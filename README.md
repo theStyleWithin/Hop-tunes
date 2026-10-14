@@ -5,11 +5,7 @@ An open source version of Microsoft Zune
 
 - [`SPEC.md`](SPEC.md): product and technical spec: a local-first, login-free music player with local profiles.
 
-- [`design/`](design/): mockups of the five core screens (PNG screenshots + clickable HTML pages).
-
-## Developing
-
-Open the repo in a GitHub Codespace (or VS Code Dev Containers). `.devcontainer/` installs Qt 6, GStreamer, TagLib and SQLite, plus a browser-viewable desktop on port 6080 for running the app.
+- [`design/`](design/): reference mockups of the five core screens (PNG screenshots + clickable HTML pages) for building the real app's UI.
 
 ## Research
 

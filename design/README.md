@@ -1,5 +1,7 @@
 # Design mockups
 
+**Reference only:** these are design targets for the real Qt/QML interface, not app code.
+
 Five screens showing how Hop-tunes looks and flows. They follow how the Zune desktop software was *organised* (pivots, three-pane collection, Now Playing art mosaic, Quickplay), with an original Hop-tunes look and no Microsoft assets. See [`../SPEC.md`](../SPEC.md) §3–4.
 
 | # | Screen | Screenshot | Clickable page |
