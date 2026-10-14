@@ -21,7 +21,7 @@ jobs:
     outputs:
       version: ${{ steps.ver.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Version
         id: ver
@@ -33,7 +33,7 @@ jobs:
       - name: Build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          .github/scripts/logged.sh apt sudo apt-get install -y --no-install-recommends \
             ninja-build g++ pkg-config file curl desktop-file-utils appstream \
             libtag1-dev libsqlite3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav \
@@ -58,7 +58,7 @@ jobs:
           appstreamcli validate --no-net --explain packaging/io.github.thestylewithin.hoptunes.metainfo.xml || true
 
       - name: Build AppImage
-        run: packaging/appimage/build-appimage.sh "${{ steps.ver.outputs.version }}"
+        run: .github/scripts/logged.sh build-appimage packaging/appimage/build-appimage.sh "${{ steps.ver.outputs.version }}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -110,8 +110,8 @@ jobs:
                       libwayland-egl1 gzip tar ;;
           esac
 
-      - uses: actions/checkout@v4
-        with: { sparse-checkout: packaging/appimage }
+      - uses: actions/checkout@v5
+        with: { sparse-checkout: "packaging/appimage\n.github/scripts" }
 
       - uses: actions/download-artifact@v4
         with: { name: appimage, path: dist }
@@ -125,16 +125,16 @@ jobs:
           case "${{ matrix.display }}" in
             xcb)
               HOPTUNES_TEST_PLATFORM=xcb xvfb-run -a -s "-screen 0 1280x800x24" \
-                sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}" ;;
+                sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}" ;;
             wayland)
               export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
               weston --backend=headless --socket=wayland-1 --width=1280 --height=800 >/tmp/weston.log 2>&1 &
               sleep 3; export WAYLAND_DISPLAY=wayland-1
-              HOPTUNES_TEST_PLATFORM=wayland sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}"
+              HOPTUNES_TEST_PLATFORM=wayland sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}"
               # Must have really used Wayland, not fallen back to XWayland.
               if grep -q "Failed to load shell integration" out/*.log; then echo "wayland shell integration missing"; exit 1; fi ;;
             *)
-              sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}" ;;
+              sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}" ;;
           esac
 
       - uses: actions/upload-artifact@v4
@@ -150,11 +150,11 @@ jobs:
     continue-on-error: true
     steps:
       - run: dnf -y install mesa-libEGL mesa-libGL fontconfig dejavu-sans-fonts alsa-lib findutils
-      - uses: actions/checkout@v4
-        with: { sparse-checkout: packaging/appimage }
+      - uses: actions/checkout@v5
+        with: { sparse-checkout: "packaging/appimage\n.github/scripts" }
       - uses: actions/download-artifact@v4
         with: { name: appimage, path: dist }
-      - run: chmod +x dist/*.AppImage && sh packaging/appimage/smoke-test.sh dist/Hop-tunes-*-x86_64.AppImage out almalinux-9
+      - run: chmod +x dist/*.AppImage && sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh dist/Hop-tunes-*-x86_64.AppImage out almalinux-9
 
   release:
     needs: [build, smoke]
