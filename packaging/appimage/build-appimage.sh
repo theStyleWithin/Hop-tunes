@@ -38,8 +38,18 @@ export QML_SOURCES_PATHS="$ROOT/src/ui/qml"
 export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so;libqwayland-egl.so;libqwayland-generic.so"
 export EXTRA_QT_MODULES="waylandclient"
 
-# ---- GStreamer: bundle plugins + scanner, isolated from the host's plugin set ------------
-export GSTREAMER_PLUGINS_DIR="$ARCH_LIB/gstreamer-1.0"
+# ---- GStreamer: bundle ONLY the audio plugins Hop-tunes uses (+ scanner) -----------------
+# Fewer plugins = smaller AppImage, fewer dependencies, fewer ways to break on odd systems.
+GST_PLUGINS="coreelements playback typefindfunctions audioconvert audioresample volume
+  autodetect pulseaudio alsa app wavparse flac audioparsers id3demux apetag ogg vorbis opus
+  isomp4 libav mpg123 wavpack asf matroska aiff equalizer replaygain spectrum level audiorate
+  audiofx scaletempo interleave"
+GST_CURATED=$(mktemp -d)
+for p in $GST_PLUGINS; do
+  if [ -e "$ARCH_LIB/gstreamer-1.0/libgst$p.so" ]; then ln -s "$ARCH_LIB/gstreamer-1.0/libgst$p.so" "$GST_CURATED/"
+  else echo "note: GStreamer plugin '$p' not available on this build host"; fi
+done
+export GSTREAMER_PLUGINS_DIR="$GST_CURATED"
 export GSTREAMER_HELPERS_DIR="$ARCH_LIB/gstreamer1.0/gstreamer-1.0"
 export GSTREAMER_VERSION=1.0
 
@@ -58,14 +68,21 @@ for d in wayland-shell-integration wayland-decoration-client wayland-graphics-in
   fi
 done
 
-# GL dispatcher fallback (see apprun-hooks/hop-tunes-gl-fallback.sh): one directory per
-# library so each is only added to the search path when the host lacks it.
-for lib in libOpenGL.so.0 libGLdispatch.so.0; do
-  mkdir -p "$APPDIR/usr/lib/gl-fallback/${lib%%.so*}"
-  cp -L "$ARCH_LIB/$lib" "$APPDIR/usr/lib/gl-fallback/${lib%%.so*}/"
+# Host-first fallback libraries (see apprun-hooks/hop-tunes-fallback-libs.sh).
+FALLBACK_LIBS="libOpenGL.so.0 libGLdispatch.so.0 libcom_err.so.2 libgpg-error.so.0 libfribidi.so.0"
+for lib in $FALLBACK_LIBS; do
+  src=$(ls "$ARCH_LIB/$lib" /lib/x86_64-linux-gnu/$lib 2>/dev/null | head -1 || true)
+  if [ -n "$src" ]; then mkdir -p "$APPDIR/usr/lib/fallback/$lib"; cp -L "$src" "$APPDIR/usr/lib/fallback/$lib/"
+  else echo "warning: fallback library $lib not found on build host"; fi
 done
 mkdir -p "$APPDIR/apprun-hooks"
 cp "$ROOT/packaging/appimage/apprun-hooks/"*.sh "$APPDIR/apprun-hooks/"
+
+# Report what the AppImage still expects from the host (for the compatibility notes).
+echo "== libraries expected from the host system:"
+{ find "$APPDIR/usr" -type f -name '*.so*' -o -type f -path '*/bin/*'; } 2>/dev/null \
+  | xargs -r objdump -p 2>/dev/null | sed -n 's/^ *NEEDED *//p' | sort -u \
+  | while read -r so; do [ -n "$(find "$APPDIR" -name "$so" -print -quit)" ] || echo "   $so"; done || true
 
 # ---- pack ---------------------------------------------------------------------------------
 export LINUXDEPLOY_OUTPUT_VERSION="$VERSION"

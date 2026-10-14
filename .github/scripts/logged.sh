@@ -8,7 +8,8 @@ log=$(mktemp)
 code=$?
 cat "$log"
 if [ $code -ne 0 ]; then
-  msg=$(tail -n 45 "$log" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+  # coreutils + sed only (minimal images may lack awk)
+  msg=$(tail -n 45 "$log" | sed -e 's/%/%25/g' -e 's/\r//g' | tr '\n' '\001' | sed 's/\x01/%0A/g')
   echo "::error title=$title (exit $code)::$msg"
 fi
 rm -f "$log"
