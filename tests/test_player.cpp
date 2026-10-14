@@ -50,6 +50,10 @@ private slots:
         gst_init(nullptr, nullptr);
         if (!gst_element_factory_find("wavparse") || !gst_element_factory_find("fakesink"))
             QSKIP("GStreamer wavparse/fakesink plugins not installed");
+        guint major = 0, minor = 0, micro = 0, nano = 0;
+        gst_version(&major, &minor, &micro, &nano);
+        if (qgetenv("HOPTUNES_PLAYBIN") == "playbin3" && major == 1 && minor < 22)
+            QSKIP("Hop-tunes does not use playbin3 before GStreamer 1.22 (known gapless bug)");
     }
 
     void emptyPlayer()
