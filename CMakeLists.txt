@@ -44,6 +44,7 @@ if(HOPTUNES_BUILD_APP)
         src/App.h                    src/App.cpp
         src/library/TrackListModel.h src/library/TrackListModel.cpp
         src/ui/qml.qrc
+        assets/assets.qrc
     )
     target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
     target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2)
@@ -51,7 +52,10 @@ if(HOPTUNES_BUILD_APP)
 
     include(GNUInstallDirs)
     install(TARGETS hop-tunes RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    install(FILES packaging/hop-tunes.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    set(HOPTUNES_APP_ID io.github.thestylewithin.hoptunes)
+    install(FILES packaging/${HOPTUNES_APP_ID}.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES packaging/${HOPTUNES_APP_ID}.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+    install(FILES packaging/${HOPTUNES_APP_ID}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 endif()
 
 # ---- tests --------------------------------------------------------------------
