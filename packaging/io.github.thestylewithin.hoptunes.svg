@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Hop-tunes app icon. Original artwork, GPL-3.0-or-later (same as the app). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="#4fd1c5"/>
+  <rect x="8" y="8" width="240" height="240" rx="44" fill="none" stroke="#111113" stroke-opacity="0.12" stroke-width="4"/>
+  <!-- note: ring + stem + flag, with a small hop dot -->
+  <circle cx="92" cy="170" r="30" fill="none" stroke="#111113" stroke-width="16"/>
+  <path d="M122 170 V64 L184 84 V150" fill="none" stroke="#111113" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="172" cy="160" r="20" fill="#111113"/>
+</svg>

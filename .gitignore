@@ -1,0 +1,5 @@
+/build*/
+/AppDir/
+/.appimage-tools/
+*.AppImage
+*.AppImage.zsync
