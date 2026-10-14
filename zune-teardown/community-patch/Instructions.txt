@@ -1,0 +1,11 @@
+1.) Copy: Applications (Folder)
+
+2.) Double Click on: Shortcut to Zune in Appdata.bat 
+
+3.) Paste: Applications (The Folder that you copied) into %SYSTEMDRIVE%\Users\%USERNAME%\AppData\Local\Microsoft\Zune (Where the batch shortcut took you, paste the "Applications" folder into that folder)
+
+4.) Make sure Zune Software is installed and closed before going to step 5.)
+
+5.) Double Click and Run: Enable Zune Software Features (USedit).reg (Yes to Admin Prompt, Yes to add .Reg File)
+
+6.) Launch Zune Software and click on collections > Apps > You will see your whole library of apps ready to be synced to the Zune device)
