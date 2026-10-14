@@ -1,0 +1,14 @@
+# Never commit Microsoft binaries, installers, extracted resources or work dirs
+work/
+tools/xarc
+*.exe
+*.dll
+*.sys
+*.msi
+*.msu
+*.cab
+*.mui
+*.acm
+*.ttc
+*.wmv
+__pycache__/

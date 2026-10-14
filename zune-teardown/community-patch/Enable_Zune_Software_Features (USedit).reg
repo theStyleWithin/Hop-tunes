@@ -1,0 +1,26 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\Microsoft\Zune\FeaturesOverride]
+"Apps"=dword:00000001
+"Channels"=dword:00000001
+"FirstLaunchIntroVideo"=dword:00000001
+"MBRPreview"=dword:00000001
+"MBRPurchase"=dword:00000001
+"MBRRental"=dword:00000001
+"MusicVideos"=dword:00000001
+"Nowplaying"=dword:00000001
+"NowplayingArt"=dword:00000001
+"Picks"=dword:00000001
+"QuickMixLocal"=dword:00000001
+"QuickMixZmp"=dword:00000001
+"Quickplay"=dword:00000001
+"SignInAvailable"=dword:00000001
+"SubscriptionFreeTracks"=dword:00000001
+"Music"=dword:00000001
+"Videos"=dword:00000001
+"Art"=dword:00000001
+"Social"=dword:00000000
+"Podcasts"=dword:00000001
+"Marketplace"=dword:00000001
+"Games"=dword:00000001
+
