@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop-tunes · Create a profile</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .page { min-height: 100vh; display: flex; flex-direction: column; gap: 40px; padding: 48px 64px; }
+  label.f { font-size: 18px; color: var(--text-2); }
+  input[type=text] { height: 56px; background: var(--panel); border: 2px solid #3a3a41; color: #fff; font-family: inherit; font-size: 24px; font-weight: 300; padding: 0 16px; outline: none; width: 100%; }
+  input[type=text]:focus { border-color: var(--accent); }
+  .sw { width: 48px; height: 48px; border: none; cursor: pointer; }
+  .sw[aria-pressed=true] { outline: 3px solid var(--text); outline-offset: 4px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div style="display:flex;align-items:center;gap:20px">
+    <a class="back" href="index.html" aria-label="Back to profiles" id="back"></a>
+    <span style="font-size:16px;color:var(--muted);letter-spacing:2px">STEP 1 OF 2</span>
+  </div>
+  <h1 style="margin:0;font-size:72px;font-weight:300;letter-spacing:-2px;line-height:1">make it yours</h1>
+
+  <div style="display:flex;flex-wrap:wrap;gap:64px;align-items:flex-start">
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div id="avatar" style="width:240px;height:240px;display:flex;align-items:flex-end;padding:0 20px">
+        <span id="ini" style="font-size:104px;font-weight:300;color:var(--ink);line-height:1.1"></span>
+      </div>
+      <button class="ghost" type="button">choose a picture…</button>
+    </div>
+
+    <form style="display:flex;flex-direction:column;gap:32px;flex:1 1 480px;min-width:0;max-width:640px" onsubmit="location.href='quickplay.html';return false">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <label class="f" for="pname">profile name</label>
+        <input id="pname" type="text" value="sam" placeholder="what should we call you?" autocomplete="off">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <span class="f">accent colour</span>
+        <div id="swatches" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <span class="f">music folders</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--panel);padding:14px 16px;flex-wrap:wrap">
+          <span style="font-size:17px">~/Music</span>
+          <span style="font-size:14px;color:var(--muted)">already scanned · 4,812 songs</span>
+        </div>
+        <button class="ghost" type="button" style="align-self:flex-start">+ add folder</button>
+      </div>
+      <label style="display:flex;align-items:flex-start;gap:14px;cursor:pointer">
+        <input type="checkbox" id="pin" style="width:22px;height:22px;margin:4px 0 0">
+        <span style="display:flex;flex-direction:column;gap:4px">
+          <span style="font-size:18px">lock with a PIN</span>
+          <span style="font-size:14px;color:var(--muted)">keeps others on this computer from casually browsing your history. a privacy curtain, not encryption.</span>
+        </span>
+      </label>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:8px">
+        <button class="btn" type="submit" id="create" style="height:52px;padding:0 32px;font-size:20px">create profile</button>
+        <a href="index.html" style="height:52px;padding:0 24px;font-size:18px;display:flex;align-items:center;color:var(--text-2)">cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+<script src="app.js"></script>
+<script>
+  HT.mount("#back", HT.icon.back);
+  const colors = [["#4fd1c5","teal"],["#ff8a4c","orange"],["#b69cff","violet"],["#f2c94c","yellow"],["#7cc4ff","sky"],["#ff6b8b","rose"]];
+  let sel = "#f2c94c";
+  const name = document.getElementById("pname");
+  function render() {
+    document.getElementById("avatar").style.background = sel;
+    document.getElementById("create").style.background = sel;
+    document.getElementById("pin").style.accentColor = sel;
+    document.getElementById("ini").textContent = (name.value.trim()[0] || "?").toLowerCase();
+    HT.mount("#swatches", colors.map(([c, l]) =>
+      `<button type="button" class="sw" style="background:${c}" aria-label="${l}" aria-pressed="${c === sel}" data-c="${c}"></button>`).join(""));
+  }
+  document.getElementById("swatches").addEventListener("click", (e) => {
+    const c = e.target.closest("[data-c]"); if (c) { sel = c.dataset.c; render(); }
+  });
+  name.addEventListener("input", render);
+  render();
+</script>
+</body>
+</html>
