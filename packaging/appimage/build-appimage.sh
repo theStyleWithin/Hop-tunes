@@ -66,5 +66,5 @@ linuxdeploy --appdir "$APPDIR" --output appimage
 OUT=$(ls -1 "$ROOT"/Hop-tunes-*-x86_64.AppImage | head -1)
 echo "== built $OUT ($(du -h "$OUT" | cut -f1))"
 echo "glibc symbols required (highest):"
-find "$APPDIR" -type f \( -name '*.so*' -o -perm -u+x \) -exec objdump -T {} + 2>/dev/null \
-  | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1
+{ find "$APPDIR" -type f \( -name '*.so*' -o -perm -u+x \) -exec objdump -T {} + 2>/dev/null || true; } \
+  | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1 || true
