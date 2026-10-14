@@ -1,0 +1,19 @@
+{
+  "name": "Hop-tunes dev",
+  "image": "mcr.microsoft.com/devcontainers/cpp:1-ubuntu-24.04",
+  "features": {
+    // A lightweight Linux desktop you can open in the browser, so the Qt app can run in a Codespace.
+    "ghcr.io/devcontainers/features/desktop-lite:1": {}
+  },
+  "forwardPorts": [6080],
+  "portsAttributes": {
+    "6080": { "label": "desktop (noVNC, password: vscode)", "onAutoForward": "notify" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-vscode.cmake-tools", "ms-vscode.cpptools"],
+      "settings": { "cmake.generator": "Ninja" }
+    }
+  }
+}
