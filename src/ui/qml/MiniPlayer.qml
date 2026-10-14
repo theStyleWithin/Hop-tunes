@@ -41,10 +41,10 @@ Rectangle {
 
         RowLayout {
             spacing: 8
-            TransportButton { icon: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
-            TransportButton { icon: player.playing ? "pause" : "play"; round: true; iconSize: 16; enabled: player.hasTrack || hop.songs.count > 0
+            TransportButton { glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
+            TransportButton { glyph: player.playing ? "pause" : "play"; round: true; iconSize: 16; enabled: player.hasTrack || hop.songs.count > 0
                               onClicked: player.hasTrack ? player.toggle() : hop.playSongs(0); Accessible.name: player.playing ? "pause" : "play" }
-            TransportButton { icon: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
+            TransportButton { glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
         }
 
         RowLayout {

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
 
+#include <QFont>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QImage>
 #include <QQmlApplicationEngine>
@@ -23,6 +25,12 @@ int main(int argc, char *argv[])
     QGuiApplication::setDesktopFileName(QStringLiteral("hop-tunes"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
+    // The design uses Jost (open font). Until it is bundled, fall back to similar sans faces.
+    if (!QFontDatabase::families().contains(QStringLiteral("Jost")))
+        QFont::insertSubstitutions(QStringLiteral("Jost"),
+                                   {QStringLiteral("Inter"), QStringLiteral("Noto Sans"),
+                                    QStringLiteral("Cantarell"), QStringLiteral("DejaVu Sans")});
+
     hop::App hopApp;
     if (!hopApp.init()) return 1;
 
@@ -35,6 +43,17 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return 1;
+
+    // Developer hook: HOPTUNES_AUTOPLAY=<row> starts playing that song once the library has loaded.
+    bool autoplayOk = false;
+    const int autoplayRow = qEnvironmentVariableIntValue("HOPTUNES_AUTOPLAY", &autoplayOk);
+    if (autoplayOk) {
+        auto tryPlay = [&hopApp, autoplayRow] {
+            if (!hopApp.player()->hasTrack() && hopApp.songs()->count() > autoplayRow) hopApp.playSongs(autoplayRow);
+        };
+        QObject::connect(hopApp.songs(), &hop::TrackListModel::countChanged, &app, tryPlay);
+        tryPlay();
+    }
 
     // Developer hook: HOPTUNES_SCREENSHOT=/path/out.png saves the window after startup, then quits.
     const QString shot = QString::fromLocal8Bit(qgetenv("HOPTUNES_SCREENSHOT"));

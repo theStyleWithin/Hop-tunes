@@ -7,6 +7,18 @@ An open source version of Microsoft Zune
 
 - [`design/`](design/): reference mockups of the five core screens (PNG screenshots + clickable HTML pages) for building the real app's UI.
 
+## Status
+
+**M1 (play a folder) works:** library scan, gapless playback, collection song list, now playing, mini player. Real screenshots from the app (headless render):
+
+| collection | now playing |
+|---|---|
+| ![collection](docs/screenshots/m1-collection.png) | ![now playing](docs/screenshots/m1-now-playing.png) |
+| **first run** | **quickplay** |
+| ![first run](docs/screenshots/m1-first-run.png) | ![quickplay](docs/screenshots/m1-quickplay.png) |
+
+The design targets for later milestones are in [`design/`](design/).
+
 ## Building
 
 Hop-tunes is C++20 + Qt 6 (QML) + GStreamer + TagLib + SQLite.

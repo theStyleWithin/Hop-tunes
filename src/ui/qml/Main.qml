@@ -13,7 +13,7 @@ ApplicationWindow {
     minimumHeight: 600
     visible: true
     title: hop.player.hasTrack ? hop.player.title + " · Hop-tunes" : "Hop-tunes"
-    color: Theme.bg
+    color: view === "now playing" ? Theme.bgDeep : Theme.bg
 
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
     property string view: {
@@ -66,28 +66,12 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
         }
 
-        // now playing header (back + label), like design/screens/5
-        RowLayout {
-            visible: win.view === "now playing"
-            Layout.fillWidth: true
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 24
-            AbstractButton {
-                implicitWidth: 44; implicitHeight: 44
-                onClicked: win.view = "collection"
-                Accessible.name: "back"
-                background: Rectangle { radius: 22; color: "transparent"; border { width: 2; color: "#5b5b63" } }
-                contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
-            }
-            Item { Layout.fillWidth: true }
-            Label { text: "NOW PLAYING"; color: Theme.muted; font { family: Theme.font; pixelSize: 16; letterSpacing: 3 } }
-        }
-
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: win.views.indexOf(win.view)
             CollectionView { onAddFolderRequested: folderDialog.open() }
-            NowPlayingView { }
+            NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { }
             SettingsView { onAddFolderRequested: folderDialog.open() }
         }

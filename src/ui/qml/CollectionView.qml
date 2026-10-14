@@ -116,6 +116,7 @@ Item {
                 readonly property bool current: hop.player.hasTrack && hop.player.currentTrackId === trackId
                 width: list.width
                 height: 44
+                leftPadding: 8; rightPadding: 8
                 onDoubleClicked: hop.playSongs(index)
                 Keys.onReturnPressed: hop.playSongs(index)
                 Accessible.name: title + ", " + artist

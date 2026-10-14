@@ -39,11 +39,14 @@ Player::Player(QObject *parent) : QObject(parent)
     // Music only: never open a video window for embedded cover-art streams.
     g_object_set(m_playbin, "flags", kFlagAudio | kFlagSoftVolume, nullptr);
 
-    // Headless runs (tests, CI, screenshots) can force a sink: HOPTUNES_AUDIO_SINK=fakesink
-    const QByteArray sinkName = qgetenv("HOPTUNES_AUDIO_SINK");
-    if (!sinkName.isEmpty()) {
-        if (GstElement *sink = gst_element_factory_make(sinkName.constData(), nullptr))
-            g_object_set(m_playbin, "audio-sink", sink, nullptr);
+    // Headless runs (tests, CI, screenshots) can force a sink, e.g.
+    // HOPTUNES_AUDIO_SINK=fakesink  or  HOPTUNES_AUDIO_SINK="fakesink sync=true" (real-time)
+    const QByteArray sinkDesc = qgetenv("HOPTUNES_AUDIO_SINK");
+    if (!sinkDesc.isEmpty()) {
+        GError *err = nullptr;
+        GstElement *sink = gst_parse_launch(sinkDesc.constData(), &err);
+        if (err) g_error_free(err);
+        if (sink) g_object_set(m_playbin, "audio-sink", sink, nullptr);
     }
 
     g_signal_connect(m_playbin, "about-to-finish", G_CALLBACK(&Player::onAboutToFinish), this);

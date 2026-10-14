@@ -10,6 +10,7 @@ Rectangle {
     color: Theme.bgDeep
     clip: true
     readonly property var player: hop.player
+    signal back()
 
     // Background mosaic of placeholder tiles from the queue's albums.
     Grid {
@@ -49,7 +50,21 @@ Rectangle {
     }
 
     RowLayout {
-        anchors { fill: parent; leftMargin: 48; rightMargin: 48; topMargin: 24; bottomMargin: 36 }
+        id: header
+        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 48; rightMargin: 48; topMargin: 24 }
+        AbstractButton {
+            implicitWidth: 44; implicitHeight: 44
+            onClicked: root.back()
+            Accessible.name: "back"
+            background: Rectangle { radius: 22; color: "transparent"; border { width: 2; color: "#5b5b63" } }
+            contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
+        }
+        Item { Layout.fillWidth: true }
+        Label { text: "NOW PLAYING"; color: Theme.muted; font { family: Theme.font; pixelSize: 16; letterSpacing: 3 } }
+    }
+
+    RowLayout {
+        anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: 48; rightMargin: 48; topMargin: 16; bottomMargin: 36 }
         spacing: 48
 
         ColumnLayout {
@@ -73,11 +88,11 @@ Rectangle {
             RowLayout {
                 spacing: 18
                 Layout.topMargin: 8
-                TransportButton { icon: "prev"; iconSize: 24; implicitWidth: 52; onClicked: root.player.previous(); Accessible.name: "previous" }
-                TransportButton { icon: root.player.playing ? "pause" : "play"; round: true; iconSize: 24; implicitWidth: 76
+                TransportButton { glyph: "prev"; iconSize: 24; implicitWidth: 52; onClicked: root.player.previous(); Accessible.name: "previous" }
+                TransportButton { glyph: root.player.playing ? "pause" : "play"; round: true; iconSize: 24; implicitWidth: 76
                                   onClicked: root.player.hasTrack ? root.player.toggle() : hop.playSongs(0)
                                   Accessible.name: root.player.playing ? "pause" : "play" }
-                TransportButton { icon: "next"; iconSize: 24; implicitWidth: 52; onClicked: root.player.next(); Accessible.name: "next" }
+                TransportButton { glyph: "next"; iconSize: 24; implicitWidth: 52; onClicked: root.player.next(); Accessible.name: "next" }
             }
         }
 

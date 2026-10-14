@@ -6,14 +6,14 @@ import "Theme.js" as Theme
 // Icon button for prev / play / pause / next. Icons are drawn, so no icon font is needed.
 AbstractButton {
     id: root
-    property string icon: "play"          // prev | next | play | pause | shuffle
+    property string glyph: "play"         // prev | next | play | pause | shuffle
     property bool round: false
     property real iconSize: 18
     implicitWidth: round ? 48 : 44
     implicitHeight: implicitWidth
     hoverEnabled: true
     focusPolicy: Qt.TabFocus
-    Accessible.name: icon
+    Accessible.name: glyph
 
     background: Rectangle {
         radius: root.round ? width / 2 : 0
@@ -24,7 +24,7 @@ AbstractButton {
 
     contentItem: Canvas {
         id: c
-        property string kind: root.icon
+        property string kind: root.glyph
         onKindChanged: requestPaint()
         onPaint: {
             var g = getContext("2d")
