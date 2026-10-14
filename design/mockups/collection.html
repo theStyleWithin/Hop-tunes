@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop-tunes · Collection, music</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .sub { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding: 14px 48px 0; }
+  .views { display: flex; gap: 24px; padding: 10px 48px 0; font-size: 15px; letter-spacing: 1px; color: #8a8a93; }
+  .views .on { color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: 4px; }
+  main { flex: 1; display: flex; flex-wrap: wrap; gap: 32px; padding: 24px 48px; }
+  .artist { text-align: left; background: none; border: none; padding: 9px 10px; font-size: 18px; cursor: pointer; min-height: 40px; width: 100%; }
+  .artist[aria-pressed=true] { background: #1f1f24; color: var(--accent); }
+  .alb { background: none; border: none; padding: 0; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 6px; }
+  .alb[aria-pressed=true] .lbl { color: var(--accent); }
+  .song { display: flex; align-items: center; gap: 16px; padding: 10px 8px; font-size: 16px; border-bottom: 1px solid #1d1d22; }
+  .search { display: flex; align-items: center; gap: 10px; background: var(--panel); padding: 0 14px; height: 44px; width: 300px; }
+  .search input { flex: 1; background: none; border: none; color: #fff; font-family: inherit; font-size: 16px; outline: none; min-width: 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div id="hdr"></div>
+  <div class="sub">
+    <div style="display:flex;gap:28px;align-items:baseline;flex-wrap:wrap">
+      <span style="font-size:22px;color:var(--accent)">music</span>
+      <span style="font-size:22px;color:var(--dim)">videos</span>
+      <span style="font-size:22px;color:var(--dim)">podcasts</span>
+      <span style="font-size:16px;color:#4f4f57">pictures (later)</span>
+    </div>
+    <label class="search"><span id="sicon"></span><span class="sr">Search collection</span><input placeholder="search artists, albums, songs"></label>
+  </div>
+  <div class="views"><span class="on">ARTISTS</span><span>ALBUMS</span><span>SONGS</span><span>GENRES</span><span>PLAYLISTS</span></div>
+  <main>
+    <section aria-label="Artists" style="flex:0 0 240px;display:flex;flex-direction:column;gap:2px" id="artists"></section>
+    <section aria-label="Albums" style="flex:0 0 300px;display:flex;flex-direction:column;gap:14px">
+      <span id="aname" style="font-size:30px;font-weight:300;line-height:1.1"></span>
+      <span id="ameta" style="font-size:14px;color:var(--muted);margin-top:-8px"></span>
+      <div id="albums" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px"></div>
+    </section>
+    <section aria-label="Songs" style="flex:1 1 360px;min-width:0;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--line)">
+        <span id="atitle" style="font-size:22px"></span>
+        <a class="btn" href="now-playing.html" id="playall" style="height:40px;font-size:15px">play album</a>
+      </div>
+      <div id="songs"></div>
+    </section>
+  </main>
+  <div id="mini"></div>
+</div>
+<script src="app.js"></script>
+<script>
+  const { art, esc, LIBRARY: L, SONGS } = HT;
+  HT.mount("#hdr", HT.header("collection"));
+  HT.mount("#mini", HT.miniPlayer());
+  HT.mount("#sicon", HT.icon.search);
+  document.getElementById("playall").insertAdjacentHTML("afterbegin", HT.icon.playInk);
+  let a = 2, al = 0;
+  function render() {
+    HT.mount("#artists", L.map((x, i) =>
+      `<button type="button" class="artist row" aria-pressed="${i === a}" data-a="${i}">${esc(x.name)}</button>`).join(""));
+    const albums = L[a].albums;
+    document.getElementById("aname").textContent = L[a].name;
+    document.getElementById("ameta").textContent = `${albums.length} ${albums.length === 1 ? "album" : "albums"} · ${albums.length * 8} songs`;
+    HT.mount("#albums", albums.map((x, i) => `
+      <button type="button" class="alb" aria-pressed="${i === al}" data-al="${i}">
+        <div class="art" style="width:100%;${art(x[2], x[3])}" aria-hidden="true"></div>
+        <span class="lbl" style="font-size:15px;line-height:1.2">${esc(x[0])}</span>
+        <span style="font-size:13px;color:var(--muted);margin-top:-4px">${x[1]}</span>
+      </button>`).join(""));
+    document.getElementById("atitle").textContent = albums[al][0];
+    HT.mount("#songs", SONGS.map(([t, d, r], i) => `
+      <a class="song row" href="now-playing.html">
+        <span style="width:22px;color:#8a8a93;font-size:14px">${i + 1}</span>
+        <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t)}</span>
+        <span style="color:var(--accent);font-size:13px" aria-label="${r ? "hearted" : ""}">${r}</span>
+        <span style="color:var(--muted);font-size:14px;width:40px;text-align:right">${d}</span>
+      </a>`).join(""));
+  }
+  document.querySelector("main").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-a],[data-al]"); if (!b) return;
+    if (b.dataset.a !== undefined) { a = +b.dataset.a; al = 0; } else { al = +b.dataset.al; }
+    render();
+  });
+  render();
+</script>
+</body>
+</html>

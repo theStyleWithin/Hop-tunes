@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop-tunes · Who's listening</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .page { min-height: 100vh; display: flex; flex-direction: column; padding: 48px 64px; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 40px; }
+  .tile { display: flex; flex-direction: column; gap: 14px; width: 180px; }
+  .face { position: relative; width: 180px; height: 180px; display: flex; align-items: flex-end; padding: 0 16px; }
+  .tile:hover .face { outline: 3px solid var(--text); outline-offset: 4px; }
+  .face .ini { font-size: 72px; font-weight: 300; color: var(--ink); }
+  .lockb { position: absolute; right: 10px; bottom: 10px; width: 32px; height: 32px; border-radius: 16px; background: var(--ink); display: flex; align-items: center; justify-content: center; }
+  .add { border: 2px dashed #5b5b63; justify-content: center; align-items: center; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px"><span id="logo"></span><span style="font-size:22px;font-weight:500;letter-spacing:.5px">hop-tunes</span></div>
+    <span style="font-size:14px;color:var(--muted)">offline · nothing leaves this computer</span>
+  </div>
+
+  <main style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:56px;padding:48px 0">
+    <h1 style="margin:0;font-size:84px;font-weight:300;letter-spacing:-2px;line-height:1">who's listening?</h1>
+    <div class="tiles" id="tiles"></div>
+  </main>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:24px">
+    <a href="quickplay.html" style="font-size:18px;color:var(--text-2)">listen as guest · nothing is saved</a>
+    <span style="font-size:14px;color:var(--muted)">profiles live only in this app · separate from your computer's login</span>
+  </div>
+</div>
+<script src="app.js"></script>
+<script>
+  HT.mount("#logo", HT.icon.logo("#4fd1c5"));
+  const profiles = [
+    { name: "maya", meta: "4,812 songs · 23 playlists", color: "#4fd1c5" },
+    { name: "dre", meta: "1,206 songs · 6 playlists", color: "#ff8a4c", locked: true },
+    { name: "kiko", meta: "9,340 songs · 41 playlists", color: "#b69cff" },
+  ];
+  HT.mount("#tiles", profiles.map((p) => `
+    <a class="tile" href="quickplay.html">
+      <div class="face" style="background:${p.color}"><span class="ini">${p.name[0]}</span>
+        ${p.locked ? `<span class="lockb" aria-label="PIN protected">${HT.icon.lock}</span>` : ""}</div>
+      <span style="font-size:26px">${HT.esc(p.name)}</span>
+      <span style="font-size:14px;color:var(--muted);margin-top:-10px">${p.meta}</span>
+    </a>`).join("") + `
+    <a class="tile" href="create-profile.html">
+      <div class="face add"><svg width="48" height="48" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v16M4 12h16" stroke="#a3a3ab" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+      <span style="font-size:26px">add profile</span>
+      <span style="font-size:14px;color:var(--muted);margin-top:-10px">no email, no account</span>
+    </a>`);
+</script>
+</body>
+</html>

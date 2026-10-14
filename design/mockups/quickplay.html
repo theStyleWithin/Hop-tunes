@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop-tunes · Quickplay</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  main { flex: 1; display: flex; gap: 56px; padding: 36px 48px; overflow-x: auto; }
+  section { display: flex; flex-direction: column; gap: 16px; flex: 0 0 auto; }
+  .hist { display: flex; align-items: center; gap: 14px; }
+  .hist .art { width: 52px; flex: 0 0 auto; }
+  .hist span.t { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div id="hdr"></div>
+  <main>
+    <section>
+      <h2 class="sec">pinned</h2>
+      <div id="pinned" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;width:412px"></div>
+    </section>
+    <section style="flex:0 0 300px">
+      <h2 class="sec">history</h2>
+      <div id="history" style="display:flex;flex-direction:column;gap:16px"></div>
+    </section>
+    <section>
+      <h2 class="sec">new</h2>
+      <div id="fresh" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:330px"></div>
+      <span style="font-size:14px;color:var(--muted)">9 albums added this week</span>
+    </section>
+    <section style="flex:0 0 260px">
+      <h2 class="sec">smart dj</h2>
+      <div style="background:var(--panel);padding:20px;display:flex;flex-direction:column;gap:14px">
+        <span style="font-size:15px;color:var(--muted)">an endless mix from your own library, based on</span>
+        <span style="font-size:30px;font-weight:300;line-height:1.1">Harbor Lights Collective</span>
+        <a class="btn" href="now-playing.html" style="align-self:flex-start" id="mix">start mix</a>
+        <span style="font-size:13px;color:#8a8a93">works offline · uses genre, era and what you play together</span>
+      </div>
+    </section>
+  </main>
+  <div id="mini"></div>
+</div>
+<script src="app.js"></script>
+<script>
+  const { art, PALETTE: P, esc } = HT;
+  HT.mount("#hdr", HT.header("quickplay"));
+  HT.mount("#mini", HT.miniPlayer());
+  document.getElementById("mix").insertAdjacentHTML("afterbegin", HT.icon.playInk);
+  const pinned = [["Tidewater","album",0],["Late Bus Home","playlist",1],["Ines Valdera","artist",2],["Sunday Slow","smart playlist",3]];
+  HT.mount("#pinned", pinned.map(([t, k, i]) => `
+    <a href="collection.html" style="display:flex;flex-direction:column;gap:8px">
+      <div class="art" style="${art(P[i][0], P[i][1])}" aria-hidden="true"></div>
+      <span style="font-size:17px;line-height:1.2">${esc(t)}</span>
+      <span style="font-size:14px;color:var(--muted);margin-top:-6px">${k}</span>
+    </a>`).join(""));
+  const hist = [["Tidewater","Harbor Lights Collective",0],["Paper Satellites","Juno Okafor",4],["Copper Season","Ines Valdera",2],["Night Market","The Lanternists",5],["Small Hours","Rook & Wren",6],["Ferro","Mateo Sand",7]];
+  HT.mount("#history", hist.map(([t, s, i]) => `
+    <a class="hist" href="now-playing.html">
+      <div class="art" style="${art(P[i][0], P[i][1])}" aria-hidden="true"></div>
+      <span style="min-width:0"><span class="t">${esc(t)}</span><span style="font-size:14px;color:var(--muted)">${esc(s)}</span></span>
+    </a>`).join(""));
+  HT.mount("#fresh", P.slice(0, 9).map((c, i) =>
+    `<div class="art" style="${art(c[1], c[0])}" role="img" aria-label="new album ${i + 1}"></div>`).join(""));
+</script>
+</body>
+</html>

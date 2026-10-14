@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hop-tunes · Now playing</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { background: var(--bg-deep); overflow-x: hidden; }
+  .mosaic { position: fixed; top: -40px; right: -80px; width: 1100px; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; opacity: .38; transform: rotate(-4deg); animation: drift 60s linear infinite alternate; }
+  @keyframes drift { from { transform: rotate(-4deg) translateX(0); } to { transform: rotate(-4deg) translateX(-120px); } }
+  @media (prefers-reduced-motion: reduce) { .mosaic { animation: none; } }
+  .scrim { position: fixed; inset: 0; background: linear-gradient(90deg, #0b0b0d 0%, rgba(11,11,13,.92) 38%, rgba(11,11,13,.55) 70%, rgba(11,11,13,.75) 100%); }
+  .wrap { position: relative; min-height: 100vh; display: flex; flex-direction: column; padding: 28px 48px 36px; }
+  .q { display: flex; align-items: baseline; gap: 14px; padding: 8px 0; border-bottom: 1px solid #26262b; }
+  .big { width: 52px; height: 52px; }
+  .playbtn { width: 76px; height: 76px; border-radius: 38px; border: 2px solid var(--text); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+</style>
+</head>
+<body>
+<div class="mosaic" id="mosaic" aria-hidden="true"></div>
+<div class="scrim" aria-hidden="true"></div>
+<div class="wrap">
+  <header style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+    <a class="back" href="collection.html" aria-label="Back" id="back"></a>
+    <span style="font-size:16px;color:var(--muted);letter-spacing:3px">NOW PLAYING · MAYA</span>
+  </header>
+  <div style="flex:1;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:48px;padding-top:16px">
+    <div style="flex:1 1 560px;min-width:0;display:flex;flex-direction:column;gap:20px">
+      <div id="cover" style="width:200px;height:200px" role="img" aria-label="Album art: Tidewater"></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <span style="font-size:28px;font-weight:300;color:var(--text-2)">Harbor Lights Collective</span>
+        <span style="font-size:76px;font-weight:300;letter-spacing:-2px;line-height:.95">Salt on the Window</span>
+        <span style="font-size:22px;color:var(--muted);padding-top:6px">Tidewater · 2022 · track 2 of 8</span>
+      </div>
+      <div class="seek" style="max-width:640px;font-size:14px"><span>1:48</span><div class="bar"><i></i></div><span>4:17</span></div>
+      <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        <button class="ib big" type="button" aria-label="Previous" id="prev"></button>
+        <button class="playbtn" type="button" aria-label="Pause" id="pp"></button>
+        <button class="ib big" type="button" aria-label="Next" id="next"></button>
+        <button class="ib" type="button" aria-label="Heart this song"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" fill="#4fd1c5"/></svg></button>
+      </div>
+    </div>
+    <aside aria-label="Up next" style="flex:0 1 340px;display:flex;flex-direction:column;gap:4px;background:rgba(20,20,24,.82);padding:20px 22px">
+      <span style="font-size:22px;color:var(--accent);padding-bottom:8px">up next</span>
+      <div id="queue"></div>
+      <span style="font-size:13px;color:#8a8a93;padding-top:10px">gapless across the album · crossfade off</span>
+    </aside>
+  </div>
+</div>
+<script src="app.js"></script>
+<script>
+  const { art, PALETTE: C, SONGS, esc, icon } = HT;
+  HT.mount("#back", icon.back);
+  HT.mount("#prev", icon.prev.replace(/20/g, "26"));
+  HT.mount("#next", icon.next.replace(/20/g, "26"));
+  document.getElementById("cover").style.cssText += ";" + art("#2f6f73", "#f2c94c");
+  const tiles = [];
+  for (let i = 0; i < 40; i++) { const c = C[(i * 7 + 3) % C.length]; tiles.push(`<div class="art" style="${art(c[0], c[1], i % 3 === 0 ? 45 : 135)}"></div>`); }
+  HT.mount("#mosaic", tiles.join(""));
+  HT.mount("#queue", SONGS.slice(2, 7).map(([t, d], i) =>
+    `<div class="q"><span style="width:18px;font-size:13px;color:#8a8a93">${i + 3}</span><span style="flex:1;font-size:17px">${esc(t)}</span><span style="font-size:13px;color:var(--muted)">${d}</span></div>`).join(""));
+  let playing = true;
+  const pp = document.getElementById("pp");
+  const paint = () => { pp.innerHTML = (playing ? icon.pause : icon.play).replace(/16/g, "24"); pp.setAttribute("aria-label", playing ? "Pause" : "Play"); };
+  pp.addEventListener("click", () => { playing = !playing; paint(); });
+  paint();
+</script>
+</body>
+</html>
