@@ -19,13 +19,26 @@ DATA=160000
 
 cd "$WORK"
 LOG="$OUT/$LABEL.log"
-QT_QPA_PLATFORM="${HOPTUNES_TEST_PLATFORM:-offscreen}" QT_QUICK_BACKEND=software \
+QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM="${HOPTUNES_TEST_PLATFORM:-offscreen}" QT_QUICK_BACKEND=software \
 HOPTUNES_AUDIO_SINK="fakesink sync=true" HOPTUNES_AUTOPLAY=0 HOPTUNES_SCREENSHOT="$OUT/$LABEL.png" \
   timeout 120 "$APPIMAGE" --appimage-extract-and-run > "$LOG" 2>&1
 CODE=$?
 cat "$LOG"
 
-fail() { echo "SMOKE FAIL [$LABEL]: $1"; exit 1; }
+diagnose() {
+  echo "---- diagnostics [$LABEL]"
+  "$APPIMAGE" --appimage-version 2>&1 | head -3
+  ( cd "$WORK" && "$APPIMAGE" --appimage-extract >/dev/null 2>&1 ) || echo "extract failed"
+  R="$WORK/squashfs-root"
+  if [ -d "$R" ]; then
+    echo "-- missing libraries for the main binary:"
+    LD_LIBRARY_PATH="$R/usr/lib" ldd "$R/usr/bin/hop-tunes" 2>&1 | grep -i "not found" || echo "   (none)"
+    echo "-- traced start:"
+    QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen HOPTUNES_SCREENSHOT="$WORK/diag.png" \
+      timeout 60 sh -x "$R/AppRun" 2>&1 | tail -40
+  fi
+}
+fail() { echo "SMOKE FAIL [$LABEL]: $1"; [ "${DIAGNOSED:-0}" = 1 ] || { DIAGNOSED=1; diagnose; }; exit 1; }
 [ $CODE -eq 0 ] || fail "exit code $CODE"
 grep -q "hop-tunes selftest:" "$LOG" || fail "no selftest line (app did not finish starting)"
 grep -q "songs=1 " "$LOG" || fail "library scan did not find the test song"
