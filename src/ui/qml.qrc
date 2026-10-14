@@ -1,0 +1,14 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/">
+    <file>qml/Main.qml</file>
+    <file>qml/Theme.js</file>
+    <file>qml/AlbumArt.qml</file>
+    <file>qml/TransportButton.qml</file>
+    <file>qml/MiniPlayer.qml</file>
+    <file>qml/CollectionView.qml</file>
+    <file>qml/NowPlayingView.qml</file>
+    <file>qml/QuickplayView.qml</file>
+    <file>qml/SettingsView.qml</file>
+  </qresource>
+</RCC>

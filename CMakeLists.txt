@@ -27,19 +27,26 @@ target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3)
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
+# ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
+pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
+add_library(hoptunes_playback STATIC
+    src/playback/Player.h     src/playback/Player.cpp
+)
+target_link_libraries(hoptunes_playback PUBLIC hoptunes_core PkgConfig::GST)
+target_compile_options(hoptunes_playback PRIVATE -Wall -Wextra)
+
 # ---- desktop app --------------------------------------------------------------
 if(HOPTUNES_BUILD_APP)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Quick QuickControls2)
-    pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 
     add_executable(hop-tunes
         src/main.cpp
         src/App.h                    src/App.cpp
         src/library/TrackListModel.h src/library/TrackListModel.cpp
-        src/playback/Player.h        src/playback/Player.cpp
         src/ui/qml.qrc
     )
-    target_link_libraries(hop-tunes PRIVATE hoptunes_core Qt6::Gui Qt6::Quick Qt6::QuickControls2 PkgConfig::GST)
+    target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2)
     target_compile_options(hop-tunes PRIVATE -Wall -Wextra)
 
     include(GNUInstallDirs)
@@ -54,4 +61,9 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_library tests/test_library.cpp)
     target_link_libraries(test_library PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME library COMMAND test_library)
+
+    add_executable(test_player tests/test_player.cpp)
+    target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
+    add_test(NAME player COMMAND test_player)
+    set_tests_properties(player PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink")
 endif()
