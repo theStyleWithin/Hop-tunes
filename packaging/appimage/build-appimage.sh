@@ -58,6 +58,15 @@ for d in wayland-shell-integration wayland-decoration-client wayland-graphics-in
   fi
 done
 
+# GL dispatcher fallback (see apprun-hooks/hop-tunes-gl-fallback.sh): one directory per
+# library so each is only added to the search path when the host lacks it.
+for lib in libOpenGL.so.0 libGLdispatch.so.0; do
+  mkdir -p "$APPDIR/usr/lib/gl-fallback/${lib%%.so*}"
+  cp -L "$ARCH_LIB/$lib" "$APPDIR/usr/lib/gl-fallback/${lib%%.so*}/"
+done
+mkdir -p "$APPDIR/apprun-hooks"
+cp "$ROOT/packaging/appimage/apprun-hooks/"*.sh "$APPDIR/apprun-hooks/"
+
 # ---- pack ---------------------------------------------------------------------------------
 export LINUXDEPLOY_OUTPUT_VERSION="$VERSION"
 export LDAI_UPDATE_INFORMATION="gh-releases-zsync|theStyleWithin|Hop-tunes|continuous|Hop-tunes-*-x86_64.AppImage.zsync"
