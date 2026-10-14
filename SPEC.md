@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** Draft v0.1 · **Date:** 2026-10-14 · **Platform:** Linux first
+**Status:** Draft v0.2 · **Date:** 2026-10-14 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -90,7 +90,7 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ### 4.1 Navigation model
 - **Top pivots** in large lowercase type: **collection · now playing · quickplay · settings**.
-- Collection has **sub-pivots**: **music · videos · pictures · podcasts**. *v1 ships music only*; the others are hidden until they're built.
+- Collection has **sub-pivots**: **music · videos · pictures · podcasts**. *v1 ships music*; **videos** follows in v1.1 (§5b); pictures comes later.
 - Inside music: **artists · albums · songs · genres · playlists**.
 - Navigation is flat and text-led, with no toolbar clutter. Back/forward arrows sit top-left, and a persistent **mini player** sits along the bottom.
 
@@ -140,6 +140,50 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ---
 
+## 5b. Video (modern resolutions, including 4K)
+
+Zune 4.8 (built August 2011, codename "Dorado") is a **32-bit** app with its **own bundled 2011-era decoders** (`ZuneH264Dec.dll`, `ZUNEMP4SDECD.dll`, `ZuneDXVA2.dll`, `ZuneEvr.dll`), and it ignores the system's codecs. That explains why it falls over on modern HD/4K files. It wasn't built for:
+- **H.264 at 4K** (High profile, level 5.1/5.2), which is beyond what 2011 PC media players were tuned for;
+- **HEVC/H.265, VP9 or AV1**, the codecs most 4K files actually use. Zune has no decoder for them at all;
+- **10-bit / HDR** video;
+- the memory that 4K frame buffers need, inside a 32-bit process.
+
+*(This is an informed reading of the bundled components and their build dates, not a measured crash analysis.)*
+
+Hop-tunes avoids all of this by using maintained, modern media engines instead of shipping its own decoders.
+
+### Requirements
+| Feature | Target |
+|---|---|
+| Resolutions | SD → 1080p → **1440p → 4K (3840×2160) → 8K** where the hardware allows |
+| Codecs | H.264, **HEVC/H.265, VP9, AV1**, MPEG-4 Part 2, VC-1/WMV (legacy Zune-era files), MPEG-2 |
+| Containers | MKV, MP4/M4V, WebM, MOV, AVI, WMV/ASF, TS |
+| Bit depth / HDR | 8- and 10-bit; HDR10 / HLG with tone-mapping to SDR displays; HDR passthrough when the compositor supports it (KDE Plasma 6 HDR) |
+| Frame rates | Up to 60 fps (120 fps where supported); frame-accurate seeking |
+| **Hardware decoding** | **VA-API** (AMD / Intel, including Steam Deck), **NVDEC** (NVIDIA), **Vulkan Video** where available, with automatic, safe fallback to software decoding |
+| Audio tracks | Multiple tracks, selectable; 5.1/7.1 downmix to stereo |
+| Subtitles | SRT, ASS/SSA (styled, common for anime), PGS, embedded MKV subtitle tracks; per-profile default language |
+| Resume | Per-profile resume position for each video |
+| Chapters | MKV/MP4 chapters shown on the seek bar |
+
+### Engine
+- **Video playback uses `libmpv`**, embedded in the Qt/QML window through mpv's render API (OpenGL or Vulkan). mpv is the most battle-tested open-source video engine on Linux: it handles 4K/HDR, hardware decoding (`hwdec=auto-safe`), every subtitle format and odd files, and it is LGPL/GPL-licensed.
+- **Music keeps the GStreamer engine** (§5), which is tuned for gapless, ReplayGain and library playback. Both engines sit behind one `PlaybackEngine` interface, so the UI (mini player, MPRIS, Now Playing) treats audio and video the same way.
+- No bundled decoders. Codecs come from the system's FFmpeg/GStreamer, so the app gets new formats with OS updates (Flatpak: via the FFmpeg runtime extension).
+
+### Performance targets
+- **4K HEVC 10-bit at 60 fps** plays with **<15% CPU** on any GPU with a hardware decoder for it, such as the Steam Deck APU or AMD RDNA2+.
+- Starting a 4K file takes **<1 s** to the first frame from local SSD storage.
+- When the GPU can't decode a codec in hardware (for example AV1 on older GPUs), Hop-tunes falls back to software decoding and shows a small "software decoding" hint instead of crashing.
+
+### Library side
+- The **Videos** pivot lists items by type: movies, shows (series → season → episode, from folder names or filename patterns), music videos and other.
+- Thumbnails come from a frame grab, cached in `$XDG_CACHE_HOME`.
+- Video metadata is read with ffprobe-style probing at scan time (resolution, codec, HDR flag, duration). Badges like **4K · HDR · HEVC** appear on the tiles.
+- Optional: point a Videos folder at the same library you already serve with Jellyfin. Hop-tunes only reads the files and never modifies Jellyfin's data.
+
+---
+
 ## 6. Library
 
 - **Sources:** one or more local folders per profile, including removable or network drives. Missing drives show tracks greyed-out rather than deleting them.
@@ -175,7 +219,8 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 |---|---|---|
 | UI | **Qt 6 + QML** | Fluid animation and typography-heavy layouts are natural in QML. Native on KDE/CachyOS, good on GNOME, works on Steam Deck |
 | Core | **C++20** (or Rust with cxx-qt, see open questions) | Performance for big libraries |
-| Playback | **GStreamer 1.x** (`playbin3`) | Gapless, ReplayGain, broad format support |
+| Playback (music) | **GStreamer 1.x** (`playbin3`) | Gapless, ReplayGain, broad format support |
+| Playback (video) | **libmpv** (render API in QML) | 4K/HDR, hardware decoding, every subtitle format |
 | Tags | **TagLib 2** | Mature, all formats |
 | Database | **SQLite** (WAL mode) + FTS5 for search | Fast, embedded, zero config |
 | Desktop integration | MPRIS2 over D-Bus, XDG dirs, inotify | |
@@ -187,7 +232,7 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 hop-tunes/
 ├── src/core/        profiles, settings, paths, PIN hashing
 ├── src/library/     scanner, watcher, tag reader, index DB, artwork cache, search
-├── src/playback/    GStreamer engine, queue, gapless/crossfade, ReplayGain
+├── src/playback/    PlaybackEngine interface; GStreamer (music) + libmpv (video) backends; queue, gapless, ReplayGain
 ├── src/playlists/   manual + smart playlist engine, import/export (m3u, xspf, zpl)
 ├── src/smartdj/     local similarity mixer
 ├── src/mpris/       D-Bus MPRIS2 service
@@ -232,7 +277,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 ---
 
 ## 11. Possible future (out of scope for v1)
-- Video and pictures pivots.
+- Pictures pivot.
 - Optional "sync to a folder / generic MTP player / phone" through a plugin (plain MTP via libmtp, **no** MTPZ).
 - Encrypted profiles (SQLCipher + key from PIN).
 - Local network sharing (DLNA server) for TVs and consoles.
@@ -251,6 +296,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | **M4: Playlists & Quickplay** | Manual + smart playlists, import m3u/zpl, Quickplay pins/history/new | — |
 | **M5: Now Playing & polish** | Art mosaic, transitions, themes/accents, ReplayGain, crossfade | Feels "seamless" |
 | **M6: Ship 1.0** | Flatpak, AppImage, AUR, user docs | Published |
+| **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |
 | 1.1 / 1.2 | EQ, Smart DJ, tag editing write-back, podcasts | — |
 
 ---
