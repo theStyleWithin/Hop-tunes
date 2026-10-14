@@ -68,6 +68,11 @@ if(HOPTUNES_BUILD_TESTS)
 
     add_executable(test_player tests/test_player.cpp)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
+    # Run the playback tests against both GStreamer engines.
     add_test(NAME player COMMAND test_player)
     set_tests_properties(player PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink")
+    add_test(NAME player-playbin COMMAND test_player)
+    set_tests_properties(player-playbin PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin")
+    add_test(NAME player-playbin3 COMMAND test_player)
+    set_tests_properties(player-playbin3 PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin3")
 endif()
