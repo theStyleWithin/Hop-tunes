@@ -19,3 +19,5 @@ for _ht_dir in "$APPDIR"/usr/lib/fallback/*/; do
   fi
 done
 unset _ht_dir _ht_lib _d
+
+true
