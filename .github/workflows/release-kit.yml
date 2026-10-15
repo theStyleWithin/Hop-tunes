@@ -130,6 +130,7 @@ jobs:
       - name: Run inside the sandbox
         shell: bash
         run: |
+          set +e
           # Install the bundle like a user would, then run it in the sandbox (--version needs no display).
           [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
@@ -142,6 +143,7 @@ jobs:
       - name: flatpak-builder-lint (Flathub's own checks)
         shell: bash
         run: |
+          set +e   # collect every finding before deciding
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           if ! flatpak install --user -y --noninteractive flathub org.flatpak.Builder > /tmp/builder-install.log 2>&1; then
             echo "::error::could not install org.flatpak.Builder: $(tail -3 /tmp/builder-install.log | tr '\n' ' ')"; exit 1
