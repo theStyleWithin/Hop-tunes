@@ -33,9 +33,11 @@ diagnose() {
   if [ -d "$R" ]; then
     echo "-- missing libraries for the main binary:"
     LD_LIBRARY_PATH="$R/usr/lib" ldd "$R/usr/bin/hop-tunes" 2>&1 | grep -i "not found" || echo "   (none)"
-    echo "-- traced start:"
-    QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen HOPTUNES_SCREENSHOT="$WORK/diag.png" \
-      timeout 60 sh -x "$R/AppRun" 2>&1 | tail -40
+    echo "-- traced start (AppRun with hooks):"
+    APPDIR="$R" APPIMAGE="$APPIMAGE" QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM=offscreen \
+      HOPTUNES_SCREENSHOT="$WORK/diag.png" timeout 60 bash -x "$R/AppRun" > "$WORK/trace.log" 2>&1
+    echo "   AppRun exit code: $?"
+    grep -v "^+++* *\(for\|\[\|_d=\|_ht_dir=\)" "$WORK/trace.log" | tail -60
   fi
 }
 fail() { echo "SMOKE FAIL [$LABEL]: $1"; [ "${DIAGNOSED:-0}" = 1 ] || { DIAGNOSED=1; diagnose; }; exit 1; }
