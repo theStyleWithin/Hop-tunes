@@ -50,3 +50,9 @@ M2 adds the three-pane artists view, the albums grid, real cover art (embedded o
 | ![picker](app/m3-profile-picker.png) | ![create](app/m3-profile-create.png) | ![pin](app/m3-profile-pin.png) | ![settings](app/m3-profile-settings.png) |
 
 M3 adds local profiles. These renders come from the automated UI test (`HOPTUNES_UI_SHOTS=<dir> ./test_ui`), which drives the real screens: create a profile with a PIN, enter a wrong PIN, switch profiles, and change the colour and picture.
+
+| quickplay | playlist | smart playlist rules | search | song menu |
+|---|---|---|---|---|
+| ![quickplay](app/m4-quickplay.png) | ![playlist](app/m4-playlist.png) | ![smart](app/m4-smart-editor.png) | ![search](app/m4-search.png) | ![menu](app/m4-song-menu.png) |
+
+M4 adds playlists, smart playlists, search, hearts and play counts, and the Quickplay page with pins, history, new albums and the smart DJ. These renders also come from the UI test, run against the sample library (`HOPTUNES_UI_LIBRARY=<folder>`).
