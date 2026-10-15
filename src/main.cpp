@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#include "platform/Mpris.h"
 
 #include <QFont>
 #include <QFontDatabase>
@@ -51,6 +52,14 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return 1;
+
+    // Media keys / desktop media widgets.
+    hop::Mpris mpris(hopApp.player());
+    QObject::connect(&mpris, &hop::Mpris::quitRequested, &app, &QCoreApplication::quit);
+    QObject::connect(&mpris, &hop::Mpris::raiseRequested, &app, [&engine] {
+        if (auto *w = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) { w->show(); w->raise(); w->requestActivate(); }
+    });
+    mpris.start();
 
     // Developer hook: HOPTUNES_AUTOPLAY=<row> starts playing that song once the library has loaded.
     bool autoplayOk = false;

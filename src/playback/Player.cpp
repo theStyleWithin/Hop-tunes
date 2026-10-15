@@ -174,6 +174,7 @@ void Player::seek(qint64 ms)
                             GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT), ms * GST_MSECOND);
     m_position = ms;
     emit positionChanged();
+    emit seeked(ms);
 }
 
 // Runs on a GStreamer streaming thread, shortly before the current track ends.

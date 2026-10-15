@@ -32,10 +32,12 @@ target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
+    src/platform/Mpris.h      src/platform/Mpris.cpp
 )
-target_link_libraries(hoptunes_playback PUBLIC hoptunes_core PkgConfig::GST)
+target_link_libraries(hoptunes_playback PUBLIC hoptunes_core PkgConfig::GST PkgConfig::GIO)
 target_compile_options(hoptunes_playback PRIVATE -Wall -Wextra)
 
 # ---- desktop app --------------------------------------------------------------
@@ -77,4 +79,10 @@ if(HOPTUNES_BUILD_TESTS)
     set_tests_properties(player-playbin PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin")
     add_test(NAME player-playbin3 COMMAND test_player)
     set_tests_properties(player-playbin3 PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin3")
+
+    # MPRIS needs a D-Bus session bus; the test starts its own private one (skips if unavailable).
+    add_executable(test_mpris tests/test_mpris.cpp)
+    target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
+    add_test(NAME mpris COMMAND test_mpris)
+    set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
 endif()

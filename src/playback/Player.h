@@ -81,6 +81,7 @@ signals:
     void durationChanged();
     void volumeChanged();
     void errorChanged();
+    void seeked(qint64 ms);          // explicit seek (not normal progress)
 
 private:
     static void onAboutToFinish(GstElement *playbin, void *self);
