@@ -93,6 +93,8 @@ jobs:
     steps:
       - name: Typical desktop base libraries
         run: |
+          # Distro mirrors flake now and then; retry installs before calling it a failure.
+          retry() { for i in 1 2 3; do "$@" && return 0; echo "retry $i: $*"; sleep 15; done; return 1; }
           case "${{ matrix.pm }}" in
             apt)
               export DEBIAN_FRONTEND=noninteractive; apt-get update
@@ -101,14 +103,14 @@ jobs:
                        libwayland-client0 libwayland-cursor0 libwayland-egl1 coreutils; do
                 apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1 || true
               done
-              [ "${{ matrix.display }}" = xcb ] && apt-get install -y --no-install-recommends xvfb xauth
-              [ "${{ matrix.display }}" = wayland ] && apt-get install -y --no-install-recommends weston
+              [ "${{ matrix.display }}" = xcb ] && retry apt-get install -y --no-install-recommends xvfb xauth
+              [ "${{ matrix.display }}" = wayland ] && retry apt-get install -y --no-install-recommends weston
               true ;;
-            dnf)    dnf -y install mesa-libEGL mesa-libGL fontconfig dejavu-sans-fonts libX11 libX11-xcb libxcb \
+            dnf)    retry dnf -y install mesa-libEGL mesa-libGL fontconfig dejavu-sans-fonts libX11 libX11-xcb libxcb \
                       libxkbcommon glib2 dbus-libs alsa-lib libwayland-client libwayland-cursor libwayland-egl findutils ;;
-            pacman) pacman -Syu --noconfirm --needed mesa fontconfig ttf-dejavu libx11 libxcb libxkbcommon glib2 \
+            pacman) retry pacman -Syu --noconfirm --needed mesa fontconfig ttf-dejavu libx11 libxcb libxkbcommon glib2 \
                       dbus alsa-lib wayland ;;
-            zypper) zypper -n in Mesa-libEGL1 Mesa-libGL1 fontconfig dejavu-fonts libX11-6 libX11-xcb1 libxcb1 \
+            zypper) retry zypper -n in Mesa-libEGL1 Mesa-libGL1 fontconfig dejavu-fonts libX11-6 libX11-xcb1 libxcb1 \
                       libxkbcommon0 libglib-2_0-0 libdbus-1-3 libasound2 libwayland-client0 libwayland-cursor0 \
                       libwayland-egl1 gzip tar ;;
           esac

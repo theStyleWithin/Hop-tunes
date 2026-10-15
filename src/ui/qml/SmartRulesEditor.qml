@@ -74,13 +74,15 @@ Popup {
         contentItem: Label { text: cb.displayText; leftPadding: 10; color: Theme.text; font: cb.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
         background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: cb.activeFocus ? hop.accent : Theme.line } }
         popup.background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
-        delegate: ItemDelegate {
-            required property int index
-            required property var modelData
-            width: cb.width
-            highlighted: cb.highlightedIndex === index
-            contentItem: Label { text: modelData; color: Theme.text; font: cb.font }
-            background: Rectangle { color: highlighted ? Theme.hover : "transparent" }
+        delegate: Component {
+            ItemDelegate {
+                required property int index
+                required property var modelData
+                width: cb.width
+                highlighted: cb.highlightedIndex === index
+                contentItem: Label { text: modelData; color: Theme.text; font: cb.font }
+                background: Rectangle { color: highlighted ? Theme.hover : "transparent" }
+            }
         }
     }
 

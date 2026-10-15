@@ -28,46 +28,48 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             model: strip.tiles
             ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
-            delegate: AbstractButton {
-                id: t
-                required property var modelData
-                objectName: "tile_" + strip.title + "_" + modelData.title
-                width: 150; height: 196
-                hoverEnabled: true
-                onClicked: hop.playTile(modelData.kind, modelData.ref)
-                Accessible.name: "play " + modelData.title
-                ToolTip.visible: hovered; ToolTip.delay: 800; ToolTip.text: "click to play · right-click for more"
-                MouseArea {
-                    anchors.fill: parent; acceptedButtons: Qt.RightButton
-                    onClicked: function (mouse) { tileMenu.tile = t.modelData; tileMenu.popup(t, mouse.x, mouse.y) }
-                }
-                contentItem: ColumnLayout {
-                    spacing: 4
-                    Item {
-                        Layout.preferredWidth: 150; Layout.preferredHeight: 150
-                        AlbumArt { anchors.fill: parent; key: t.modelData.title; source: t.modelData.art || ""; opacity: t.hovered ? 0.8 : 1 }
-                        Rectangle {   // artists read as round, like the Zune artist tiles
-                            visible: t.modelData.kind === "artist"
-                            anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                            color: "#cc111113"; width: kindLabel.implicitWidth + 12; height: 22
-                            Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
-                        }
-                        Rectangle {
-                            visible: t.modelData.kind === "playlist"
-                            anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                            color: "#cc111113"; width: plLabel.implicitWidth + 12; height: 22
-                            Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
-                        }
-                        Label {
-                            visible: t.hovered
-                            anchors.centerIn: parent
-                            text: "▶"; color: "#ffffff"; font.pixelSize: 34
-                        }
+            delegate: Component {
+                AbstractButton {
+                    id: t
+                    required property var modelData
+                    objectName: "tile_" + strip.title + "_" + modelData.title
+                    width: 150; height: 196
+                    hoverEnabled: true
+                    onClicked: hop.playTile(modelData.kind, modelData.ref)
+                    Accessible.name: "play " + modelData.title
+                    ToolTip.visible: hovered; ToolTip.delay: 800; ToolTip.text: "click to play · right-click for more"
+                    MouseArea {
+                        anchors.fill: parent; acceptedButtons: Qt.RightButton
+                        onClicked: function (mouse) { tileMenu.tile = t.modelData; tileMenu.popup(t, mouse.x, mouse.y) }
                     }
-                    Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } elide: Text.ElideRight; Layout.fillWidth: true }
+                    contentItem: ColumnLayout {
+                        spacing: 4
+                        Item {
+                            Layout.preferredWidth: 150; Layout.preferredHeight: 150
+                            AlbumArt { anchors.fill: parent; key: t.modelData.title; source: t.modelData.art || ""; opacity: t.hovered ? 0.8 : 1 }
+                            Rectangle {   // artists read as round, like the Zune artist tiles
+                                visible: t.modelData.kind === "artist"
+                                anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
+                                color: "#cc111113"; width: kindLabel.implicitWidth + 12; height: 22
+                                Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                            }
+                            Rectangle {
+                                visible: t.modelData.kind === "playlist"
+                                anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
+                                color: "#cc111113"; width: plLabel.implicitWidth + 12; height: 22
+                                Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                            }
+                            Label {
+                                visible: t.hovered
+                                anchors.centerIn: parent
+                                text: "▶"; color: "#ffffff"; font.pixelSize: 34
+                            }
+                        }
+                        Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }
+                        Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } elide: Text.ElideRight; Layout.fillWidth: true }
+                    }
+                    background: Item { }
                 }
-                background: Item { }
             }
         }
     }
