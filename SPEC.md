@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** Draft v0.6 (M1–M5 built) · **Date:** 2026-10-15 · **Platform:** Linux first
+**Status:** v1.0 (M1–M6 built; release tag pending) · **Date:** 2026-10-15 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -314,7 +314,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | **M3: Profiles** ✅ | Profile create/pick/switch/delete, PIN, per-profile settings, guest mode (per-profile stats arrive with play history in M4) | Two people can share one install without seeing each other's data |
 | **M4: Playlists & Quickplay** ✅ | Manual + smart playlists, auto lists, import m3u/m3u8/pls/xspf/zpl/wpl, export m3u8, Quickplay pins/history/new, smart DJ, instant search, hearts and play counts per profile, play next / add to queue | — |
 | **M5: Now Playing & polish** ✅ | Art mosaic, transitions, themes/accents, ReplayGain, crossfade; also repeat/shuffle, volume in the mini player, drag reordering, idle-fading Now Playing controls | Feels "seamless" |
-| **M6: Ship 1.0** | Flatpak, AppImage, AUR, user docs | Published |
+| **M6: Ship 1.0** ✅ | Flatpak, AppImage, AUR, user docs; also man page, third-party notices, About section, opening files with single-instance hand-off, tagged releases | Published (once `v1.0.0` is tagged) |
 | **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |
 | 1.1 / 1.2 | EQ, Smart DJ, tag editing write-back, podcasts | — |
 

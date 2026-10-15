@@ -248,6 +248,34 @@ GVariant *Mpris::metadata(const State &s) const
 
 // ---- D-Bus thread --------------------------------------------------------------------------
 
+bool Mpris::forwardToRunningInstance(const QStringList &uris)
+{
+    GError *err = nullptr;
+    GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &err);
+    if (!bus) { if (err) g_error_free(err); return false; }
+    // Is the name owned?
+    GVariant *r = g_dbus_connection_call_sync(bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+                                              "NameHasOwner", g_variant_new("(s)", kBusName), G_VARIANT_TYPE("(b)"),
+                                              G_DBUS_CALL_FLAGS_NONE, 2000, nullptr, nullptr);
+    gboolean owned = FALSE;
+    if (r) { g_variant_get(r, "(b)", &owned); g_variant_unref(r); }
+    bool ok = false;
+    if (owned) {
+        ok = true;
+        for (const QString &u : uris) {
+            GVariant *res = g_dbus_connection_call_sync(bus, kBusName, kPath, kPlayerIface, "OpenUri",
+                                                        g_variant_new("(s)", u.toUtf8().constData()), nullptr,
+                                                        G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, nullptr);
+            if (res) g_variant_unref(res); else ok = false;
+        }
+        GVariant *res = g_dbus_connection_call_sync(bus, kBusName, kPath, kRootIface, "Raise", nullptr, nullptr,
+                                                    G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, nullptr);
+        if (res) g_variant_unref(res); else ok = false;
+    }
+    g_object_unref(bus);
+    return ok;
+}
+
 void Mpris::onMethodCall(GDBusConnection *, const char *, const char *, const char *iface, const char *method,
                          GVariant *params, GDBusMethodInvocation *inv, void *self)
 {
@@ -265,6 +293,12 @@ void Mpris::onMethodCall(GDBusConnection *, const char *, const char *, const ch
     else if (name == "Play") onQt([p] { p->play(); });
     else if (name == "PlayPause") onQt([p] { p->toggle(); });
     else if (name == "Stop") onQt([p] { p->stop(); });
+    else if (name == "OpenUri") {
+        const char *uri = nullptr;
+        g_variant_get(params, "(&s)", &uri);
+        const QString u = QString::fromUtf8(uri ? uri : "");
+        onQt([m, u] { emit m->openUriRequested(u); });
+    }
     else if (name == "Seek") {
         gint64 offset = 0;
         g_variant_get(params, "(x)", &offset);

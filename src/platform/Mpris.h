@@ -3,6 +3,7 @@
 
 #include <QMutex>
 #include <QObject>
+#include <QStringList>
 #include <QString>
 
 #include <atomic>
@@ -26,6 +27,11 @@ class Player;
 class Mpris : public QObject {
     Q_OBJECT
 public:
+    // Single instance: if Hop-tunes is already running on this session bus, hand it the
+    // files (MPRIS OpenUri) and bring its window forward (Raise). Returns true when an
+    // instance answered, so this process can exit.
+    static bool forwardToRunningInstance(const QStringList &uris);
+
     explicit Mpris(Player *player, QObject *parent = nullptr);
     ~Mpris() override;
 
@@ -35,6 +41,7 @@ public:
 signals:
     void raiseRequested();
     void quitRequested();
+    void openUriRequested(const QString &uri);   // file:// or a plain path
     void registeredChanged(bool registered);
 
 private:

@@ -1,0 +1,55 @@
+name: flatpak
+
+# Builds the Flatpak bundle on the KDE 6.8 runtime; attaches it to tagged releases.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.8
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: Hop-tunes-x86_64.flatpak
+          manifest-path: packaging/flatpak/io.github.thestylewithin.hoptunes.yml
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.yml') }}
+          upload-artifact: true
+
+      - name: Smoke-test the build
+        shell: bash
+        run: |
+          set -e
+          # Runs the built app inside the Flatpak sandbox (no display needed for --version).
+          flatpak-builder --run flatpak_app packaging/flatpak/io.github.thestylewithin.hoptunes.yml hop-tunes --version | tee version.txt
+          grep -q "hop-tunes" version.txt
+          test -f Hop-tunes-x86_64.flatpak
+
+      - name: Attach to the tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          # The AppImage workflow creates the release; wait for it, then add the bundle.
+          # (Untagged builds keep the bundle as a workflow artifact: the "continuous"
+          # release is recreated on every push and would drop it.)
+          tag="${GITHUB_REF#refs/tags/}"
+          command -v gh >/dev/null || { echo "gh CLI not in this image; bundle stays a workflow artifact"; exit 0; }
+          for i in $(seq 1 40); do gh release view "$tag" >/dev/null 2>&1 && break; sleep 30; done
+          gh release upload "$tag" Hop-tunes-x86_64.flatpak --clobber

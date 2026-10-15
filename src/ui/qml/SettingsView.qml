@@ -305,7 +305,43 @@ Item {
             PlainButton { visible: root.confirmRemove; text: "remove"; danger: true; onClicked: { root.confirmRemove = false; root.profileMsg = hop.removeProfile() } }
         }
 
-        Label { text: "hop-tunes " + hop.version + " · offline · GPL-3.0"; color: Theme.faint; font { family: Theme.font; pixelSize: 13 } Layout.topMargin: 24 }
+        // ---- about -------------------------------------------------------------------
+        Label { text: "about"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 28 }
+        Label {
+            objectName: "aboutVersion"
+            text: "hop-tunes " + hop.version + " · GPL-3.0-or-later · works offline, no accounts, no tracking"
+            color: Theme.text2; font { family: Theme.font; pixelSize: 15 }
+        }
+        Label { text: "keyboard"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 6 }
+        GridLayout {
+            columns: 2; columnSpacing: 28; rowSpacing: 6
+            Repeater {
+                model: [["space", "play / pause"], ["ctrl + → / ctrl + ←", "next / previous song"],
+                        ["ctrl + F  or  /", "search your music"], ["esc", "clear the search"],
+                        ["ctrl + 1 / 2 / 3", "collection / now playing / quickplay"], ["ctrl + ,", "settings"],
+                        ["media keys", "play, pause, next, previous (also from desktop widgets)"]]
+                delegate: Component {
+                    RowLayout {
+                        required property var modelData
+                        Layout.columnSpan: 2
+                        spacing: 28
+                        Label { text: modelData[0]; color: Theme.text; font { family: Theme.font; pixelSize: 14; weight: Font.Medium } Layout.preferredWidth: 190 }
+                        Label { text: modelData[1]; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+                    }
+                }
+            }
+        }
+        Label {
+            Layout.topMargin: 10
+            Layout.fillWidth: true; Layout.maximumWidth: 760
+            wrapMode: Text.WordWrap
+            text: "built with Qt, GStreamer, TagLib and SQLite, and set in Jost (SIL Open Font License). "
+                + "see THIRD_PARTY_NOTICES.md for the full list. hop-tunes is inspired by how the Zune software "
+                + "organised music; it is an independent project, not affiliated with or endorsed by Microsoft. "
+                + "Zune is a trademark of Microsoft Corporation."
+            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+        }
+        Item { height: 18; width: 1 }
     }
     }
 }

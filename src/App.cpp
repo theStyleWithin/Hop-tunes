@@ -3,6 +3,7 @@
 
 #include "core/Paths.h"
 #include "library/Smart.h"
+#include "library/TagReader.h"
 
 #include <QCoreApplication>
 #include <QColor>
@@ -10,6 +11,7 @@
 #include <QStyleHints>
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QImage>
 #include <QJsonArray>
 #include <QFileInfo>
@@ -38,6 +40,9 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         if (m_rescanPending) { m_rescanPending = false; rescan(); }
     });
     for (TrackListModel *m : {&m_songs, &m_albumSongs, &m_playlistSongs}) m->setStats(&m_stats);
+    m_openTimer.setSingleShot(true);
+    m_openTimer.setInterval(250);
+    connect(&m_openTimer, &QTimer::timeout, this, [this] { const QStringList b = m_openBatch; m_openBatch.clear(); openFiles(b); });
     connect(&m_player, &Player::positionChanged, this, &App::onPosition);
     connect(&m_player, &Player::trackStarted, this, &App::onTrackChanged);
     // Playback preferences are per profile.
@@ -271,6 +276,7 @@ void App::activate(const QString &id, bool guest)
     emit foldersChanged();
     reload();
     rescan();
+    if (!m_pendingOpen.isEmpty()) { const QStringList p = m_pendingOpen; m_pendingOpen.clear(); openFiles(p); }
 }
 
 void App::leaveProfile()
@@ -959,6 +965,47 @@ bool App::showAlbum(const QString &ref)
     if (!m_search.isEmpty()) setSearchText({});
     applySelection(ref.section(kRefSep, 0, 0), ref.section(kRefSep, 1));
     return selectedAlbumRef() == ref;
+}
+
+// ---- opening files -------------------------------------------------------------------
+
+void App::openUri(const QString &uri)
+{
+    m_openBatch << uri;
+    m_openTimer.start();
+}
+
+void App::openFiles(const QStringList &pathsOrUris)
+{
+    if (pathsOrUris.isEmpty()) return;
+    if (!profileReady()) { m_pendingOpen += pathsOrUris; return; }
+    QList<Track> q;
+    auto add = [this, &q](const QFileInfo &fi) {
+        if (!fi.isFile() || !TagReader::isAudioFile(fi)) return;
+        const QString path = fi.canonicalFilePath();
+        const int i = m_libraryIndex.value(path, -1);
+        if (i >= 0) { q.append(m_library[i]); return; }
+        Track t = TagReader::read(QFileInfo(path));
+        t.path = path;
+        q.append(t);
+    };
+    for (const QString &item : pathsOrUris) {
+        const QString path = item.startsWith(QLatin1String("file:"), Qt::CaseInsensitive) ? QUrl(item).toLocalFile() : item;
+        const QFileInfo fi(path);
+        if (fi.isDir()) {
+            QStringList files;
+            QDirIterator it(fi.absoluteFilePath(), QDir::Files | QDir::Readable, QDirIterator::Subdirectories);
+            while (it.hasNext()) files << it.next();
+            files.sort(Qt::CaseInsensitive);
+            for (const QString &f : files) add(QFileInfo(f));
+        } else {
+            add(fi);
+        }
+    }
+    if (q.isEmpty()) return;
+    m_djSeed.clear();
+    emit djChanged();
+    m_player.setQueue(q, 0);
 }
 
 // ---- smart DJ --------------------------------------------------------------------------

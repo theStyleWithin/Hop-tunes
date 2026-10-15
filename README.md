@@ -5,9 +5,23 @@
 > [!WARNING]
 > **In development: do not download.** Hop-tunes is unfinished and not ready for everyday use. Builds may change or break without notice, and there are no stable releases yet.
 
+## Install
+
+| | |
+|---|---|
+| **Flatpak** | `Hop-tunes-x86_64.flatpak` from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases), then `flatpak install --user Hop-tunes-x86_64.flatpak` |
+| **Arch / CachyOS (AUR)** | `yay -S hop-tunes` (or `hop-tunes-git` for the latest code) |
+| **AppImage** | download, `chmod +x`, run. Any x86_64 distro from 2022 on |
+
+The [user guide](docs/user-guide.md) covers everything from the first run to troubleshooting.
+
 ## Docs
 
+- [`docs/user-guide.md`](docs/user-guide.md): how to use Hop-tunes.
+- [`CHANGELOG.md`](CHANGELOG.md): what changed in each version.
 - [`SPEC.md`](SPEC.md): product and technical spec: a local-first, login-free music player with local profiles.
+- [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md): open-source components and their licenses; trademark notice.
+- [`packaging/`](packaging/): AppImage, Flatpak and AUR build files.
 
 - [`design/`](design/): screenshots of the real app for each milestone, plus the original design mockups.
 
@@ -18,6 +32,7 @@
 - **M3 (local profiles): done.** "Who's listening?" picker, first-run profile setup, optional PIN (a privacy curtain, not security), accent colour and picture per profile, switch without restarting, guest mode that saves nothing. Each profile has its own folders and settings. No accounts or sign-in.
 - **M4 (playlists & quickplay): done.** Instant search, hearts and play counts per profile, playlists (with move up/down), smart playlists with a rule builder, auto lists (hearted, most played, recently added, never played), playlist import (`.m3u`, `.m3u8`, `.pls`, `.xspf`, and Zune `.zpl`/`.wpl`, even ones made on Windows) and `.m3u8` export, play next / add to queue, and a Quickplay page with pins, history, new albums and an offline smart DJ.
 - **M5 (now playing & polish): done.** Crossfade (0–12 s; albums stay gapless), even volume with ReplayGain (per song or per album), shuffle and repeat (also from desktop media widgets), a volume control, dark and light themes (or match the system), smooth transitions with a "reduce motion" option, drag-to-reorder for the queue and playlists, and Now Playing controls that fade away while you listen.
+- **M6 (ship 1.0): ready, waiting for the release tag.** Flatpak (KDE 6.8 runtime, music folder read-only, other folders through the file chooser), AUR packages `hop-tunes` and `hop-tunes-git`, a user guide, changelog, man page, third-party notices, an About section with keyboard shortcuts, `--help`/`--version`/`--forget-pin`, opening files from a file manager (a second launch reuses the open window), and tagged GitHub releases with the AppImage and Flatpak attached. Version 1.0.0.
 - **AppImage:** portable build for glibc 2.35+ distros, tested on 10 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
 **New in M5: polish, themes and playback options**
