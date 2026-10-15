@@ -142,13 +142,22 @@ jobs:
       - name: flatpak-builder-lint (Flathub's own checks)
         shell: bash
         run: |
-          set -e
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive flathub org.flatpak.Builder
           lint() { flatpak run --command=flatpak-builder-lint org.flatpak.Builder "$@"; }
-          lint manifest kit-manifest.yml
-          lint builddir flatpak_app
-          if [ -d repo ]; then lint repo repo; fi
+          # Each finding becomes an annotation; any error fails the job.
+          fail=0
+          # (No "repo" lint: it checks screenshot mirroring that only Flathub's build infra does.)
+          for target in "manifest kit-manifest.yml" "builddir flatpak_app"; do
+            set -- $target
+            out=$(lint "$@" 2>&1); code=$?
+            echo "== lint $target (exit $code)"; echo "$out"
+            if [ $code -ne 0 ]; then
+              fail=1
+              echo "::error title=flatpak-builder-lint $1::$(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
+            fi
+          done
+          exit $fail
 
   publish:
     needs: [kit, aur-check, flathub-check]
