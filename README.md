@@ -9,7 +9,7 @@
 
 - [`SPEC.md`](SPEC.md): product and technical spec: a local-first, login-free music player with local profiles.
 
-- [`design/`](design/): reference mockups of the five core screens (PNG screenshots + clickable HTML pages) for building the real app's UI.
+- [`design/`](design/): screenshots of the real app for each milestone, plus the original design mockups.
 
 ## Status
 
@@ -18,11 +18,17 @@
 - **M3 (local profiles): done.** "Who's listening?" picker, first-run profile setup, optional PIN (a privacy curtain, not security), accent colour and picture per profile, switch without restarting, guest mode that saves nothing. Each profile has its own folders and settings. No accounts or sign-in.
 - **AppImage:** portable build for glibc 2.35+ distros, tested on 10 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
+**New in M3: local profiles**
+
+| who's listening? | settings › profile |
+|---|---|
+| ![profile picker](design/app/m3-profile-picker.png) | ![profile settings](design/app/m3-profile-settings.png) |
+
+**M1–M2: the music collection**
+
 | collection › artists | now playing |
 |---|---|
 | ![artists](design/app/m2-collection-artists.png) | ![now playing](design/app/m2-now-playing.png) |
-| **who's listening?** | **settings › profile** |
-| ![profile picker](design/app/m3-profile-picker.png) | ![profile settings](design/app/m3-profile-settings.png) |
 
 More renders, plus the original design targets, are in [`design/`](design/).
 
