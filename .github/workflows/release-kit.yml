@@ -130,9 +130,11 @@ jobs:
       - name: Run inside the sandbox
         shell: bash
         run: |
-          # Containers have no FUSE and no machine-id; neither matters for this check.
+          # Install the bundle like a user would, then run it in the sandbox (--version needs no display).
           [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
-          out=$(flatpak-builder --disable-rofiles-fuse --run flatpak_app local-build.yml hop-tunes --version 2>&1); code=$?
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive hop-tunes-kit-check.flatpak 2>&1 | tail -5
+          out=$(flatpak run --command=hop-tunes io.github.thestylewithin.hoptunes --version 2>&1); code=$?
           echo "$out"
           if [ $code -ne 0 ] || ! grep -q "hop-tunes ${{ needs.kit.outputs.version }}" <<<"$out"; then
             echo "::error title=flatpak run::$(tail -25 <<<"$out" | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')"; exit 1
