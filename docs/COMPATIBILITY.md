@@ -46,33 +46,6 @@ The Flatpak and the AppImage work on CachyOS too.
 **Not supported by the AppImage:** AlmaLinux / RHEL / Rocky 9 and anything older (tested:
 the app opens but plays no sound). Use the Flatpak.
 
-## Which install should I pick?
-
-| You use | Best choice | Why |
-|---|---|---|
-| CachyOS, Arch, EndeavourOS, Manjaro | **AUR** (`hop-tunes`) | built for your system, updates with the rest of it |
-| Any other distro, or an older one | **Flatpak** | brings its own libraries, so it works almost everywhere Flatpak does |
-| You don't want to install anything | **AppImage** | one file you run directly; needs a 2022-or-newer distro |
-
-### Flatpak
-
-The Flatpak runs on the KDE Platform runtime and doesn't depend on your distro's
-libraries. It works on any x86_64 distro that can run current Flatpak apps, including the
-older ones the AppImage can't run on. It is built and run inside its sandbox on every
-change.
-
-### AUR
-
-The AUR package builds against your system's own Qt, GStreamer and TagLib. Because Arch
-and Arch-based distros update continuously, it is checked against current Arch on every
-change: built with `makepkg`, checked with `namcap`, installed, and started. Distros built
-on Arch that hold packages back for a long time may need a full system update
-(`sudo pacman -Syu`) first.
-
 ## Something not working?
 
-Please open an issue at https://github.com/theStyleWithin/Hop-tunes/issues and include:
-
-- your distro and version,
-- how you installed Hop-tunes (Flatpak, AUR or AppImage),
-- what happened, and the output of `hop-tunes --version`.
+Please open an issue on GitHub: https://github.com/theStyleWithin/Hop-tunes/issues
