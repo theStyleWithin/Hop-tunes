@@ -97,6 +97,13 @@ private slots:
         m_bus.waitForFinished();
     }
 
+    void startStopRace()
+    {
+        // Destroying right after start must neither hang nor crash.
+        for (int i = 0; i < 20; ++i) { Player p; Mpris m(&p); m.start(); }
+        QVERIFY(true);
+    }
+
     void controlsPlayback()
     {
         QTemporaryDir dir;

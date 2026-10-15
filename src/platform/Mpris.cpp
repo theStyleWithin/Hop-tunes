@@ -94,8 +94,16 @@ Mpris::Mpris(Player *player, QObject *parent) : QObject(parent), m_player(player
 
 Mpris::~Mpris()
 {
-    if (m_loop) g_main_loop_quit(m_loop);
-    if (m_thread.joinable()) m_thread.join();
+    if (!m_thread.joinable()) return;
+    // Queue the quit on the loop's own context: safe whether the loop is running, not yet
+    // started (it runs the request first thing) or already finished (no session bus).
+    g_main_context_invoke(m_ctx, [](gpointer loop) -> gboolean {
+        g_main_loop_quit(static_cast<GMainLoop *>(loop));
+        return G_SOURCE_REMOVE;
+    }, m_loop);
+    m_thread.join();
+    g_main_loop_unref(m_loop);
+    g_main_context_unref(m_ctx);
 }
 
 void Mpris::start()
@@ -147,11 +155,7 @@ void Mpris::run()
         }
         g_object_unref(conn);
     }
-    g_main_context_pop_thread_default(m_ctx);
-    g_main_loop_unref(m_loop);
-    g_main_context_unref(m_ctx);
-    m_loop = nullptr;
-    m_ctx = nullptr;
+    g_main_context_pop_thread_default(m_ctx);   // loop/context are freed by the destructor after join
 }
 
 // ---- Qt thread -----------------------------------------------------------------------------
