@@ -4,6 +4,7 @@
 #include "library/Track.h"
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QList>
 
 namespace hop {
@@ -23,6 +24,8 @@ public:
         YearRole,
         DurationRole,      // "3:42"
         PathRole,
+        HeartedRole,
+        PlayCountRole,
     };
 
     explicit TrackListModel(QObject *parent = nullptr);
@@ -35,6 +38,10 @@ public:
     void setTracks(const QList<Track> &tracks);
     const QList<Track> &tracks() const { return m_tracks; }
 
+    // Per-profile stats for the hearted / play-count roles (owned by the App; may be null).
+    void setStats(const QHash<QString, TrackStats> *stats) { m_stats = stats; }
+    void statsChanged(const QString &path);   // refresh rows showing this file
+
     static QString formatDuration(qint64 ms);
 
 signals:
@@ -42,6 +49,7 @@ signals:
 
 private:
     QList<Track> m_tracks;
+    const QHash<QString, TrackStats> *m_stats = nullptr;
 };
 
 } // namespace hop

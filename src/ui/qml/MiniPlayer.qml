@@ -39,6 +39,13 @@ Rectangle {
             }
         }
 
+        HeartButton {
+            objectName: "miniHeart"
+            visible: player.hasTrack
+            on: hop.currentHearted
+            onClicked: hop.toggleHeartCurrent()
+        }
+
         RowLayout {
             spacing: 8
             TransportButton { glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
@@ -74,6 +81,6 @@ Rectangle {
             Label { text: player.hasTrack ? hop.formatTime(player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
         }
 
-        Label { text: "gapless"; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+        Label { text: hop.djSeed !== "" ? "smart dj" : "gapless"; color: hop.djSeed !== "" ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: 13 } }
     }
 }

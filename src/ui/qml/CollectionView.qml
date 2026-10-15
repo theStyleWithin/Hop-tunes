@@ -8,7 +8,30 @@ import "Theme.js" as Theme
 Item {
     id: root
     signal addFolderRequested()
-    property string mode: ["albums", "songs"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
+    property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
+    function showArtists() { mode = "artists" }
+
+    TrackMenu {
+        id: menu
+        property var playFn: null
+        onPlayRequested: if (playFn) playFn()
+        onNewPlaylistRequested: function (paths) { prompt.pendingPaths = paths; prompt.ask("new playlist", "", "create") }
+    }
+    NamePrompt {
+        id: prompt
+        property var pendingPaths: []
+        onAccepted: function (name) { var k = hop.createPlaylist(name, pendingPaths); pendingPaths = []; if (k) hop.selectPlaylist(k) }
+    }
+    function songMenu(paths, path, hearted, playFn, src, x, y) {
+        menu.paths = paths; menu.heartPath = path; menu.hearted = hearted
+        menu.pinKind = ""; menu.playlistRow = -1; menu.playFn = playFn
+        menu.popup(src, x, y)
+    }
+    function albumMenu(paths, ref, label, playFn, src, x, y) {
+        menu.paths = paths; menu.heartPath = ""; menu.pinKind = "album"; menu.pinRef = ref; menu.pinLabel = label
+        menu.playlistRow = -1; menu.playFn = playFn
+        menu.popup(src, x, y)
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -28,21 +51,57 @@ Item {
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
             Label {
-                visible: !hop.scanning && hop.songs.count > 0
-                text: hop.songs.count + (hop.songs.count === 1 ? " song" : " songs")
+                visible: !hop.scanning && hop.librarySize > 0
+                text: hop.searchText !== "" ? hop.songs.count + " of " + hop.librarySize : hop.songs.count + (hop.songs.count === 1 ? " song" : " songs")
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
+            // instant search (spec §4.2)
+            TextField {
+                id: search
+                objectName: "searchField"
+                visible: hop.librarySize > 0
+                implicitWidth: 260
+                placeholderText: "search"
+                placeholderTextColor: Theme.dim
+                color: Theme.text
+                font { family: Theme.font; pixelSize: 16 }
+                leftPadding: 34
+                text: hop.searchText
+                onTextEdited: searchDelay.restart()
+                Keys.onEscapePressed: { text = ""; hop.searchText = "" }
+                Accessible.name: "search your music"
+                Timer { id: searchDelay; interval: 120; onTriggered: hop.searchText = search.text }
+                // Typing breaks the text binding; keep the box in step when search is
+                // cleared elsewhere (profile switch, "show in collection").
+                Connections { target: hop; function onSearchChanged() { if (search.text !== hop.searchText) search.text = hop.searchText } }
+                background: Rectangle {
+                    implicitHeight: 38; color: Theme.panel
+                    border { width: search.activeFocus ? 2 : 1; color: search.activeFocus ? hop.accent : Theme.line }
+                    Label { x: 11; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.dim; font.pixelSize: 18 }
+                }
+                AbstractButton {
+                    visible: search.text !== ""
+                    anchors { right: parent.right; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                    width: 26; height: 26
+                    onClicked: { search.text = ""; hop.searchText = "" }
+                    Accessible.name: "clear search"
+                    contentItem: Label { text: "×"; color: Theme.muted; font.pixelSize: 20; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Item { }
+                }
+            }
+            Shortcut { sequences: ["Ctrl+F", "/"]; enabled: hop.profileReady && search.visible; onActivated: { root.mode = root.mode === "playlists" ? "songs" : root.mode; search.forceActiveFocus(); search.selectAll() } }
         }
 
-        // ARTISTS · ALBUMS · SONGS (genres and playlists arrive in later milestones)
+        // ARTISTS · ALBUMS · SONGS · PLAYLISTS (genres: later)
         RowLayout {
             Layout.leftMargin: 48; Layout.topMargin: 10
             spacing: 24
             Repeater {
-                model: [["ARTISTS", "artists"], ["ALBUMS", "albums"], ["SONGS", "songs"], ["GENRES", ""], ["PLAYLISTS", ""]]
+                model: [["ARTISTS", "artists"], ["ALBUMS", "albums"], ["SONGS", "songs"], ["GENRES", ""], ["PLAYLISTS", "playlists"]]
                 delegate: AbstractButton {
                     id: tab
                     required property var modelData
+                    objectName: "tab_" + modelData[1]
                     readonly property bool on: root.mode === modelData[1]
                     enabled: modelData[1] !== ""
                     onClicked: root.mode = modelData[1]
@@ -63,7 +122,7 @@ Item {
 
         // empty state
         ColumnLayout {
-            visible: hop.songs.count === 0 && !hop.scanning
+            visible: hop.librarySize === 0 && !hop.scanning
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.topMargin: 40
             spacing: 18
@@ -87,11 +146,22 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
+        // no search hits
+        ColumnLayout {
+            visible: hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.leftMargin: 48; Layout.topMargin: 40
+            spacing: 12
+            Label { text: "nothing matches \u201c" + hop.searchText + "\u201d"; color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light } }
+            Label { text: "search looks at titles, artists, albums and genres."; color: Theme.muted; font { family: Theme.font; pixelSize: 16 } }
+            Item { Layout.fillHeight: true }
+        }
+
         StackLayout {
-            visible: hop.songs.count > 0
+            visible: hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
-            currentIndex: ["artists", "albums", "songs"].indexOf(root.mode)
+            currentIndex: ["artists", "albums", "songs", "playlists"].indexOf(root.mode)
 
             // ---- artists › albums › songs ----
             RowLayout {
@@ -115,6 +185,10 @@ Item {
                         leftPadding: 10
                         onClicked: hop.selectArtist(index)
                         Accessible.name: name
+                        MouseArea {
+                            anchors.fill: parent; acceptedButtons: Qt.RightButton
+                            onClicked: function (mouse) { hop.selectArtist(ad.index); artistMenu.artist = ad.name; artistMenu.popup(ad, mouse.x, mouse.y) }
+                        }
                         background: Rectangle { color: ad.sel || ad.hovered ? Theme.hover : "transparent" }
                         contentItem: Label { text: ad.name; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
                                              color: ad.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
@@ -148,6 +222,10 @@ Item {
                             onClicked: hop.selectAlbum(index)
                             onDoubleClicked: { hop.selectAlbum(index); hop.playAlbum(0) }
                             Accessible.name: title
+                            MouseArea {
+                                anchors.fill: parent; acceptedButtons: Qt.RightButton
+                                onClicked: function (mouse) { hop.selectAlbum(alb.index); root.albumMenu(hop.selectedAlbumPaths(), hop.selectedAlbumRef(), alb.title, function () { hop.playAlbum(0) }, alb, mouse.x, mouse.y) }
+                            }
                             background: Item {}
                             contentItem: ColumnLayout {
                                 spacing: 4
@@ -191,7 +269,9 @@ Item {
                             wide: false
                             trackId: model.trackId; title: model.title; artist: model.artist; album: model.album
                             trackNo: model.trackNo; duration: model.duration
+                            path: model.path; hearted: model.hearted
                             onPlay: hop.playAlbum(index)
+                            onMenu: function (src, x, y) { root.songMenu([model.path], model.path, model.hearted, function () { hop.playAlbum(index) }, src, x, y) }
                         }
                     }
                 }
@@ -215,6 +295,10 @@ Item {
                     width: allAlbums.cellWidth - 18; height: allAlbums.cellHeight
                     onClicked: { hop.openAlbum(index); root.mode = "artists" }
                     Accessible.name: title + ", " + artist
+                    MouseArea {
+                        anchors.fill: parent; acceptedButtons: Qt.RightButton
+                        onClicked: function (mouse) { root.albumMenu(hop.albumPaths(tile.index), hop.albumRef(tile.index), tile.title, function () { hop.playTile("album", hop.albumRef(tile.index)) }, tile, mouse.x, mouse.y) }
+                    }
                     background: Item {}
                     contentItem: ColumnLayout {
                         spacing: 4
@@ -245,6 +329,7 @@ Item {
                         Label { text: "title"; Layout.fillWidth: true; Layout.preferredWidth: 4; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
                         Label { text: "artist"; Layout.fillWidth: true; Layout.preferredWidth: 3; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
                         Label { text: "album"; Layout.fillWidth: true; Layout.preferredWidth: 3; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                        Item { Layout.preferredWidth: 27 }
                         Label { text: "length"; Layout.preferredWidth: 56; horizontalAlignment: Text.AlignRight; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
                     }
                     Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 1; color: Theme.line }
@@ -256,9 +341,46 @@ Item {
                     width: list.width
                     trackId: model.trackId; title: model.title; artist: model.artist; album: model.album
                     trackNo: model.trackNo; duration: model.duration
+                    path: model.path; hearted: model.hearted
                     onPlay: hop.playSongs(index)
+                    onMenu: function (src, x, y) { root.songMenu([model.path], model.path, model.hearted, function () { hop.playSongs(index) }, src, x, y) }
                 }
             }
+
+            // ---- playlists ----
+            PlaylistsPane {
+                onSongMenu: function (paths, path, hearted, row, count, playFn, src, x, y) {
+                    menu.paths = paths; menu.heartPath = path; menu.hearted = hearted; menu.pinKind = ""
+                    menu.playlistRow = row; menu.playlistCount = count; menu.playFn = playFn
+                    menu.popup(src, x, y)
+                }
+            }
+        }
+    }
+
+    Menu {
+        id: artistMenu
+        property string artist: ""
+        property bool pinned: false
+        onAboutToShow: pinned = hop.isPinned("artist", artist)
+        background: Rectangle { implicitWidth: 240; color: Theme.panel; border { width: 1; color: Theme.line } }
+        MenuItem {
+            text: "play all by " + artistMenu.artist
+            onTriggered: hop.playTile("artist", artistMenu.artist)
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 15 } leftPadding: 6 }
+            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+        }
+        MenuItem {
+            text: "smart DJ from " + artistMenu.artist
+            onTriggered: hop.startDj(artistMenu.artist)
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 15 } leftPadding: 6 }
+            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+        }
+        MenuItem {
+            text: artistMenu.pinned ? "unpin from quickplay" : "pin to quickplay"
+            onTriggered: artistMenu.pinned ? hop.unpinTile("artist", artistMenu.artist) : hop.pinTile("artist", artistMenu.artist, artistMenu.artist)
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 15 } leftPadding: 6 }
+            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
         }
     }
 }

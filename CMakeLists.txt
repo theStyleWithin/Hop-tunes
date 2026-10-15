@@ -20,7 +20,10 @@ add_library(hoptunes_core STATIC
     src/core/Paths.h          src/core/Paths.cpp
     src/core/ProfileStore.h src/core/ProfileStore.cpp
     src/library/Track.h
+    src/core/Sql.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
+    src/library/ProfileDb.h   src/library/ProfileDb.cpp
+    src/library/Smart.h       src/library/Smart.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
     src/library/CoverArt.h    src/library/CoverArt.cpp
     src/library/CollectionModels.h src/library/CollectionModels.cpp
@@ -74,6 +77,10 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_profiles tests/test_profiles.cpp)
     target_link_libraries(test_profiles PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME profiles COMMAND test_profiles)
+
+    add_executable(test_m4 tests/test_m4.cpp)
+    target_link_libraries(test_m4 PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME playlists-search-dj COMMAND test_m4)
 
     add_executable(test_player tests/test_player.cpp)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)

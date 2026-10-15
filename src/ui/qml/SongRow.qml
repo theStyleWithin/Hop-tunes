@@ -4,7 +4,8 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "Theme.js" as Theme
 
-// One song in a list. Double-click / Enter plays. `wide` adds artist and album columns.
+// One song in a list. Double-click / Enter plays, right-click opens the song menu.
+// `wide` adds artist and album columns.
 ItemDelegate {
     id: row
     property bool wide: true
@@ -14,7 +15,10 @@ ItemDelegate {
     property string album
     property int trackNo
     property string duration
+    property string path
+    property bool hearted: false
     signal play()
+    signal menu(Item source, real x, real y)   // right-click / menu key, at that point
 
     readonly property bool current: hop.player.hasTrack && hop.player.currentTrackId === trackId
     height: 44
@@ -22,6 +26,8 @@ ItemDelegate {
     onDoubleClicked: row.play()
     Keys.onReturnPressed: row.play()
     Keys.onEnterPressed: row.play()
+    Keys.onMenuPressed: row.menu(row, 40, row.height)
+    MouseArea { anchors.fill: parent; acceptedButtons: Qt.RightButton; onClicked: function (mouse) { row.menu(row, mouse.x, mouse.y) } }
     Accessible.name: title + (artist ? ", " + artist : "")
 
     background: Rectangle {
@@ -38,6 +44,12 @@ ItemDelegate {
                 color: Theme.text2; font { family: Theme.font; pixelSize: 15 } }
         Label { visible: row.wide; text: row.album; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
                 color: Theme.text2; font { family: Theme.font; pixelSize: 15 } }
+        HeartButton {
+            size: 15
+            on: row.hearted
+            opacity: row.hearted || row.hovered ? 1 : 0
+            onClicked: hop.toggleHeart(row.path)
+        }
         Label { text: row.duration; Layout.preferredWidth: 56; horizontalAlignment: Text.AlignRight
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
     }

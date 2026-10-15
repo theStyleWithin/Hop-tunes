@@ -255,6 +255,174 @@ private slots:
         QCOMPARE(m_app->profileStore()->count(), 1);
         QVERIFY(QFile::exists(m_home.filePath(QStringLiteral("Music/A/B/01 Song.wav"))));
     }
+
+    // ---- M4: search, hearts, play counts, playlists, smart playlists, quickplay, DJ ----
+    // Uses HOPTUNES_UI_LIBRARY (a real tagged library, for design renders) when set,
+    // otherwise a generated folder of short songs. Assertions do not depend on which.
+
+    void m4Setup()
+    {
+        QString lib = qEnvironmentVariable("HOPTUNES_UI_LIBRARY");
+        if (lib.isEmpty()) {
+            lib = m_home.filePath(QStringLiteral("Library"));
+            const char *names[] = {"Alpha/One/01 Morning Tide.wav", "Alpha/One/02 Harbour Song.wav",
+                                   "Beta/Two/01 Night Market.wav", "Beta/Two/02 Paper Moon.wav", "Gamma/Three/01 Copper Light.wav"};
+            for (const char *n : names) {
+                QDir().mkpath(QFileInfo(lib + QLatin1Char('/') + QLatin1String(n)).absolutePath());
+                QVERIFY(writeWav(lib + QLatin1Char('/') + QLatin1String(n), 4000));
+            }
+        }
+        QCOMPARE(m_app->createProfile(QStringLiteral("Lib"), QStringLiteral("#7cc4ff"), {}, QUrl::fromLocalFile(lib)), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->librarySize() >= 5, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->scanning(), 15000);
+    }
+
+    void m4Search()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("tab_songs"));
+        const int all = m_app->librarySize();
+        const QString word = m_app->songs()->tracks().at(1).displayTitle().split(QLatin1Char(' ')).last();
+        type("searchField", word.toLower());
+        QTRY_VERIFY(m_app->songs()->count() < all);
+        QVERIFY(m_app->songs()->count() >= 1);
+        QCOMPARE(m_app->searchText(), word.toLower());
+        shot("m4-search");
+        QTest::keyClick(window(), Qt::Key_Escape);
+        QTRY_COMPARE(m_app->songs()->count(), all);
+        type("searchField", QStringLiteral("zzqx no such thing"));
+        QTRY_COMPARE(m_app->songs()->count(), 0);
+        m_app->setSearchText({});
+        QCOMPARE(m_app->songs()->count(), all);
+        QCOMPARE(item("searchField")->property("text").toString(), QString());   // the box follows
+    }
+
+    void m4HeartsAndPlayCounts()
+    {
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        const QString first = m_app->player()->currentTrack()->path;
+        QVERIFY(click("miniHeart"));
+        QVERIFY(m_app->currentHearted());
+        // Half the song heard = one play, recorded in stats and history.
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->profileDb()->allStats().value(first).playCount, 1, 10000);
+        QTRY_VERIFY(!m_app->quickplayHistory().isEmpty());
+        // Moving on early counts as a skip.
+        m_app->player()->next();
+        QTRY_VERIFY(m_app->player()->currentTrack() && m_app->player()->currentTrack()->path != first);
+        const QString second = m_app->player()->currentTrack()->path;
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->player()->position() >= 1200, 5000);
+        m_app->player()->next();
+        QTRY_COMPARE(m_app->profileDb()->allStats().value(second).skipCount, 1);
+        QCOMPARE(m_app->profileDb()->allStats().value(second).playCount, 0);
+
+        m_app->selectPlaylist(QStringLiteral("auto:hearted"));
+        QCOMPARE(m_app->playlistSongs()->count(), 1);
+        m_app->selectPlaylist(QStringLiteral("auto:most"));
+        QCOMPARE(m_app->playlistSongs()->tracks().first().path, first);
+        m_app->selectPlaylist(QStringLiteral("auto:never"));
+        QCOMPARE(m_app->playlistSongs()->count(), m_app->librarySize() - 1);
+    }
+
+    void m4ManualPlaylist()
+    {
+        QVERIFY(click("tab_playlists"));
+        QVERIFY(click("newPlaylist"));
+        type("namePromptField", QStringLiteral("Road Trip"));
+        QVERIFY(click("namePromptOk"));
+        QTRY_VERIFY(m_app->selectedPlaylist().startsWith(QStringLiteral("pl:")));
+        const QString key = m_app->selectedPlaylist();
+        QStringList paths;
+        for (const Track &t : m_app->songs()->tracks()) paths.prepend(t.path);   // reverse order
+        QVERIFY(m_app->addToPlaylist(key, paths.mid(0, 4)));
+        QCOMPARE(m_app->playlistSongs()->count(), 4);
+        QVERIFY(m_app->movePlaylistItem(3, 0));
+        QCOMPARE(m_app->playlistSongs()->tracks().first().path, paths[3]);
+        QVERIFY(m_app->removeFromPlaylist(1));
+        QCOMPARE(m_app->playlistSongs()->count(), 3);
+        shot("m4-playlist");
+        m_app->playPlaylist(0);
+        QTRY_COMPARE(m_app->player()->currentTrack()->path, paths[3]);
+
+        // Export, then import the file back: same songs, a non-clashing name.
+        const QString file = m_home.filePath(QStringLiteral("road.m3u8"));
+        QVERIFY(m_app->exportPlaylist(key, QUrl::fromLocalFile(file)).startsWith(QStringLiteral("saved")));
+        QCOMPARE(m_app->importPlaylist(QUrl::fromLocalFile(file)), QStringLiteral("imported 3 songs"));
+        QCOMPARE(m_app->selectedPlaylistInfo().value("name").toString(), QStringLiteral("Road Trip (2)"));
+        QCOMPARE(m_app->playlistSongs()->tracks().first().path, paths[3]);
+        QVERIFY(m_app->deletePlaylist(m_app->selectedPlaylist()));
+        m_app->selectPlaylist(key);
+    }
+
+    void m4SmartPlaylist()
+    {
+        QVERIFY(click("newSmartPlaylist"));
+        type("smartName", QStringLiteral("Unplayed"));
+        QTRY_VERIFY(item("smartPreview")->property("text").toString().contains(QStringLiteral("match")));
+        shot("m4-smart-editor");
+        QVERIFY(click("smartSave"));
+        QTRY_COMPARE(m_app->selectedPlaylistInfo().value("kind").toString(), QStringLiteral("smart"));
+        // A rule "genre contains ''" matches everything; tighten it through the API.
+        QVERIFY(m_app->setSmartRules(m_app->selectedPlaylist(), QStringLiteral(R"({"match":"all","rules":[{"field":"plays","op":"eq","value":"0"}]})")));
+        QCOMPARE(m_app->playlistSongs()->count(), m_app->librarySize() - 1);
+        QCOMPARE(m_app->smartPreviewCount(QStringLiteral(R"({"rules":[{"field":"hearted","op":"is","value":"true"}]})")), 1);
+    }
+
+    void m4QuickplayAndDj()
+    {
+        const QString ref = m_app->albumRef(0);
+        QVERIFY(!ref.isEmpty());
+        m_app->pinTile(QStringLiteral("album"), ref, QStringLiteral("x"));
+        m_app->pinTile(QStringLiteral("playlist"), m_app->selectedPlaylist().mid(3), QStringLiteral("y"));
+        QCOMPARE(m_app->quickplayPinned().size(), 2);
+        QVERIFY(!m_app->quickplayNew().isEmpty());
+        QVERIFY(m_app->isPinned(QStringLiteral("album"), ref));
+
+        const QString artist = m_app->djArtists().value(0);
+        m_app->startDj(artist);
+        QCOMPARE(m_app->djSeed(), artist);
+        QVERIFY(m_app->player()->queueLength() > 0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        window()->setProperty("view", QStringLiteral("quickplay"));
+        shot("m4-quickplay");
+        // Playing something else ends the mix.
+        m_app->playTile(QStringLiteral("album"), ref);
+        QVERIFY(m_app->djSeed().isEmpty());
+
+        // Play next / add to queue.
+        const int len = m_app->player()->queueLength();
+        const QString lastPath = m_app->songs()->tracks().last().path;
+        m_app->playNextPaths({lastPath});
+        m_app->enqueuePaths({lastPath});
+        QCOMPARE(m_app->player()->queueLength(), len + 2);
+        QCOMPARE(m_app->player()->queue().at(m_app->player()->currentIndex() + 1).path, lastPath);
+
+        // The song menu opens on right-click.
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("tab_songs"));
+        QTest::qWait(100);
+        const QPoint p(330, 300);
+        QTest::mouseMove(window(), p);
+        QTest::mouseClick(window(), Qt::RightButton, Qt::NoModifier, p);
+        shot("m4-song-menu");
+        QTest::keyClick(window(), Qt::Key_Escape);
+    }
+
+    void m4StatsArePerProfile()
+    {
+        const QString lib = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        m_app->openGuest();
+        QTRY_VERIFY(m_app->profileReady());
+        QVERIFY(m_app->profileDb()->allStats().isEmpty());
+        QVERIFY(m_app->quickplayPinned().isEmpty());
+        QCOMPARE(m_app->playlists().size(), 4);       // only the built-in lists
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(lib), QString());
+        QCOMPARE(m_app->quickplayPinned().size(), 2);
+        QVERIFY(!m_app->profileDb()->allStats().isEmpty());
+        QVERIFY(QFile::exists(m_app->profileStore()->dirFor(lib) + QStringLiteral("/profile.sqlite")));
+    }
 };
 
 int main(int argc, char **argv)

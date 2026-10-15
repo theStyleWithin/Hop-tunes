@@ -59,6 +59,10 @@ public:
     // Replaces the queue and starts playing at `start`.
     void setQueue(const QList<Track> &tracks, int start);
     QList<Track> queue() const { return m_queue; }
+    // Adds to the end of the queue (starts playing if nothing is queued).
+    void enqueue(const QList<Track> &tracks);
+    // Inserts right after the current track (after the one already lined up for gapless).
+    void playNext(const QList<Track> &tracks);
     Q_INVOKABLE QString queueTitle(int i) const
     {
         return (i >= 0 && i < m_queue.size()) ? m_queue[i].displayTitle() : QString();

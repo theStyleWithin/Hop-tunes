@@ -18,7 +18,7 @@ ApplicationWindow {
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
     property string view: {
         var v = String(initialView || "").replace("nowplaying", "now playing")
-        if (v === "albums" || v === "songs" || v === "artists") v = "collection"
+        if (v === "albums" || v === "songs" || v === "artists" || v === "playlists") v = "collection"
         return views.indexOf(v) >= 0 ? v : "collection"
     }
 
@@ -98,9 +98,9 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: win.views.indexOf(win.view)
-            CollectionView { onAddFolderRequested: folderDialog.open() }
+            CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open() }
             NowPlayingView { onBack: win.view = "collection" }
-            QuickplayView { }
+            QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
             SettingsView { onAddFolderRequested: folderDialog.open() }
         }
 

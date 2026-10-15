@@ -16,9 +16,18 @@
 - **M1 (play a folder): done.** Incremental library scan, gapless playback, song list, now playing, mini player.
 - **M2 (collection): done** except search. Artists → albums → songs panes, albums grid, cover art (embedded + folder images), MPRIS media keys and desktop media widgets.
 - **M3 (local profiles): done.** "Who's listening?" picker, first-run profile setup, optional PIN (a privacy curtain, not security), accent colour and picture per profile, switch without restarting, guest mode that saves nothing. Each profile has its own folders and settings. No accounts or sign-in.
+- **M4 (playlists & quickplay): done.** Instant search, hearts and play counts per profile, playlists (with move up/down), smart playlists with a rule builder, auto lists (hearted, most played, recently added, never played), playlist import (`.m3u`, `.m3u8`, `.pls`, `.xspf`, and Zune `.zpl`/`.wpl`, even ones made on Windows) and `.m3u8` export, play next / add to queue, and a Quickplay page with pins, history, new albums and an offline smart DJ.
 - **AppImage:** portable build for glibc 2.35+ distros, tested on 10 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
-**New in M3: local profiles**
+**New in M4: playlists, quickplay and search**
+
+| quickplay | playlists |
+|---|---|
+| ![quickplay](design/app/m4-quickplay.png) | ![playlist](design/app/m4-playlist.png) |
+| **smart playlist rules** | **song menu** |
+| ![smart playlist editor](design/app/m4-smart-editor.png) | ![song menu](design/app/m4-song-menu.png) |
+
+**M3: local profiles**
 
 | who's listening? | settings › profile |
 |---|---|

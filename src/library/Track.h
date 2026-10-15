@@ -25,11 +25,20 @@ struct Track {
     int     trackNo = 0;
     int     year = 0;
     QString art;           // cover image path (cached embedded art or folder image), may be empty
+    qint64  added = 0;     // when the file first appeared in the index (seconds since epoch)
 
     // What the UI shows when tags are missing.
     QString displayTitle() const;
     QString displayArtist() const;
     QString displayAlbum() const;
+};
+
+// Per-profile listening stats for one file (profile.sqlite, keyed by path).
+struct TrackStats {
+    int playCount = 0;
+    int skipCount = 0;
+    qint64 lastPlayed = 0;   // seconds since epoch, 0 = never
+    bool hearted = false;
 };
 
 } // namespace hop
