@@ -27,7 +27,7 @@ Built on Ubuntu 22.04, so it needs **glibc 2.35 or newer** (any x86_64 desktop d
 | Linux Mint 22 | ✅ tested every build |
 | Fedora 41 | ✅ tested every build |
 | Arch Linux (and Arch-based: CachyOS, EndeavourOS, Manjaro, SteamOS 3) | ✅ tested every build (Arch) |
-| openSUSE Tumbleweed | tested every build |
+| openSUSE Tumbleweed | ✅ tested every build |
 | Real X11 session (Xvfb) | ✅ tested every build |
 | Real Wayland session (Weston) | ✅ tested every build |
 | AlmaLinux / RHEL 9 (glibc 2.34) | ❌ below the floor: the app starts, but some codecs need glibc 2.35 |
@@ -35,7 +35,7 @@ Built on Ubuntu 22.04, so it needs **glibc 2.35 or newer** (any x86_64 desktop d
 Not supported: 32-bit or ARM systems, and musl-based distros (Alpine, Void-musl). These need
 separate builds.
 
-Each test launches the AppImage, scans a music folder with the bundled TagLib, **plays a
+Each test launches the AppImage, creates a local profile, scans a music folder with the bundled TagLib, **plays a
 song through the bundled GStreamer**, renders the UI and checks the log for errors.
 
 ## What's inside, and what comes from your system

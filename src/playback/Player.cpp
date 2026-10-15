@@ -104,7 +104,7 @@ void Player::setQueue(const QList<Track> &tracks, int start)
         m_pendingIndex = -1;
     }
     emit queueChanged();
-    if (tracks.isEmpty()) { stop(); return; }
+    if (tracks.isEmpty()) { stop(); m_index = -1; emit currentChanged(); return; }   // also used to clear on profile switch
     startAt(qBound(0, start, int(tracks.size()) - 1));
 }
 

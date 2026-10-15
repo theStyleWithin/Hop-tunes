@@ -18,7 +18,7 @@ Item {
         RowLayout {
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 14
             spacing: 28
-            Label { text: "music"; color: Theme.accent; font { family: Theme.font; pixelSize: 22 } }
+            Label { text: "music"; color: hop.accent; font { family: Theme.font; pixelSize: 22 } }
             Label { text: "videos"; color: Theme.dim; font { family: Theme.font; pixelSize: 22 } }
             Label { text: "podcasts"; color: Theme.dim; font { family: Theme.font; pixelSize: 22 } }
             Item { Layout.fillWidth: true }
@@ -55,7 +55,7 @@ Item {
                         color: tab.on ? "#ffffff" : (!tab.enabled ? Theme.faint : (tab.hovered ? Theme.text2 : "#8a8a93"))
                         font { family: Theme.font; pixelSize: 15; letterSpacing: 1 }
                         bottomPadding: 4
-                        Rectangle { visible: tab.on; anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 2; color: Theme.accent }
+                        Rectangle { visible: tab.on; anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 2; color: hop.accent }
                     }
                 }
             }
@@ -82,7 +82,7 @@ Item {
                 text: "choose a music folder…"
                 onClicked: root.addFolderRequested()
                 contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 18; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
+                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
             }
             Item { Layout.fillHeight: true }
         }
@@ -117,7 +117,7 @@ Item {
                         Accessible.name: name
                         background: Rectangle { color: ad.sel || ad.hovered ? Theme.hover : "transparent" }
                         contentItem: Label { text: ad.name; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
-                                             color: ad.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
+                                             color: ad.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
                     }
                 }
 
@@ -153,7 +153,7 @@ Item {
                                 spacing: 4
                                 AlbumArt { key: alb.title; source: alb.art; Layout.fillWidth: true; Layout.preferredHeight: width }
                                 Label { text: alb.title; Layout.fillWidth: true; elide: Text.ElideRight
-                                        color: alb.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: 15 } }
+                                        color: alb.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 15 } }
                                 Label { text: alb.year > 0 ? alb.year : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
                             }
                         }
@@ -173,7 +173,7 @@ Item {
                             onClicked: hop.playAlbum(0)
                             contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 15; weight: Font.Medium }
                                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            background: Rectangle { implicitWidth: 120; implicitHeight: 40; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
+                            background: Rectangle { implicitWidth: 120; implicitHeight: 40; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
                         }
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }

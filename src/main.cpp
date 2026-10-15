@@ -81,8 +81,8 @@ int main(int argc, char *argv[])
                 saved = w->grabWindow().save(shot);
             // One machine-readable line for automated smoke tests.
             const hop::Player *p = hopApp.player();
-            fprintf(stdout, "hop-tunes selftest: version=%s songs=%d playing=%d position_ms=%lld screenshot=%d error=\"%s\"\n",
-                    HOPTUNES_VERSION, hopApp.songs()->count(), p->isPlaying() ? 1 : 0,
+            fprintf(stdout, "hop-tunes selftest: version=%s profile=\"%s\" songs=%d playing=%d position_ms=%lld screenshot=%d error=\"%s\"\n",
+                    HOPTUNES_VERSION, qPrintable(hopApp.profile().value(QStringLiteral("name")).toString()), hopApp.songs()->count(), p->isPlaying() ? 1 : 0,
                     static_cast<long long>(p->position()), saved ? 1 : 0, qPrintable(p->error()));
             fflush(stdout);
             QCoreApplication::exit(saved ? 0 : 2);

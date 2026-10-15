@@ -107,7 +107,7 @@ Rectangle {
                 id: upNext
                 anchors { fill: parent; margins: 20 }
                 spacing: 4
-                Label { text: "up next"; color: Theme.accent; font { family: Theme.font; pixelSize: 22 } bottomPadding: 8 }
+                Label { text: "up next"; color: hop.accent; font { family: Theme.font; pixelSize: 22 } bottomPadding: 8 }
                 Repeater {
                     model: {
                         var q = [], n = root.player.queueLength, i = root.player.currentIndex

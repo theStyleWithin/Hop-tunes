@@ -3,7 +3,7 @@
 # Usage: smoke-test.sh <path/to/Hop-tunes.AppImage> <out-dir> <label>
 # Env:   HOPTUNES_TEST_PLATFORM=offscreen (default) | xcb | wayland  (display server must already run)
 # Checks: the AppImage starts, the UI loads, the bundled TagLib scans a song, the bundled
-# GStreamer actually plays it, and a screenshot is written. Exits non-zero on any failure.
+# GStreamer actually plays it, a local profile is created, and a screenshot is written. Exits non-zero on any failure.
 set -u
 APPIMAGE=$(readlink -f "$1"); OUT=$(readlink -f "$2"); LABEL=$3
 mkdir -p "$OUT"
@@ -21,7 +21,7 @@ cd "$WORK"
 LOG="$OUT/$LABEL.log"
 QT_FORCE_STDERR_LOGGING=1 QT_QPA_PLATFORM="${HOPTUNES_TEST_PLATFORM:-offscreen}" QT_QUICK_BACKEND=software \
 HOPTUNES_AUDIO_SINK="fakesink sync=true" HOPTUNES_AUTOPLAY=0 HOPTUNES_SCREENSHOT="$OUT/$LABEL.png" \
-  timeout 120 "$APPIMAGE" --appimage-extract-and-run > "$LOG" 2>&1
+HOPTUNES_PROFILE="Smoke Test" timeout 120 "$APPIMAGE" --appimage-extract-and-run > "$LOG" 2>&1
 CODE=$?
 cat "$LOG"
 
@@ -43,6 +43,8 @@ diagnose() {
 fail() { echo "SMOKE FAIL [$LABEL]: $1"; [ "${DIAGNOSED:-0}" = 1 ] || { DIAGNOSED=1; diagnose; }; exit 1; }
 [ $CODE -eq 0 ] || fail "exit code $CODE"
 grep -q "hop-tunes selftest:" "$LOG" || fail "no selftest line (app did not finish starting)"
+grep -q 'profile="Smoke Test"' "$LOG" || fail "profile was not created/opened"
+[ -f "$HOME/.local/share/hop-tunes/profiles/profiles.json" ] || fail "profiles.json not written"
 grep -q "songs=1 " "$LOG" || fail "library scan did not find the test song"
 grep -q "playing=1 " "$LOG" || fail "bundled GStreamer did not play the test song"
 grep -q 'error=""' "$LOG" || fail "player reported an error"
