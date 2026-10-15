@@ -60,7 +60,7 @@ if(HOPTUNES_BUILD_APP)
 
     include(GNUInstallDirs)
     install(TARGETS hop-tunes RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    set(HOPTUNES_APP_ID io.github.thestylewithin.hoptunes)
+    set(HOPTUNES_APP_ID io.github.thestylewithin.Hop_tunes)
     install(FILES packaging/${HOPTUNES_APP_ID}.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES packaging/${HOPTUNES_APP_ID}.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
     install(FILES packaging/${HOPTUNES_APP_ID}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)

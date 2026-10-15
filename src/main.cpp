@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hop-tunes"));
     QGuiApplication::setApplicationVersion(QStringLiteral(HOPTUNES_VERSION));
-    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.thestylewithin.hoptunes"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.thestylewithin.Hop_tunes"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
     // Command line: hop-tunes [--help] [--version] [files or folders...]

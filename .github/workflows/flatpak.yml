@@ -1,6 +1,6 @@
 name: flatpak
 
-# Builds the Flatpak bundle on the KDE 6.8 runtime; attaches it to tagged releases.
+# Builds the Flatpak bundle on the KDE runtime; attaches it to tagged releases.
 on:
   push:
     branches: [main]
@@ -19,16 +19,17 @@ jobs:
   bundle:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.8
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48   # the action installs the KDE SDK itself
       options: --privileged
     steps:
       - uses: actions/checkout@v5
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: Hop-tunes-x86_64.flatpak
-          manifest-path: packaging/flatpak/io.github.thestylewithin.hoptunes.yml
+          manifest-path: packaging/flatpak/io.github.thestylewithin.Hop_tunes.yml
           cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.yml') }}
           upload-artifact: true
+          mirror-screenshots-url: https://dl.flathub.org/media/
 
       - name: Smoke-test the build
         shell: bash
@@ -38,7 +39,7 @@ jobs:
           [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive Hop-tunes-x86_64.flatpak
-          sh .github/scripts/logged.sh flatpak-run flatpak run --command=hop-tunes io.github.thestylewithin.hoptunes --version | tee version.txt
+          sh .github/scripts/logged.sh flatpak-run flatpak run --command=hop-tunes io.github.thestylewithin.Hop_tunes --version | tee version.txt
           grep -q "hop-tunes" version.txt
           test -f Hop-tunes-x86_64.flatpak
 

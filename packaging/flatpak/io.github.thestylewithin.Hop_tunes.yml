@@ -1,10 +1,11 @@
 # Flatpak build of Hop-tunes.
-# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.hoptunes.yml
-# The KDE runtime provides Qt 6.8 and (from the freedesktop base) GStreamer with the
-# base and good plugins; AAC, WMA and other codecs come from the ffmpeg-full extension.
-id: io.github.thestylewithin.hoptunes
+# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.Hop_tunes.yml
+# The KDE runtime provides Qt 6 and (from the freedesktop base) GStreamer with the base and
+# good plugins plus gst-libav; AAC, WMA and other codecs come from the runtime's
+# codecs-extra extension, which Flatpak installs with the runtime.
+id: io.github.thestylewithin.Hop_tunes
 runtime: org.kde.Platform
-runtime-version: '6.8'
+runtime-version: '6.11'
 sdk: org.kde.Sdk
 command: hop-tunes
 
@@ -19,17 +20,6 @@ finish-args:
   - --filesystem=xdg-music:ro
   # Media keys and desktop media widgets (MPRIS).
   - --own-name=org.mpris.MediaPlayer2.hoptunes
-
-add-extensions:
-  org.freedesktop.Platform.ffmpeg-full:
-    directory: lib/ffmpeg
-    version: '24.08'
-    add-ld-path: .
-    no-autodownload: false
-    autodelete: false
-
-cleanup-commands:
-  - mkdir -p /app/lib/ffmpeg
 
 cleanup:
   - /include

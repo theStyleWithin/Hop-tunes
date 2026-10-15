@@ -152,7 +152,7 @@ shuffle and repeat.
 | Profiles (settings, playlists, play counts, history) | `~/.local/share/hop-tunes/profiles/` |
 | Cover art cache (safe to delete) | `~/.cache/hop-tunes/` |
 
-The Flatpak keeps the same folders under `~/.var/app/io.github.thestylewithin.hoptunes/`.
+The Flatpak keeps the same folders under `~/.var/app/io.github.thestylewithin.Hop_tunes/`.
 
 ## Troubleshooting
 
@@ -162,9 +162,8 @@ volume slider in the mini player isn't at zero.
 
 **Some files don't play (AAC, WMA).**
 - **AUR:** install `gst-libav` (and `gst-plugins-ugly` for some MP3/WMA files).
-- **Flatpak:** the codecs come from the `org.freedesktop.Platform.ffmpeg-full` extension, which
-  Flatpak normally installs automatically. If it didn't, run
-  `flatpak install flathub org.freedesktop.Platform.ffmpeg-full//24.08`.
+- **Flatpak:** the codecs come from the runtime's `codecs-extra` extension, which Flatpak
+  installs with the runtime. If AAC or WMA files still won't play, run `flatpak update`.
 
 **Songs are missing.** Check *settings → music folders* and press *rescan now*. Hop-tunes
 skips files it can't recognise as audio. In the Flatpak, folders outside your Music folder
@@ -172,7 +171,7 @@ must be added with *+ add folder*, which grants access to them.
 
 **I forgot my profile PIN.** Because a PIN is only a curtain, you can remove it. Close
 Hop-tunes and run `hop-tunes --forget-pin "Your Name"` (Flatpak:
-`flatpak run io.github.thestylewithin.hoptunes --forget-pin "Your Name"`). Your playlists,
+`flatpak run io.github.thestylewithin.Hop_tunes --forget-pin "Your Name"`). Your playlists,
 history and settings are not affected.
 
 **The window doesn't open on a very old distro (AppImage).** The AppImage needs glibc 2.35
@@ -186,7 +185,7 @@ Found a bug? Please open an issue: https://github.com/theStyleWithin/Hop-tunes/i
 
 ## Uninstalling
 
-- **Flatpak:** `flatpak uninstall io.github.thestylewithin.hoptunes` (add `--delete-data` to
+- **Flatpak:** `flatpak uninstall io.github.thestylewithin.Hop_tunes` (add `--delete-data` to
   remove your profiles too).
 - **AUR:** `sudo pacman -R hop-tunes`.
 - **AppImage:** delete the file.

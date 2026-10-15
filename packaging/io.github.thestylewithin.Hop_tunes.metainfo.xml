@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Copyright 2026 Hop-tunes contributors -->
 <component type="desktop-application">
-  <id>io.github.thestylewithin.hoptunes</id>
+  <id>io.github.thestylewithin.Hop_tunes</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Hop-tunes</name>
@@ -24,7 +24,7 @@
       independent project, not affiliated with or endorsed by Microsoft.
     </p>
   </description>
-  <launchable type="desktop-id">io.github.thestylewithin.hoptunes.desktop</launchable>
+  <launchable type="desktop-id">io.github.thestylewithin.Hop_tunes.desktop</launchable>
   <provides>
     <binary>hop-tunes</binary>
   </provides>
