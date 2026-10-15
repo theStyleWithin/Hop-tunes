@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "library/CollectionModels.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
 #include "library/TrackListModel.h"
@@ -23,6 +24,18 @@ class App : public QObject {
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
     Q_PROPERTY(int scanTotal READ scanTotal NOTIFY scanProgressChanged)
     Q_PROPERTY(QString version READ version CONSTANT)
+    // collection › music › artists (three panes) and albums
+    Q_PROPERTY(hop::ArtistListModel *artists READ artists CONSTANT)
+    Q_PROPERTY(hop::AlbumListModel *artistAlbums READ artistAlbums CONSTANT)
+    Q_PROPERTY(hop::AlbumListModel *allAlbums READ allAlbums CONSTANT)
+    Q_PROPERTY(hop::TrackListModel *albumSongs READ albumSongs CONSTANT)
+    Q_PROPERTY(int selectedArtist READ selectedArtist NOTIFY selectionChanged)
+    Q_PROPERTY(int selectedAlbum READ selectedAlbum NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedArtistName READ selectedArtistName NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedAlbumTitle READ selectedAlbumTitle NOTIFY selectionChanged)
+    Q_PROPERTY(QString selectedAlbumArt READ selectedAlbumArt NOTIFY selectionChanged)
+    Q_PROPERTY(int selectedAlbumYear READ selectedAlbumYear NOTIFY selectionChanged)
+    Q_PROPERTY(QStringList mosaicArt READ mosaicArt NOTIFY libraryChanged)   // cover URLs for now playing
 
 public:
     explicit App(QObject *parent = nullptr);
@@ -35,6 +48,22 @@ public:
     int scanDone() const { return m_scanDone; }
     int scanTotal() const { return m_scanTotal; }
     QString version() const;
+    ArtistListModel *artists() { return &m_artists; }
+    AlbumListModel *artistAlbums() { return &m_artistAlbums; }
+    AlbumListModel *allAlbums() { return &m_allAlbums; }
+    TrackListModel *albumSongs() { return &m_albumSongs; }
+    int selectedArtist() const { return m_selArtist; }
+    int selectedAlbum() const { return m_selAlbum; }
+    QString selectedArtistName() const;
+    QString selectedAlbumTitle() const;
+    QString selectedAlbumArt() const;
+    int selectedAlbumYear() const;
+    QStringList mosaicArt() const { return m_mosaicArt; }
+
+    Q_INVOKABLE void selectArtist(int row);
+    Q_INVOKABLE void selectAlbum(int row);          // row in artistAlbums
+    Q_INVOKABLE void openAlbum(int allAlbumsRow);   // from the albums grid: select its artist + album
+    Q_INVOKABLE void playAlbum(int startRow = 0);   // play the selected album
 
     Q_INVOKABLE void addFolder(const QUrl &folder);
     Q_INVOKABLE void removeFolder(const QString &path);
@@ -47,10 +76,14 @@ signals:
     void foldersChanged();
     void scanningChanged();
     void scanProgressChanged();
+    void selectionChanged();
+    void libraryChanged();
 
 private:
     void reload();
     void saveFolders();
+    void applySelection(const QString &artistName, const QString &albumTitle);
+    QList<Track> albumTracks(const Album &a) const;
 
     TrackIndex m_index;
     Scanner m_scanner{&m_index};
@@ -59,6 +92,15 @@ private:
     QStringList m_folders;
     int m_scanDone = 0;
     int m_scanTotal = 0;
+
+    Collection m_collection;
+    ArtistListModel m_artists;
+    AlbumListModel m_artistAlbums;
+    AlbumListModel m_allAlbums;
+    TrackListModel m_albumSongs;
+    int m_selArtist = -1;
+    int m_selAlbum = -1;
+    QStringList m_mosaicArt;
 };
 
 } // namespace hop

@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** Draft v0.2 · **Date:** 2026-10-14 · **Platform:** Linux first
+**Status:** Draft v0.3 (M1 and M2 built) · **Date:** 2026-10-14 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -290,10 +290,10 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | Milestone | Scope | Done when |
 |---|---|---|
 | **M0: Skeleton** | Repo layout, CMake, Qt/QML window, CI (GitHub Actions), licence | Empty app builds and runs in CI |
-| **M1: Play a folder** | Scanner + index DB + GStreamer gapless playback + song list | Can pick a folder and play an album gaplessly |
-| **M2: Collection** | Artists/albums/songs pivots, art grid, search, mini player, MPRIS | Daily-driver usable for one person |
+| ✅ **M1: Play a folder** | Scanner + index DB + GStreamer gapless playback + song list | Can pick a folder and play an album gaplessly |
+| ✅ **M2: Collection** | Artists/albums/songs pivots, art grid, cover art, mini player, MPRIS. *Search moved to M4.* | Daily-driver usable for one person |
 | **M3: Profiles** | Profile create/pick/switch/delete, PIN, per-profile stats/settings, guest mode | Two people can share one install without seeing each other's data |
-| **M4: Playlists & Quickplay** | Manual + smart playlists, import m3u/zpl, Quickplay pins/history/new | — |
+| **M4: Playlists & Quickplay** | Manual + smart playlists, import m3u/zpl, Quickplay pins/history/new, instant search | — |
 | **M5: Now Playing & polish** | Art mosaic, transitions, themes/accents, ReplayGain, crossfade | Feels "seamless" |
 | **M6: Ship 1.0** | Flatpak, AppImage, AUR, user docs | Published |
 | **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |

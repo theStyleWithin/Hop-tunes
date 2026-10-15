@@ -2,6 +2,7 @@
 #include "playback/Player.h"
 
 #include <QMutexLocker>
+#include <QUrl>
 #include <QtGlobal>
 
 #include <gst/gst.h>
@@ -28,7 +29,15 @@ Player::Player(QObject *parent) : QObject(parent)
 {
     if (!gst_is_initialized()) gst_init(nullptr, nullptr);
 
-    m_playbin = gst_element_factory_make("playbin3", "hop-player");
+    // playbin3's gapless hand-off is unreliable before GStreamer 1.22 ("Internal data stream
+    // error" at the end of a queue), so older runtimes use the long-proven playbin.
+    // HOPTUNES_PLAYBIN=playbin|playbin3 overrides (used by tests).
+    guint major = 0, minor = 0, micro = 0, nano = 0;
+    gst_version(&major, &minor, &micro, &nano);
+    QByteArray factory = (major > 1 || minor >= 22) ? QByteArrayLiteral("playbin3") : QByteArrayLiteral("playbin");
+    const QByteArray forced = qgetenv("HOPTUNES_PLAYBIN");
+    if (forced == "playbin" || forced == "playbin3") factory = forced;
+    m_playbin = gst_element_factory_make(factory.constData(), "hop-player");
     if (!m_playbin) m_playbin = gst_element_factory_make("playbin", "hop-player");
     if (!m_playbin) {
         setError(QStringLiteral("GStreamer playbin is missing: install gst-plugins-base"));
@@ -72,6 +81,10 @@ Player::~Player()
 
 QString Player::title() const  { return hasTrack() ? m_queue[m_index].displayTitle() : QString(); }
 QString Player::artist() const { return hasTrack() ? m_queue[m_index].displayArtist() : QString(); }
+QString Player::artUrl() const
+{
+    return (hasTrack() && !m_queue[m_index].art.isEmpty()) ? QUrl::fromLocalFile(m_queue[m_index].art).toString() : QString();
+}
 QString Player::album() const  { return hasTrack() ? m_queue[m_index].displayAlbum() : QString(); }
 
 void Player::setVolume(double v)
@@ -161,6 +174,7 @@ void Player::seek(qint64 ms)
                             GstSeekFlags(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_KEY_UNIT), ms * GST_MSECOND);
     m_position = ms;
     emit positionChanged();
+    emit seeked(ms);
 }
 
 // Runs on a GStreamer streaming thread, shortly before the current track ends.

@@ -21,6 +21,9 @@ add_library(hoptunes_core STATIC
     src/library/Track.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
+    src/library/CoverArt.h    src/library/CoverArt.cpp
+    src/library/CollectionModels.h src/library/CollectionModels.cpp
+    src/library/TrackListModel.h src/library/TrackListModel.cpp
     src/library/Scanner.h     src/library/Scanner.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
@@ -29,10 +32,12 @@ target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
+pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
+    src/platform/Mpris.h      src/platform/Mpris.cpp
 )
-target_link_libraries(hoptunes_playback PUBLIC hoptunes_core PkgConfig::GST)
+target_link_libraries(hoptunes_playback PUBLIC hoptunes_core PkgConfig::GST PkgConfig::GIO)
 target_compile_options(hoptunes_playback PRIVATE -Wall -Wextra)
 
 # ---- desktop app --------------------------------------------------------------
@@ -42,8 +47,8 @@ if(HOPTUNES_BUILD_APP)
     add_executable(hop-tunes
         src/main.cpp
         src/App.h                    src/App.cpp
-        src/library/TrackListModel.h src/library/TrackListModel.cpp
         src/ui/qml.qrc
+        assets/assets.qrc
     )
     target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
     target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2)
@@ -51,7 +56,10 @@ if(HOPTUNES_BUILD_APP)
 
     include(GNUInstallDirs)
     install(TARGETS hop-tunes RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    install(FILES packaging/hop-tunes.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    set(HOPTUNES_APP_ID io.github.thestylewithin.hoptunes)
+    install(FILES packaging/${HOPTUNES_APP_ID}.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+    install(FILES packaging/${HOPTUNES_APP_ID}.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+    install(FILES packaging/${HOPTUNES_APP_ID}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
 endif()
 
 # ---- tests --------------------------------------------------------------------
@@ -64,6 +72,17 @@ if(HOPTUNES_BUILD_TESTS)
 
     add_executable(test_player tests/test_player.cpp)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
+    # Run the playback tests against both GStreamer engines.
     add_test(NAME player COMMAND test_player)
     set_tests_properties(player PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink")
+    add_test(NAME player-playbin COMMAND test_player)
+    set_tests_properties(player-playbin PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin")
+    add_test(NAME player-playbin3 COMMAND test_player)
+    set_tests_properties(player-playbin3 PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin3")
+
+    # MPRIS needs a D-Bus session bus; the test starts its own private one (skips if unavailable).
+    add_executable(test_mpris tests/test_mpris.cpp)
+    target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
+    add_test(NAME mpris COMMAND test_mpris)
+    set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
 endif()

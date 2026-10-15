@@ -1,0 +1,8 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/">
+    <file>fonts/Jost-300-Light.ttf</file>
+    <file>fonts/Jost-400-Book.ttf</file>
+    <file>fonts/Jost-500-Medium.ttf</file>
+  </qresource>
+</RCC>

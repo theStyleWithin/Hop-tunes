@@ -1,0 +1,179 @@
+name: appimage
+
+# Builds the portable AppImage on an old-glibc base, proves it runs on a spread of distros
+# (headless, real X11 and real Wayland), then publishes it to the "continuous" pre-release.
+on:
+  push:
+    branches: [main, appimage]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: appimage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04          # glibc 2.35 baseline = oldest supported systems
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Version
+        id: ver
+        run: |
+          base=$(sed -n 's/^project(hop-tunes VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="$base-git.$(git rev-parse --short HEAD)"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Build dependencies
+        run: |
+          sudo apt-get update
+          # GitHub's 22.04 image ships libunwind-14-dev, which blocks libgstreamer1.0-dev.
+          sudo apt-get remove -y libunwind-14-dev || true
+          .github/scripts/logged.sh apt sudo apt-get install -y --no-install-recommends \
+            ninja-build g++ pkg-config file curl desktop-file-utils appstream \
+            libtag1-dev libsqlite3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+            gstreamer1.0-pulseaudio gstreamer1.0-alsa \
+            libgl1-mesa-dev libegl1 libopengl0 libglvnd0 libcom-err2 libgpg-error0 libfribidi0 libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcb-xfixes0 \
+            libwayland-client0 libwayland-cursor0 libwayland-egl1
+
+      - name: Qt 6.8 LTS
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          cache: true
+
+      - name: Validate desktop entry and AppStream metadata
+        run: |
+          desktop-file-validate packaging/io.github.thestylewithin.hoptunes.desktop
+          appstreamcli validate --no-net --explain packaging/io.github.thestylewithin.hoptunes.metainfo.xml || true
+
+      - name: Build AppImage
+        run: .github/scripts/logged.sh build-appimage packaging/appimage/build-appimage.sh "${{ steps.ver.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: |
+            Hop-tunes-*-x86_64.AppImage
+            Hop-tunes-*-x86_64.AppImage.zsync
+          if-no-files-found: error
+
+  smoke:
+    needs: build
+    name: smoke (${{ matrix.label }})
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { label: ubuntu-22.04, image: 'ubuntu:22.04',        pm: apt }
+          - { label: ubuntu-24.04, image: 'ubuntu:24.04',        pm: apt }
+          - { label: debian-12,    image: 'debian:12',           pm: apt }
+          - { label: debian-13,    image: 'debian:13',           pm: apt }
+          - { label: mint-22,      image: 'linuxmintd/mint22-amd64', pm: apt }
+          - { label: fedora-41,    image: 'fedora:41',           pm: dnf }
+          - { label: arch,         image: 'archlinux:latest',    pm: pacman }
+          - { label: opensuse-tw,  image: 'opensuse/tumbleweed', pm: zypper }
+          - { label: x11-ubuntu-24.04,     image: 'ubuntu:24.04', pm: apt, display: xcb }
+          - { label: wayland-ubuntu-24.04, image: 'ubuntu:24.04', pm: apt, display: wayland }
+    steps:
+      - name: Typical desktop base libraries
+        run: |
+          case "${{ matrix.pm }}" in
+            apt)
+              export DEBIAN_FRONTEND=noninteractive; apt-get update
+              for p in libegl1 libgl1 libfontconfig1 fonts-dejavu-core libx11-6 libx11-xcb1 libxcb1 \
+                       libxkbcommon0 libglib2.0-0 libglib2.0-0t64 libdbus-1-3 libasound2 libasound2t64 \
+                       libwayland-client0 libwayland-cursor0 libwayland-egl1 coreutils; do
+                apt-get install -y --no-install-recommends "$p" >/dev/null 2>&1 || true
+              done
+              [ "${{ matrix.display }}" = xcb ] && apt-get install -y --no-install-recommends xvfb xauth
+              [ "${{ matrix.display }}" = wayland ] && apt-get install -y --no-install-recommends weston
+              true ;;
+            dnf)    dnf -y install mesa-libEGL mesa-libGL fontconfig dejavu-sans-fonts libX11 libX11-xcb libxcb \
+                      libxkbcommon glib2 dbus-libs alsa-lib libwayland-client libwayland-cursor libwayland-egl findutils ;;
+            pacman) pacman -Syu --noconfirm --needed mesa fontconfig ttf-dejavu libx11 libxcb libxkbcommon glib2 \
+                      dbus alsa-lib wayland ;;
+            zypper) zypper -n in Mesa-libEGL1 Mesa-libGL1 fontconfig dejavu-fonts libX11-6 libX11-xcb1 libxcb1 \
+                      libxkbcommon0 libglib-2_0-0 libdbus-1-3 libasound2 libwayland-client0 libwayland-cursor0 \
+                      libwayland-egl1 gzip tar ;;
+          esac
+
+      - uses: actions/checkout@v5
+        with: { sparse-checkout: "packaging/appimage\n.github/scripts" }
+
+      - uses: actions/download-artifact@v4
+        with: { name: appimage, path: dist }
+
+      - name: Run AppImage
+        shell: sh
+        run: |
+          set -e
+          chmod +x dist/*.AppImage
+          APP=$(ls dist/Hop-tunes-*-x86_64.AppImage)
+          case "${{ matrix.display }}" in
+            xcb)
+              HOPTUNES_TEST_PLATFORM=xcb xvfb-run -a -s "-screen 0 1280x800x24" \
+                sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}" ;;
+            wayland)
+              export XDG_RUNTIME_DIR=$(mktemp -d); chmod 700 "$XDG_RUNTIME_DIR"
+              weston --backend=headless --socket=wayland-1 --width=1280 --height=800 >/tmp/weston.log 2>&1 &
+              sleep 3; export WAYLAND_DISPLAY=wayland-1
+              HOPTUNES_TEST_PLATFORM=wayland sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}"
+              # Must have really used Wayland, not fallen back to XWayland.
+              if grep -q "Failed to load shell integration" out/*.log; then echo "wayland shell integration missing"; exit 1; fi ;;
+            *)
+              sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh "$APP" out "${{ matrix.label }}" ;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: 'smoke-${{ matrix.label }}', path: out }
+
+  # Documents the compatibility floor: a distro older than the glibc 2.35 baseline must refuse
+  # cleanly. Informational only; it is expected to fail.
+  floor:
+    needs: build
+    runs-on: ubuntu-latest
+    container: 'almalinux:9'
+    continue-on-error: true
+    steps:
+      - run: dnf -y install mesa-libEGL mesa-libGL fontconfig dejavu-sans-fonts alsa-lib findutils
+      - uses: actions/checkout@v5
+        with: { sparse-checkout: "packaging/appimage\n.github/scripts" }
+      - uses: actions/download-artifact@v4
+        with: { name: appimage, path: dist }
+      - run: chmod +x dist/*.AppImage && sh .github/scripts/logged.sh smoke sh packaging/appimage/smoke-test.sh dist/Hop-tunes-*-x86_64.AppImage out almalinux-9
+
+  release:
+    needs: [build, smoke]
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: appimage, path: dist }
+      - name: Publish to the continuous pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd dist && sha256sum Hop-tunes-* > SHA256SUMS
+          gh release delete continuous --yes --cleanup-tag 2>/dev/null || true
+          gh release create continuous --prerelease --target "$GITHUB_SHA" \
+            --title "Hop-tunes continuous build (${{ needs.build.outputs.version }})" \
+            --notes "IN DEVELOPMENT: DO NOT DOWNLOAD. Unfinished test build for development only. Latest automatic build from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Download the .AppImage, make it executable (chmod +x) and run it. Tested on Ubuntu 22.04/24.04, Debian 12/13, Linux Mint 22, Fedora 41, Arch and openSUSE Tumbleweed (headless, X11 and Wayland)." \
+            Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS

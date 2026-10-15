@@ -34,3 +34,13 @@ Open `mockups/index.html` in any browser; there is no build step. The pages link
 - **Motion:** the Now Playing mosaic drifts slowly and stops when the system's "reduce motion" setting is on.
 
 The editable source of these mockups also lives as a design canvas in Claude ("Hop-tunes Screens").
+
+## The real app (renders of the running build)
+
+Screenshots of Hop-tunes itself, rendered headless from the actual build. The sample albums and covers are invented test data.
+
+| collection › artists | collection › albums | now playing |
+|---|---|---|
+| ![artists](app/m2-collection-artists.png) | ![albums](app/m2-collection-albums.png) | ![now playing](app/m2-now-playing.png) |
+
+M2 adds the three-pane artists view, the albums grid, real cover art (embedded or `cover.jpg`) and a Now Playing mosaic built from your own covers.

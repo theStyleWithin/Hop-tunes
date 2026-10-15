@@ -25,13 +25,16 @@ public:
     ~Scanner() override;
 
     bool isRunning() const;
+    // Where extracted cover art is written. Empty (default) disables cover art lookup.
+    void setArtCacheDir(const QString &dir) { m_artDir = dir; }
     void start(const QStringList &folders);   // no-op while running
     void cancel();
 
     // Synchronous core, used by the worker and by tests.
     static Result scanFolders(TrackIndex *index, const QStringList &folders,
                               const QAtomicInt *cancelFlag = nullptr,
-                              const std::function<void(int done, int total)> &progress = {});
+                              const std::function<void(int done, int total)> &progress = {},
+                              const QString &artCacheDir = {});
 
 signals:
     void started();
@@ -40,6 +43,7 @@ signals:
 
 private:
     TrackIndex *m_index;
+    QString m_artDir;
     QFuture<void> m_future;
     QAtomicInt m_cancel{0};
     QAtomicInt m_running{0};

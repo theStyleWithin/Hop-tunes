@@ -28,6 +28,7 @@ class Player : public QObject {
     Q_PROPERTY(QString album READ album NOTIFY currentChanged)
     Q_PROPERTY(int year READ year NOTIFY currentChanged)
     Q_PROPERTY(int trackNo READ trackNo NOTIFY currentChanged)
+    Q_PROPERTY(QString artUrl READ artUrl NOTIFY currentChanged)
     Q_PROPERTY(qint64 position READ position NOTIFY positionChanged)
     Q_PROPERTY(qint64 duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY volumeChanged)
@@ -47,6 +48,8 @@ public:
     QString album() const;
     int year() const { return hasTrack() ? m_queue[m_index].year : 0; }
     int trackNo() const { return hasTrack() ? m_queue[m_index].trackNo : 0; }
+    QString artUrl() const;
+    const Track *currentTrack() const { return hasTrack() ? &m_queue[m_index] : nullptr; }
     qint64 position() const { return m_position; }
     qint64 duration() const { return m_duration; }
     double volume() const { return m_volume; }
@@ -78,6 +81,7 @@ signals:
     void durationChanged();
     void volumeChanged();
     void errorChanged();
+    void seeked(qint64 ms);          // explicit seek (not normal progress)
 
 private:
     static void onAboutToFinish(GstElement *playbin, void *self);

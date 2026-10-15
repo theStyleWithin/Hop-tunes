@@ -24,6 +24,7 @@ struct Track {
     int     disc = 0;
     int     trackNo = 0;
     int     year = 0;
+    QString art;           // cover image path (cached embedded art or folder image), may be empty
 
     // What the UI shows when tags are missing.
     QString displayTitle() const;
