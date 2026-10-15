@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 ApplicationWindow {
     id: win
@@ -65,7 +64,7 @@ ApplicationWindow {
                     Accessible.role: Accessible.PageTab
                     contentItem: Label {
                         text: pivot.modelData
-                        color: pivot.on ? "#ffffff" : (pivot.hovered ? Theme.text2 : Theme.dim)
+                        color: pivot.on ? Theme.strong : (pivot.hovered ? Theme.text2 : Theme.dim)
                         font { family: Theme.font; pixelSize: 44; weight: pivot.on ? Font.Normal : Font.Light }
                     }
                     background: Item { }
@@ -95,9 +94,18 @@ ApplicationWindow {
         }
 
         StackLayout {
+            id: stack
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: win.views.indexOf(win.view)
+            // Slide-and-fade between pivots (spec §4.5: ≤ 200 ms, off with "reduce motion").
+            transform: Translate { id: slide }
+            onCurrentIndexChanged: if (Theme.motion > 0) pivotAnim.restart()
+            ParallelAnimation {
+                id: pivotAnim
+                NumberAnimation { target: stack; property: "opacity"; from: 0.0; to: 1.0; duration: Theme.motion; easing.type: Easing.OutCubic }
+                NumberAnimation { target: slide; property: "x"; from: 28; to: 0; duration: Theme.motion; easing.type: Easing.OutCubic }
+            }
             CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open() }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }

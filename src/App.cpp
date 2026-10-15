@@ -5,6 +5,9 @@
 #include "library/Smart.h"
 
 #include <QCoreApplication>
+#include <QColor>
+#include <QGuiApplication>
+#include <QStyleHints>
 #include <QDateTime>
 #include <QDir>
 #include <QImage>
@@ -36,7 +39,17 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     });
     for (TrackListModel *m : {&m_songs, &m_albumSongs, &m_playlistSongs}) m->setStats(&m_stats);
     connect(&m_player, &Player::positionChanged, this, &App::onPosition);
-    connect(&m_player, &Player::currentChanged, this, &App::onTrackChanged);
+    connect(&m_player, &Player::trackStarted, this, &App::onTrackChanged);
+    // Playback preferences are per profile.
+    for (auto sig : {&Player::crossfadeChanged, &Player::replayGainChanged, &Player::repeatModeChanged, &Player::shuffleChanged})
+        connect(&m_player, sig, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    if (auto *hints = QGuiApplication::styleHints())
+        connect(hints, &QStyleHints::colorSchemeChanged, this, [this] {
+            if (m_theme == QLatin1String("system")) { emit appearanceChanged(); emit profileChanged(); }
+        });
+#endif
+    connect(&m_player, &Player::currentChanged, this, [this] { emit statsChanged(); djTopUp(); });
 }
 
 App::~App()
@@ -131,7 +144,46 @@ QVariantList App::profiles() const
 QString App::accent() const
 {
     const Profile *p = m_store.find(m_profileId);
-    return p ? p->accent : accents().value(0);
+    const QString a = p ? p->accent : accents().value(0);
+    // The accent is also a text colour; on a light background it needs to be darker to read.
+    return lightTheme() ? QColor(a).darker(165).name() : a;
+}
+
+bool App::systemThemeAvailable() const
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    return true;
+#else
+    return false;
+#endif
+}
+
+bool App::lightTheme() const
+{
+    if (m_theme == QLatin1String("light")) return true;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+    if (m_theme == QLatin1String("system"))
+        return QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Light;
+#endif
+    return false;
+}
+
+void App::setTheme(const QString &theme)
+{
+    const QString t = (theme == QLatin1String("light") || theme == QLatin1String("system")) ? theme : QStringLiteral("dark");
+    if (t == m_theme) return;
+    m_theme = t;
+    saveProfileSettings();
+    emit appearanceChanged();
+    emit profileChanged();   // accent
+}
+
+void App::setReduceMotion(bool on)
+{
+    if (on == m_reduceMotion) return;
+    m_reduceMotion = on;
+    saveProfileSettings();
+    emit appearanceChanged();
 }
 
 bool App::profileNeedsPin(const QString &id) const
@@ -194,7 +246,17 @@ void App::activate(const QString &id, bool guest)
     } else {
         for (const QJsonValue &v : s.value(QStringLiteral("folders")).toArray()) m_folders << v.toString();
     }
+    m_loadingSettings = true;
     m_player.setVolume(s.value(QStringLiteral("volume")).toDouble(1.0));
+    m_player.setCrossfadeMs(s.value(QStringLiteral("crossfadeMs")).toInt(0));
+    m_player.setReplayGainMode(s.value(QStringLiteral("replayGain")).toInt(Player::GainOff));
+    m_player.setReplayGainPreamp(s.value(QStringLiteral("replayGainPreamp")).toDouble(0.0));
+    m_player.setRepeatMode(s.value(QStringLiteral("repeat")).toInt(Player::RepeatOff));
+    m_player.setShuffle(s.value(QStringLiteral("shuffle")).toBool(false));
+    m_theme = s.value(QStringLiteral("theme")).toString(QStringLiteral("dark"));
+    m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
+    m_loadingSettings = false;
+    emit appearanceChanged();
     if (!m_db.open(guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite")))
         qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
     m_stats = m_db.allStats();
@@ -226,6 +288,9 @@ void App::leaveProfile()
     m_djSeed.clear();
     m_profileId.clear();
     m_guest = false;
+    m_theme = QStringLiteral("dark");
+    m_reduceMotion = false;
+    emit appearanceChanged();
     m_folders.clear();
     reload();
     emit foldersChanged();
@@ -238,6 +303,13 @@ void App::saveProfileSettings()
     QJsonObject s = m_store.settings(m_profileId);
     s.insert(QStringLiteral("folders"), QJsonArray::fromStringList(m_folders));
     s.insert(QStringLiteral("volume"), m_player.volume());
+    s.insert(QStringLiteral("crossfadeMs"), m_player.crossfadeMs());
+    s.insert(QStringLiteral("replayGain"), m_player.replayGainMode());
+    s.insert(QStringLiteral("replayGainPreamp"), m_player.replayGainPreamp());
+    s.insert(QStringLiteral("repeat"), m_player.repeatMode());
+    s.insert(QStringLiteral("shuffle"), m_player.shuffle());
+    s.insert(QStringLiteral("theme"), m_theme);
+    s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     m_store.saveSettings(m_profileId, s);
 }
 
@@ -512,8 +584,6 @@ void App::onTrackChanged()
     }
     const Track *t = m_player.currentTrack();
     m_listen = t ? Listen{t->path, 0, t->durationMs, false} : Listen{};
-    emit statsChanged();   // currentHearted
-    djTopUp();
 }
 
 bool App::currentHearted() const

@@ -86,11 +86,11 @@ if(HOPTUNES_BUILD_TESTS)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
     # Run the playback tests against both GStreamer engines.
     add_test(NAME player COMMAND test_player)
-    set_tests_properties(player PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink")
+    set_tests_properties(player PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
     add_test(NAME player-playbin COMMAND test_player)
-    set_tests_properties(player-playbin PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin")
+    set_tests_properties(player-playbin PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true;HOPTUNES_PLAYBIN=playbin")
     add_test(NAME player-playbin3 COMMAND test_player)
-    set_tests_properties(player-playbin3 PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink;HOPTUNES_PLAYBIN=playbin3")
+    set_tests_properties(player-playbin3 PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true;HOPTUNES_PLAYBIN=playbin3")
 
     # MPRIS needs a D-Bus session bus; the test starts its own private one (skips if unavailable).
     add_executable(test_mpris tests/test_mpris.cpp)

@@ -2,7 +2,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // Smart playlist rule builder (spec §7): "genre is …", "added in the last N days",
 // "play count less than …", "hearted". Shows how many songs match as you edit.
@@ -59,7 +58,7 @@ Popup {
     width: Math.min(820, Overlay.overlay ? Overlay.overlay.width - 80 : 820)
     padding: 28
     background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
-    Overlay.modal: Rectangle { color: "#a0000000" }
+    Overlay.modal: Rectangle { color: Theme.scrim }
 
     component Combo: ComboBox {
         id: cb
@@ -88,7 +87,7 @@ Popup {
 
     contentItem: ColumnLayout {
         spacing: 16
-        Label { text: ed.key ? "edit smart playlist" : "new smart playlist"; color: "#ffffff"; font { family: Theme.font; pixelSize: 30; weight: Font.Light } }
+        Label { text: ed.key ? "edit smart playlist" : "new smart playlist"; color: Theme.strong; font { family: Theme.font; pixelSize: 30; weight: Font.Light } }
         TextField {
             id: nameField
             objectName: "smartName"

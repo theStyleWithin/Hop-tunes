@@ -2,7 +2,8 @@
 <RCC version="1.0">
   <qresource prefix="/">
     <file>qml/Main.qml</file>
-    <file>qml/Theme.js</file>
+    <file>qml/Theme.qml</file>
+    <file>qml/qmldir</file>
     <file>qml/AlbumArt.qml</file>
     <file>qml/SongRow.qml</file>
     <file>qml/TransportButton.qml</file>

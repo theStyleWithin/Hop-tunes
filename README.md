@@ -17,9 +17,18 @@
 - **M2 (collection): done** except search. Artists → albums → songs panes, albums grid, cover art (embedded + folder images), MPRIS media keys and desktop media widgets.
 - **M3 (local profiles): done.** "Who's listening?" picker, first-run profile setup, optional PIN (a privacy curtain, not security), accent colour and picture per profile, switch without restarting, guest mode that saves nothing. Each profile has its own folders and settings. No accounts or sign-in.
 - **M4 (playlists & quickplay): done.** Instant search, hearts and play counts per profile, playlists (with move up/down), smart playlists with a rule builder, auto lists (hearted, most played, recently added, never played), playlist import (`.m3u`, `.m3u8`, `.pls`, `.xspf`, and Zune `.zpl`/`.wpl`, even ones made on Windows) and `.m3u8` export, play next / add to queue, and a Quickplay page with pins, history, new albums and an offline smart DJ.
+- **M5 (now playing & polish): done.** Crossfade (0–12 s; albums stay gapless), even volume with ReplayGain (per song or per album), shuffle and repeat (also from desktop media widgets), a volume control, dark and light themes (or match the system), smooth transitions with a "reduce motion" option, drag-to-reorder for the queue and playlists, and Now Playing controls that fade away while you listen.
 - **AppImage:** portable build for glibc 2.35+ distros, tested on 10 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
-**New in M4: playlists, quickplay and search**
+**New in M5: polish, themes and playback options**
+
+| light theme | now playing (drag to reorder up next) |
+|---|---|
+| ![light theme](design/app/m5-albums-light.png) | ![now playing](design/app/m5-now-playing-light.png) |
+| **playback settings** | **appearance settings** |
+| ![playback settings](design/app/m5-settings-playback.png) | ![appearance](design/app/m5-settings-light.png) |
+
+**M4: playlists, quickplay and search**
 
 | quickplay | playlists |
 |---|---|

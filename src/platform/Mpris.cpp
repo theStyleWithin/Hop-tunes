@@ -51,6 +51,8 @@ const char *kXml = R"XML(
     <property name="Rate" type="d" access="readwrite"/>
     <property name="Metadata" type="a{sv}" access="read"/>
     <property name="Volume" type="d" access="readwrite"/>
+    <property name="LoopStatus" type="s" access="readwrite"/>
+    <property name="Shuffle" type="b" access="readwrite"/>
     <property name="Position" type="x" access="read"/>
     <property name="MinimumRate" type="d" access="read"/>
     <property name="MaximumRate" type="d" access="read"/>
@@ -82,6 +84,8 @@ Mpris::Mpris(Player *player, QObject *parent) : QObject(parent), m_player(player
     connect(player, &Player::queueChanged, this, &Mpris::refresh);
     connect(player, &Player::volumeChanged, this, &Mpris::refresh);
     connect(player, &Player::durationChanged, this, &Mpris::refresh);
+    connect(player, &Player::repeatModeChanged, this, &Mpris::refresh);
+    connect(player, &Player::shuffleChanged, this, &Mpris::refresh);
     connect(player, &Player::positionChanged, this, [this] { m_positionUs = m_player->position() * 1000; });
     connect(player, &Player::seeked, this, [this](qint64 ms) {
         m_positionUs = ms * 1000;
@@ -176,7 +180,11 @@ void Mpris::refresh()
         s.trackNo = t->trackNo;
     }
     s.volume = m_player->volume();
-    s.canNext = m_player->currentIndex() + 1 < m_player->queueLength();
+    s.canNext = m_player->currentIndex() + 1 < m_player->queueLength()
+                || (m_player->repeatMode() == Player::RepeatAll && m_player->hasTrack());
+    s.loop = m_player->repeatMode() == Player::RepeatAll ? QStringLiteral("Playlist")
+           : m_player->repeatMode() == Player::RepeatOne ? QStringLiteral("Track") : QStringLiteral("None");
+    s.shuffle = m_player->shuffle();
     s.canPrevious = m_player->hasTrack();
     s.canPlay = m_player->hasTrack();
 
@@ -196,6 +204,8 @@ void Mpris::refresh()
         g_variant_builder_add(&b, "{sv}", "Metadata", metadata(s)); any = true;
     }
     if (!qFuzzyCompare(s.volume + 1, old.volume + 1)) { g_variant_builder_add(&b, "{sv}", "Volume", g_variant_new_double(s.volume)); any = true; }
+    if (s.loop != old.loop) { g_variant_builder_add(&b, "{sv}", "LoopStatus", g_variant_new_string(u8(s.loop))); any = true; }
+    if (s.shuffle != old.shuffle) { g_variant_builder_add(&b, "{sv}", "Shuffle", g_variant_new_boolean(s.shuffle)); any = true; }
     if (s.canNext != old.canNext) { g_variant_builder_add(&b, "{sv}", "CanGoNext", g_variant_new_boolean(s.canNext)); any = true; }
     if (s.canPrevious != old.canPrevious) { g_variant_builder_add(&b, "{sv}", "CanGoPrevious", g_variant_new_boolean(s.canPrevious)); any = true; }
     if (s.canPlay != old.canPlay) {
@@ -291,6 +301,8 @@ GVariant *Mpris::onGetProperty(GDBusConnection *, const char *, const char *, co
     if (name == "Rate" || name == "MinimumRate" || name == "MaximumRate") return g_variant_new_double(1.0);
     if (name == "Metadata") return m->metadata(s);
     if (name == "Volume") return g_variant_new_double(s.volume);
+    if (name == "LoopStatus") return g_variant_new_string(u8(s.loop));
+    if (name == "Shuffle") return g_variant_new_boolean(s.shuffle);
     if (name == "Position") return g_variant_new_int64(m->m_positionUs.load());
     if (name == "CanGoNext") return g_variant_new_boolean(s.canNext);
     if (name == "CanGoPrevious") return g_variant_new_boolean(s.canPrevious);
@@ -307,6 +319,19 @@ int Mpris::onSetProperty(GDBusConnection *, const char *, const char *, const ch
         const double v = g_variant_get_double(value);
         Player *p = m->m_player;
         QMetaObject::invokeMethod(m, [p, v] { p->setVolume(v); }, Qt::QueuedConnection);
+        return TRUE;
+    }
+    if (g_strcmp0(prop, "LoopStatus") == 0) {
+        const QByteArray v = g_variant_get_string(value, nullptr);
+        const int mode = v == "Playlist" ? Player::RepeatAll : (v == "Track" ? Player::RepeatOne : Player::RepeatOff);
+        Player *p = m->m_player;
+        QMetaObject::invokeMethod(m, [p, mode] { p->setRepeatMode(mode); }, Qt::QueuedConnection);
+        return TRUE;
+    }
+    if (g_strcmp0(prop, "Shuffle") == 0) {
+        const bool on = g_variant_get_boolean(value);
+        Player *p = m->m_player;
+        QMetaObject::invokeMethod(m, [p, on] { p->setShuffle(on); }, Qt::QueuedConnection);
         return TRUE;
     }
     return g_strcmp0(prop, "Rate") == 0;   // rate is fixed at 1.0; accept and ignore

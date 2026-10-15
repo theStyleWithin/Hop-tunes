@@ -66,6 +66,11 @@ class App : public QObject {
     Q_PROPERTY(QStringList djArtists READ djArtists NOTIFY libraryChanged)
     Q_PROPERTY(QString djSeed READ djSeed NOTIFY djChanged)
     Q_PROPERTY(bool currentHearted READ currentHearted NOTIFY statsChanged)
+    // appearance (spec §4.5), per profile
+    Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY appearanceChanged)        // dark | light | system
+    Q_PROPERTY(bool lightTheme READ lightTheme NOTIFY appearanceChanged)
+    Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY appearanceChanged)
+    Q_PROPERTY(bool systemThemeAvailable READ systemThemeAvailable CONSTANT)
 
 public:
     explicit App(QObject *parent = nullptr);
@@ -115,6 +120,12 @@ public:
     QStringList djArtists() const;
     QString djSeed() const { return m_djSeed; }
     bool currentHearted() const;
+    QString theme() const { return m_theme; }
+    void setTheme(const QString &theme);
+    bool lightTheme() const;
+    bool reduceMotion() const { return m_reduceMotion; }
+    void setReduceMotion(bool on);
+    bool systemThemeAvailable() const;
 
     // playlists: keys are "pl:<id>" for the profile's own and "auto:<name>" for built-ins.
     Q_INVOKABLE void selectPlaylist(const QString &key);
@@ -187,6 +198,7 @@ signals:
     void quickplayChanged();
     void djChanged();
     void statsChanged();
+    void appearanceChanged();
 
 private:
     void reload();
@@ -218,6 +230,9 @@ private:
     TrackListModel m_playlistSongs;
     QVariantList m_qpPinned, m_qpHistory, m_qpNew;
     QString m_djSeed;
+    QString m_theme = QStringLiteral("dark");
+    bool m_reduceMotion = false;
+    bool m_loadingSettings = false;
     quint32 m_djRound = 0;
     struct Listen { QString path; qint64 maxPos = 0; qint64 duration = 0; bool counted = false; } m_listen;
     QString m_profileId;          // empty when no profile is open

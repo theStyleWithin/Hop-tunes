@@ -2,7 +2,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // Small modal asking for a name (new playlist, rename).
 Popup {
@@ -18,11 +17,11 @@ Popup {
     anchors.centerIn: Overlay.overlay
     padding: 28
     background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
-    Overlay.modal: Rectangle { color: "#a0000000" }
+    Overlay.modal: Rectangle { color: Theme.scrim }
 
     contentItem: ColumnLayout {
         spacing: 18
-        Label { text: p.title; color: "#ffffff"; font { family: Theme.font; pixelSize: 30; weight: Font.Light } }
+        Label { text: p.title; color: Theme.strong; font { family: Theme.font; pixelSize: 30; weight: Font.Light } }
         TextField {
             id: field
             objectName: "namePromptField"

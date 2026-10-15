@@ -2,7 +2,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // quickplay (spec §4.4, design/screens/3): pinned, history, new, and smart DJ.
 Item {
@@ -50,19 +49,19 @@ Item {
                             Rectangle {   // artists read as round, like the Zune artist tiles
                                 visible: t.modelData.kind === "artist"
                                 anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                                color: "#cc111113"; width: kindLabel.implicitWidth + 12; height: 22
+                                color: Theme.fade(0.8); width: kindLabel.implicitWidth + 12; height: 22
                                 Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
                             }
                             Rectangle {
                                 visible: t.modelData.kind === "playlist"
                                 anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                                color: "#cc111113"; width: plLabel.implicitWidth + 12; height: 22
+                                color: Theme.fade(0.8); width: plLabel.implicitWidth + 12; height: 22
                                 Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
                             }
                             Label {
                                 visible: t.hovered
                                 anchors.centerIn: parent
-                                text: "▶"; color: "#ffffff"; font.pixelSize: 34
+                                text: "▶"; color: "white"; font.pixelSize: 34
                             }
                         }
                         Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }

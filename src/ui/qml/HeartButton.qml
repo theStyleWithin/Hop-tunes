@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
-import "Theme.js" as Theme
 
 // ♥ toggle. Hearts are per profile and feed the "hearted" list and the smart DJ.
 AbstractButton {

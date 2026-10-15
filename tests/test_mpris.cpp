@@ -151,6 +151,23 @@ private slots:
         g_variant_unref(r);
         QTRY_COMPARE_WITH_TIMEOUT(player.volume(), 0.5, 5000);
 
+        // Repeat and shuffle from desktop widgets (LoopStatus / Shuffle).
+        r = g_dbus_connection_call_sync(m_client, "org.mpris.MediaPlayer2.hoptunes", "/org/mpris/MediaPlayer2",
+            "org.freedesktop.DBus.Properties", "Set",
+            g_variant_new("(ssv)", "org.mpris.MediaPlayer2.Player", "LoopStatus", g_variant_new_string("Track")),
+            nullptr, G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, nullptr);
+        QVERIFY(r);
+        g_variant_unref(r);
+        QTRY_COMPARE_WITH_TIMEOUT(player.repeatMode(), int(Player::RepeatOne), 5000);
+        player.setShuffle(true);
+        QTRY_VERIFY_WITH_TIMEOUT([&] { GVariant *v = prop("org.mpris.MediaPlayer2.Player", "Shuffle"); const bool b = v && g_variant_get_boolean(v); if (v) g_variant_unref(v); return b; }(), 5000);
+        GVariant *loop = prop("org.mpris.MediaPlayer2.Player", "LoopStatus");
+        QVERIFY(loop);
+        QCOMPARE(QString::fromUtf8(g_variant_get_string(loop, nullptr)), QStringLiteral("Track"));
+        g_variant_unref(loop);
+        player.setShuffle(false);
+        player.setRepeatMode(Player::RepeatOff);
+
         QSignalSpy seeked(&player, &Player::seeked);
         QVERIFY(call("SetPosition", g_variant_new("(ox)", "/io/github/thestylewithin/hoptunes/track/2", gint64(5'000'000))));
         QTRY_COMPARE_WITH_TIMEOUT(seeked.count(), 1, 5000);
