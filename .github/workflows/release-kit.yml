@@ -143,19 +143,30 @@ jobs:
         shell: bash
         run: |
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          if ! flatpak install --user -y --noninteractive flathub org.flatpak.Builder > /tmp/builder-install.log 2>&1; then
+            echo "::error::could not install org.flatpak.Builder: $(tail -3 /tmp/builder-install.log | tr '\n' ' ')"; exit 1
+          fi
           lint() { flatpak run --command=flatpak-builder-lint org.flatpak.Builder "$@"; }
-          # Each finding becomes an annotation; any error fails the job.
+          # One annotation per finding (the linter prints JSON); any error fails the job.
           fail=0
           # (No "repo" lint: it checks screenshot mirroring that only Flathub's build infra does.)
           for target in "manifest kit-manifest.yml" "builddir flatpak_app"; do
             set -- $target
-            out=$(lint "$@" 2>&1); code=$?
-            echo "== lint $target (exit $code)"; echo "$out"
-            if [ $code -ne 0 ]; then
-              fail=1
-              echo "::error title=flatpak-builder-lint $1::$(echo "$out" | tr '\n' ' ' | cut -c1-1500)"
-            fi
+            lint "$@" > /tmp/lint.out 2>&1; code=$?
+            echo "== lint $target (exit $code)"; cat /tmp/lint.out
+            [ $code -eq 0 ] && continue
+            fail=1
+            python3 - "$1" /tmp/lint.out <<'PY' || echo "::error::lint $1 failed: $(head -c 400 /tmp/lint.out | tr '\n' ' ')"
+          import json, sys
+          kind, path = sys.argv[1], sys.argv[2]
+          text = open(path).read()
+          data = json.loads(text[text.index("{"):])
+          for level in ("errors", "warnings"):
+              for item in data.get(level, []):
+                  print(f"::{'error' if level == 'errors' else 'warning'}::lint {kind}: {item}")
+          for msg in data.get("message", []) if isinstance(data.get("message"), list) else []:
+              print(f"::notice::lint {kind}: {msg}")
+          PY
           done
           exit $fail
 
