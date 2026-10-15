@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // Shown until a profile is open (spec §3.2): first-run "create your profile", the picker
 // with big tiles, and the PIN curtain. Local only: no accounts, nothing leaves the machine.
@@ -31,7 +30,7 @@ Rectangle {
         visible: gate.mode === "pick"
         anchors { fill: parent; leftMargin: 72; rightMargin: 72; topMargin: 64; bottomMargin: 48 }
         spacing: 12
-        Label { text: "who's listening?"; color: "#ffffff"; font { family: Theme.font; pixelSize: 52; weight: Font.Light } }
+        Label { text: "who's listening?"; color: Theme.strong; font { family: Theme.font; pixelSize: 52; weight: Font.Light } }
         Label { text: "profiles live on this computer only. no accounts, no sign-in."; color: Theme.muted; font { family: Theme.font; pixelSize: 16 } }
         Flow {
             Layout.fillWidth: true; Layout.topMargin: 36
@@ -50,7 +49,7 @@ Rectangle {
                         spacing: 12
                         ProfileAvatar {
                             profile: tile.modelData; size: 176
-                            border { width: tile.hovered || tile.activeFocus ? 3 : 0; color: "#ffffff" }
+                            border { width: tile.hovered || tile.activeFocus ? 3 : 0; color: Theme.strong }
                         }
                         Row {
                             spacing: 8
@@ -72,7 +71,7 @@ Rectangle {
                     spacing: 12
                     Rectangle {
                         width: 176; height: 176; color: "transparent"
-                        border { width: 2; color: addTile.hovered ? Theme.text2 : "#3a3a42" }
+                        border { width: 2; color: addTile.hovered ? Theme.text2 : Theme.borderSoft }
                         Label { anchors.centerIn: parent; text: "+"; color: Theme.muted; font { family: Theme.font; pixelSize: 64; weight: Font.Light } }
                     }
                     Label { text: "add profile"; color: Theme.muted; font { family: Theme.font; pixelSize: 20 } }
@@ -86,7 +85,7 @@ Rectangle {
             PlainButton { objectName: "guestButton"; text: "listen as guest"; onClicked: hop.openGuest() }
             Label { text: "guest mode keeps no history and saves nothing."; color: Theme.dim; font { family: Theme.font; pixelSize: 14 } }
         }
-        Label { visible: gate.error !== ""; text: gate.error; color: "#ff8a8a"; font { family: Theme.font; pixelSize: 15 } }
+        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: 15 } }
     }
 
     // ---- PIN curtain -----------------------------------------------------------------
@@ -95,7 +94,7 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 18
         ProfileAvatar { profile: gate.pinProfile; size: 140; Layout.alignment: Qt.AlignHCenter }
-        Label { text: gate.pinProfile.name || ""; color: "#ffffff"; font { family: Theme.font; pixelSize: 34; weight: Font.Light } Layout.alignment: Qt.AlignHCenter }
+        Label { text: gate.pinProfile.name || ""; color: Theme.strong; font { family: Theme.font; pixelSize: 34; weight: Font.Light } Layout.alignment: Qt.AlignHCenter }
         PinField {
             id: pinEntry
             objectName: "pinEntry"
@@ -103,7 +102,7 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             onAccepted: unlock.clicked()
         }
-        Label { objectName: "pinError"; text: gate.error; visible: text !== ""; color: "#ff8a8a"; font { family: Theme.font; pixelSize: 15 } Layout.alignment: Qt.AlignHCenter }
+        Label { objectName: "pinError"; text: gate.error; visible: text !== ""; color: Theme.danger; font { family: Theme.font; pixelSize: 15 } Layout.alignment: Qt.AlignHCenter }
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 12
@@ -134,7 +133,7 @@ Rectangle {
 
         Label {
             text: hop.profiles.length === 0 ? "welcome to hop-tunes" : "add a profile"
-            color: "#ffffff"; font { family: Theme.font; pixelSize: 52; weight: Font.Light }
+            color: Theme.strong; font { family: Theme.font; pixelSize: 52; weight: Font.Light }
         }
         Label {
             text: "a profile keeps your folders, settings and (soon) playlists separate. it stays on this computer."
@@ -175,7 +174,7 @@ Rectangle {
                             Accessible.name: "colour " + modelData
                             background: Rectangle {
                                 color: modelData
-                                border { width: createForm.accent === modelData ? 3 : 0; color: "#ffffff" }
+                                border { width: createForm.accent === modelData ? 3 : 0; color: Theme.strong }
                             }
                         }
                     }
@@ -205,7 +204,7 @@ Rectangle {
                 implicitWidth: 24; implicitHeight: 24
                 x: usePin.leftPadding; y: (usePin.height - height) / 2
                 color: usePin.checked ? createForm.accent : "transparent"
-                border { width: 2; color: usePin.checked ? createForm.accent : "#5b5b63" }
+                border { width: 2; color: usePin.checked ? createForm.accent : Theme.border }
                 Label { anchors.centerIn: parent; visible: usePin.checked; text: "✓"; color: Theme.ink; font { pixelSize: 16; weight: Font.Bold } }
             }
             contentItem: Label { text: usePin.text; leftPadding: usePin.indicator.width + 12; color: Theme.text2; font { family: Theme.font; pixelSize: 16 } verticalAlignment: Text.AlignVCenter }
@@ -223,7 +222,7 @@ Rectangle {
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 720
         }
 
-        Label { visible: gate.error !== ""; text: gate.error; color: "#ff8a8a"; font { family: Theme.font; pixelSize: 15 } }
+        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: 15 } }
         Item { Layout.fillHeight: true }
         RowLayout {
             spacing: 12

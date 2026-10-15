@@ -46,6 +46,8 @@ private:
         int trackNo = 0;
         double volume = 1.0;
         bool canNext = false, canPrevious = false, canPlay = false;
+        QString loop = QStringLiteral("None");          // None | Playlist | Track
+        bool shuffle = false;
     };
 
     void run();

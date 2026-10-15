@@ -21,6 +21,7 @@
 
 #include <gst/gst.h>
 
+#include <functional>
 #include <memory>
 
 using namespace hop;
@@ -65,10 +66,25 @@ class TestUi : public QObject {
         if (!i) qWarning("no item %s", name);
         return i;
     }
+    // Scrolls the nearest Flickable so the item is on screen (Settings is a long page).
+    void ensureVisible(QQuickItem *i)
+    {
+        for (QQuickItem *p = i->parentItem(); p; p = p->parentItem()) {
+            if (!p->inherits("QQuickFlickable")) continue;
+            auto *content = qvariant_cast<QQuickItem *>(p->property("contentItem"));
+            if (!content) return;
+            const qreal y = i->mapToItem(content, QPointF(0, 0)).y();
+            const qreal maxY = qMax(0.0, p->property("contentHeight").toReal() - p->height());
+            p->setProperty("contentY", qBound(0.0, y - 120, maxY));
+            QTest::qWait(30);
+            return;
+        }
+    }
     bool click(const char *name)
     {
         QQuickItem *i = item(name);
         if (!i || !i->isVisible() || !i->isEnabled()) { qWarning("cannot click %s", name); return false; }
+        ensureVisible(i);
         const QPointF c = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
         QTest::mouseClick(window(), Qt::LeftButton, Qt::NoModifier, c.toPoint());
         return true;
@@ -422,6 +438,116 @@ private slots:
         QCOMPARE(m_app->quickplayPinned().size(), 2);
         QVERIFY(!m_app->profileDb()->allStats().isEmpty());
         QVERIFY(QFile::exists(m_app->profileStore()->dirFor(lib) + QStringLiteral("/profile.sqlite")));
+    }
+
+    // ---- M5: themes, playback settings, shuffle/repeat, drag reorder, idle fade ----
+
+    void dragRow(QQuickItem *row, int handleX, int dy)
+    {
+        const QPointF h = row->mapToScene(QPointF(handleX, row->height() / 2));
+        const QPoint start = h.toPoint();
+        QTest::mousePress(window(), Qt::LeftButton, Qt::NoModifier, start);
+        for (int k = 1; k <= 6; ++k) QTest::mouseMove(window(), start + QPoint(0, dy * k / 6), 10);
+        QTest::mouseRelease(window(), Qt::LeftButton, Qt::NoModifier, start + QPoint(0, dy));
+    }
+
+    void m5SettingsPersist()
+    {
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTest::qWait(250);
+        QVERIFY(click("choice_light"));
+        QVERIFY(m_app->lightTheme());
+        QCOMPARE(m_app->theme(), QStringLiteral("light"));
+        if (m_app->player()->replayGainAvailable()) {
+            QVERIFY(click("choice_2"));
+            QCOMPARE(m_app->player()->replayGainMode(), 2);
+        }
+        QVERIFY(click("choice_true"));
+        QVERIFY(m_app->reduceMotion());
+        m_app->player()->setCrossfadeMs(3000);
+        QVERIFY(click("shuffleButton"));
+        QVERIFY(m_app->player()->shuffle());
+        QVERIFY(click("repeatButton"));
+        QCOMPARE(m_app->player()->repeatMode(), 1);
+        shot("m5-settings-light");
+
+        // Leave and come back: everything is remembered for this profile only.
+        const QString id = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        QVERIFY(!m_app->lightTheme());                      // the picker uses the default
+        m_app->openGuest();
+        QVERIFY(!m_app->lightTheme());
+        QCOMPARE(m_app->player()->crossfadeMs(), 0);
+        QVERIFY(!m_app->player()->shuffle());
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(id), QString());
+        QVERIFY(m_app->lightTheme());
+        QVERIFY(m_app->reduceMotion());
+        QCOMPARE(m_app->player()->crossfadeMs(), 3000);
+        QVERIFY(m_app->player()->shuffle());
+        QCOMPARE(m_app->player()->repeatMode(), 1);
+        if (m_app->player()->replayGainAvailable()) QCOMPARE(m_app->player()->replayGainMode(), 2);
+        m_app->player()->setShuffle(false);
+        m_app->player()->setRepeatMode(0);
+        m_app->player()->setCrossfadeMs(0);
+        m_app->setReduceMotion(false);
+    }
+
+    void m5PlaylistDragReorder()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("tab_playlists"));
+        QStringList paths;
+        for (const Track &t : m_app->songs()->tracks()) paths << t.path;
+        const QString key = m_app->createPlaylist(QStringLiteral("Drag Me"), paths.mid(0, 4));
+        m_app->selectPlaylist(key);
+        QTest::qWait(200);
+        // The first row's handle, dragged two rows down.
+        QQuickItem *list = item("playlistList");
+        QVERIFY(list);
+        QQuickItem *firstRow = nullptr;
+        std::function<void(QQuickItem *)> findRow = [&](QQuickItem *it) {
+            if (firstRow) return;
+            if (it->property("draggable").toBool() && it->property("path").toString() == paths[0]) { firstRow = it; return; }
+            for (QQuickItem *c : it->childItems()) findRow(c);
+        };
+        findRow(window()->contentItem());
+        QVERIFY(firstRow);
+        QTest::mouseMove(window(), firstRow->mapToScene(QPointF(20, 20)).toPoint());
+        dragRow(firstRow, 20, int(firstRow->height() * 2));
+        QTRY_COMPARE(m_app->playlistSongs()->tracks().at(2).path, paths[0]);
+        QCOMPARE(m_app->playlistSongs()->tracks().at(0).path, paths[1]);
+        QVERIFY(m_app->deletePlaylist(key));
+    }
+
+    void m5QueueDragAndIdleFade()
+    {
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        window()->setProperty("view", QStringLiteral("now playing"));
+        QTest::qWait(250);
+        const QString second = m_app->player()->queue().at(2).path;   // "up next" row 1
+        QQuickItem *row = item("upNext_1");
+        QVERIFY(row);
+        dragRow(row, 8, -int(row->height()));                          // up one place
+        QTRY_COMPARE(m_app->player()->queue().at(1).path, second);
+        QTRY_COMPARE(item("upNextTitle_0")->property("text").toString(), m_app->player()->queue().at(1).displayTitle());   // the screen follows
+        shot("m5-now-playing-light");
+        // Idle: the controls fade out, and come back on mouse movement.
+        QObject *np = nullptr;
+        std::function<void(QQuickItem *)> findNp = [&](QQuickItem *it) {
+            if (np) return;
+            if (it->property("idle").isValid() && it->property("chrome").isValid()) { np = it; return; }
+            for (QQuickItem *c : it->childItems()) findNp(c);
+        };
+        findNp(window()->contentItem());
+        QVERIFY(np);
+        QTRY_VERIFY_WITH_TIMEOUT(np->property("idle").toBool(), 6000);
+        QTest::mouseMove(window(), QPoint(300, 300));
+        QTest::mouseMove(window(), QPoint(320, 310));
+        QTRY_VERIFY(!np->property("idle").toBool());
+        m_app->setTheme(QStringLiteral("dark"));
+        QVERIFY(!m_app->lightTheme());
     }
 };
 

@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
-import "Theme.js" as Theme
 
 // Album cover: the real image when there is one, otherwise a two-colour placeholder
 // derived from the album name (so every album still has a recognisable tile).

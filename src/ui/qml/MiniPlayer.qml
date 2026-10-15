@@ -2,7 +2,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // Persistent bottom bar (spec §4.6).
 Rectangle {
@@ -48,16 +47,30 @@ Rectangle {
 
         RowLayout {
             spacing: 8
+            TransportButton {
+                objectName: "shuffleButton"
+                glyph: "shuffle"; iconSize: 15; active: player.shuffle
+                onClicked: player.shuffle = !player.shuffle
+                Accessible.name: player.shuffle ? "shuffle on" : "shuffle off"
+                ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: player.shuffle ? "shuffle: on" : "shuffle: off"
+            }
             TransportButton { glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
             TransportButton { glyph: player.playing ? "pause" : "play"; round: true; iconSize: 16; enabled: player.hasTrack || hop.songs.count > 0
                               onClicked: player.hasTrack ? player.toggle() : hop.playSongs(0); Accessible.name: player.playing ? "pause" : "play" }
             TransportButton { glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
+            TransportButton {
+                objectName: "repeatButton"
+                glyph: player.repeatMode === 2 ? "repeat1" : "repeat"; iconSize: 15; active: player.repeatMode !== 0
+                onClicked: player.cycleRepeat()
+                Accessible.name: ["repeat off", "repeat all", "repeat one"][player.repeatMode]
+                ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: ["repeat: off", "repeat: all", "repeat: this song"][player.repeatMode]
+            }
         }
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
-            Label { text: hop.formatTime(player.position); color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+            Label { text: player.hasTrack ? hop.formatTime(Math.max(1, player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
             Slider {
                 id: seek
                 Layout.fillWidth: true
@@ -68,7 +81,7 @@ Rectangle {
                 Accessible.name: "seek"
                 background: Rectangle {
                     x: seek.leftPadding; y: seek.topPadding + seek.availableHeight / 2 - height / 2
-                    width: seek.availableWidth; height: 4; color: "#34343a"
+                    width: seek.availableWidth; height: 4; color: Theme.track
                     Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: hop.accent }
                 }
                 handle: Rectangle {
@@ -81,6 +94,42 @@ Rectangle {
             Label { text: player.hasTrack ? hop.formatTime(player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
         }
 
-        Label { text: hop.djSeed !== "" ? "smart dj" : "gapless"; color: hop.djSeed !== "" ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+        // volume (spec §4.6)
+        RowLayout {
+            spacing: 2
+            property real lastVolume: 1.0
+            id: vol
+            TransportButton {
+                glyph: player.volume === 0 ? "mute" : "volume"; iconSize: 15
+                onClicked: { if (player.volume > 0) { vol.lastVolume = player.volume; player.volume = 0 } else player.volume = vol.lastVolume || 1.0 }
+                Accessible.name: player.volume === 0 ? "unmute" : "mute"
+            }
+            Slider {
+                id: volSlider
+                objectName: "volumeSlider"
+                implicitWidth: 96
+                from: 0; to: 1
+                onMoved: player.volume = value
+                Binding { target: volSlider; property: "value"; value: player.volume; when: !volSlider.pressed }
+                Accessible.name: "volume"
+                background: Rectangle {
+                    x: volSlider.leftPadding; y: volSlider.topPadding + volSlider.availableHeight / 2 - height / 2
+                    width: volSlider.availableWidth; height: 3; color: Theme.track
+                    Rectangle { width: volSlider.visualPosition * parent.width; height: parent.height; color: Theme.muted }
+                }
+                handle: Rectangle {
+                    x: volSlider.leftPadding + volSlider.visualPosition * (volSlider.availableWidth - width)
+                    y: volSlider.topPadding + volSlider.availableHeight / 2 - height / 2
+                    width: 10; height: 10; radius: 5; color: Theme.text
+                    visible: volSlider.hovered || volSlider.pressed
+                }
+            }
+        }
+
+        Label {
+            text: hop.djSeed !== "" ? "smart dj" : (player.fading ? "crossfading" : (player.crossfadeMs > 0 ? "crossfade " + Math.round(player.crossfadeMs / 1000) + " s" : "gapless"))
+            color: hop.djSeed !== "" || player.fading ? hop.accent : Theme.muted
+            font { family: Theme.font; pixelSize: 13 }
+        }
     }
 }

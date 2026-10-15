@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** Draft v0.5 (M1–M4 built) · **Date:** 2026-10-15 · **Platform:** Linux first
+**Status:** Draft v0.6 (M1–M5 built) · **Date:** 2026-10-15 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -114,8 +114,8 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ### 4.3 Now Playing
 - Full-window view with a **mosaic of the artist's or library's album art** slowly drifting in the background, plus big type for title / artist / album.
-- Up next: the queue is shown inline and can be reordered by drag.
-- Minimal controls that fade out after inactivity.
+- Up next: the queue is shown inline and can be reordered by drag. *(M5: drag the ≡ handle; click a song to jump to it, × to remove it.)*
+- Minimal controls that fade out after inactivity. *(M5: after 3.5 s while playing; mouse or keys bring them back.)*
 
 ### 4.4 Quickplay (start page)
 - **Pinned:** user-pinned albums, artists and playlists.
@@ -125,8 +125,8 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ### 4.5 Visual language (original)
 - Typography-first: large, light-weight sans-serif with generous whitespace. Use an open font (Inter, Selawik-style alternatives, Noto Sans), **not** Segoe/Zune Pro.
-- Dark and light themes, plus a user-chosen accent colour per profile.
-- Motion: subtle slide-and-fade transitions between pivots (≤200 ms) and smooth kinetic scrolling. Respects the system "reduce motion" setting.
+- Dark and light themes, plus a user-chosen accent colour per profile. *(M5: dark, light and "match system" (Qt 6.5+); in the light theme the accent is darkened so it stays readable as text.)*
+- Motion: subtle slide-and-fade transitions between pivots (≤200 ms) and smooth kinetic scrolling. Respects the system "reduce motion" setting. *(M5: 180 ms slide-and-fade; "reduce motion" is a per-profile setting, as Linux desktops expose no common system flag for it.)*
 - Original icon set and app logo. No Zune shapes or colours.
 
 ### 4.6 Mini player and system integration
@@ -142,10 +142,10 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 |---|:-:|---|
 | Formats: MP3, AAC/M4A, FLAC, ALAC, Ogg Vorbis, Opus, WAV, WMA | ✓ | Via GStreamer plugins |
 | Gapless playback | ✓ | Must be seamless on albums. This is the signature feel |
-| Crossfade (0–12 s, off by default) | ✓ | Disabled automatically within a continuous album |
-| ReplayGain (track/album), with tag fallback scanning | ✓ | |
+| Crossfade (0–12 s, off by default) | ✓ | Disabled automatically within a continuous album. *Built in M5: a second playbin starts the next song and the two cross with an equal-power curve; consecutive tracks of one album stay gapless.* |
+| ReplayGain (track/album), with tag fallback scanning | ✓ | *M5 uses the gain tags in the files (rgvolume + rglimiter, pre-amp ±15 dB, −6 dB for untagged songs). Scanning untagged files to compute their gain is left for a later release.* |
 | 10-band EQ + presets | v1.1 | Per profile |
-| Shuffle, repeat one/all, queue, play next | ✓ | |
+| Shuffle, repeat one/all, queue, play next | ✓ | *Shuffle keeps the playing song and restores the original order when switched off; repeat and shuffle are also controllable from desktop media widgets (MPRIS LoopStatus/Shuffle).* |
 | Playback speed for podcasts | v1.2 | `scaletempo` |
 | Resume position for long tracks / audiobooks (`.m4b`) | v1.1 | |
 
@@ -209,7 +209,7 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 
 ## 7. Playlists
 
-- Manual playlists. *(M4 reorders with "move up / move down" in the song menu; drag and drop comes with the M5 polish pass.)*
+- Manual playlists, reordered by dragging the ≡ handle (M5) or with "move up / down" in the song menu.
 - **Smart playlists:** rule builder (genre is …, rating ≥ …, added in last N days, play count < …, etc.), live-updating.
 - Auto lists: Most played, Recently added, Never played, Hearted.
 - Export to `.m3u8` with relative paths.
@@ -313,7 +313,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | ✅ **M2: Collection** | Artists/albums/songs pivots, art grid, cover art, mini player, MPRIS. *Search moved to M4.* | Daily-driver usable for one person |
 | **M3: Profiles** ✅ | Profile create/pick/switch/delete, PIN, per-profile settings, guest mode (per-profile stats arrive with play history in M4) | Two people can share one install without seeing each other's data |
 | **M4: Playlists & Quickplay** ✅ | Manual + smart playlists, auto lists, import m3u/m3u8/pls/xspf/zpl/wpl, export m3u8, Quickplay pins/history/new, smart DJ, instant search, hearts and play counts per profile, play next / add to queue | — |
-| **M5: Now Playing & polish** | Art mosaic, transitions, themes/accents, ReplayGain, crossfade | Feels "seamless" |
+| **M5: Now Playing & polish** ✅ | Art mosaic, transitions, themes/accents, ReplayGain, crossfade; also repeat/shuffle, volume in the mini player, drag reordering, idle-fading Now Playing controls | Feels "seamless" |
 | **M6: Ship 1.0** | Flatpak, AppImage, AUR, user docs | Published |
 | **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |
 | 1.1 / 1.2 | EQ, Smart DJ, tag editing write-back, podcasts | — |
@@ -321,6 +321,12 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 ---
 
 ## 13. Open questions
+
+- *Known GStreamer issue (found in M5 testing):* with GStreamer 1.24's playbin3 and an audio
+  output running faster than real time (a test-only setup), skipping at the exact moment of a
+  gapless hand-off can deadlock inside GStreamer. It did not happen in 30 back-to-back
+  real-time runs on either engine. If it is ever seen with real audio, setting
+  `HOPTUNES_PLAYBIN=playbin` switches to the classic engine.
 1. C++ or Rust (cxx-qt) for the core?
 2. Should a PIN be required to *delete* another profile?
 3. Should profiles be able to **share** a playlist (read-only link between profiles)?

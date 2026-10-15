@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // collection › music › playlists (spec §7): built-in lists, your playlists and smart
 // playlists on the left; the selected list on the right.
@@ -178,6 +177,8 @@ Item {
                     trackId: model.trackId; title: model.title; artist: model.artist; album: model.album
                     trackNo: index + 1; duration: model.duration
                     path: model.path; hearted: model.hearted
+                    draggable: root.info.kind === "manual"
+                    onMoveRequested: function (steps) { hop.movePlaylistItem(index, Math.max(0, Math.min(hop.playlistSongs.count - 1, index + steps))) }
                     onPlay: hop.playPlaylist(index)
                     onMenu: function (src, x, y) {
                         root.songMenu([model.path], model.path, model.hearted,
@@ -195,10 +196,10 @@ Item {
         anchors.centerIn: Overlay.overlay
         padding: 28
         background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
-        Overlay.modal: Rectangle { color: "#a0000000" }
+        Overlay.modal: Rectangle { color: Theme.scrim }
         contentItem: ColumnLayout {
             spacing: 18
-            Label { text: "delete \\u201c" + (root.info.name || "") + "\\u201d?"; color: "#ffffff"; font { family: Theme.font; pixelSize: 26; weight: Font.Light } }
+            Label { text: "delete \\u201c" + (root.info.name || "") + "\\u201d?"; color: Theme.strong; font { family: Theme.font; pixelSize: 26; weight: Font.Light } }
             Label { text: "only the playlist goes. the songs stay in your library."; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } }
             RowLayout {
                 Layout.alignment: Qt.AlignRight

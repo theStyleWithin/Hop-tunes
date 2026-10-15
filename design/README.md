@@ -56,3 +56,9 @@ M3 adds local profiles. These renders come from the automated UI test (`HOPTUNES
 | ![quickplay](app/m4-quickplay.png) | ![playlist](app/m4-playlist.png) | ![smart](app/m4-smart-editor.png) | ![search](app/m4-search.png) | ![menu](app/m4-song-menu.png) |
 
 M4 adds playlists, smart playlists, search, hearts and play counts, and the Quickplay page with pins, history, new albums and the smart DJ. These renders also come from the UI test, run against the sample library (`HOPTUNES_UI_LIBRARY=<folder>`).
+
+| light theme | now playing | playback settings | appearance settings |
+|---|---|---|---|
+| ![light](app/m5-albums-light.png) | ![now playing](app/m5-now-playing-light.png) | ![playback](app/m5-settings-playback.png) | ![appearance](app/m5-settings-light.png) |
+
+M5 adds crossfade, ReplayGain, shuffle and repeat, a volume control, light/dark/system themes, pivot transitions, drag-to-reorder and idle-fading Now Playing controls.

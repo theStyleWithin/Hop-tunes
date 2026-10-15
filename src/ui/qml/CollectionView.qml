@@ -2,7 +2,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import "Theme.js" as Theme
 
 // collection › music: artists (three panes, design/screens/4), albums grid, songs list.
 Item {
@@ -111,7 +110,7 @@ Item {
                     background: Item {}
                     contentItem: Label {
                         text: tab.modelData[0]
-                        color: tab.on ? "#ffffff" : (!tab.enabled ? Theme.faint : (tab.hovered ? Theme.text2 : "#8a8a93"))
+                        color: tab.on ? Theme.strong : (!tab.enabled ? Theme.faint : (tab.hovered ? Theme.text2 : Theme.tabIdle))
                         font { family: Theme.font; pixelSize: 15; letterSpacing: 1 }
                         bottomPadding: 4
                         Rectangle { visible: tab.on; anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 2; color: hop.accent }

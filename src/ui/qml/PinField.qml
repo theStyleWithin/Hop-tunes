@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
-import "Theme.js" as Theme
 
 // 4–8 digit PIN entry, shown as dots.
 TextField {

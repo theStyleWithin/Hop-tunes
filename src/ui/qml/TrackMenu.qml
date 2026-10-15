@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
-import "Theme.js" as Theme
 
 // Right-click menu for songs and albums (spec §4.2): play next, add to queue, add to
 // playlist, heart, pin. Set `paths` (and optionally the pin and playlist-row fields) and popup().
@@ -27,7 +26,7 @@ Menu {
         implicitWidth: 260
         contentItem: Label {
             text: mi.text; leftPadding: 6
-            color: mi.enabled ? (mi.highlighted ? "#ffffff" : Theme.text) : Theme.dim
+            color: mi.enabled ? (mi.highlighted ? Theme.strong : Theme.text) : Theme.dim
             font { family: Theme.font; pixelSize: 15 }
         }
         arrow: Label { x: mi.width - width - 10; anchors.verticalCenter: parent.verticalCenter; visible: !!mi.subMenu; text: "›"; color: Theme.muted; font.pixelSize: 18 }

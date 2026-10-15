@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
-import "Theme.js" as Theme
 
 // A profile's picture: its avatar image, or its initial on its accent colour.
 Rectangle {
