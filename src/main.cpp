@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("hop"), &hopApp);
-    // Developer hook: HOPTUNES_VIEW=collection|nowplaying|quickplay|settings picks the first view.
+    // Developer hook: HOPTUNES_VIEW=collection|artists|albums|songs|nowplaying|quickplay|settings picks the first view.
     engine.rootContext()->setContextProperty(QStringLiteral("initialView"),
                                              QString::fromLocal8Bit(qgetenv("HOPTUNES_VIEW")));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,

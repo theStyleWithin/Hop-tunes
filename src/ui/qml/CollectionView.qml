@@ -8,7 +8,7 @@ import "Theme.js" as Theme
 Item {
     id: root
     signal addFolderRequested()
-    property string mode: "artists"
+    property string mode: ["albums", "songs"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
 
     ColumnLayout {
         anchors.fill: parent

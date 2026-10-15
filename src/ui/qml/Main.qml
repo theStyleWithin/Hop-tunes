@@ -18,6 +18,7 @@ ApplicationWindow {
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
     property string view: {
         var v = String(initialView || "").replace("nowplaying", "now playing")
+        if (v === "albums" || v === "songs" || v === "artists") v = "collection"
         return views.indexOf(v) >= 0 ? v : "collection"
     }
 

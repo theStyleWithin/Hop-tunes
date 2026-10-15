@@ -9,15 +9,15 @@ An open source version of Microsoft Zune
 
 ## Status
 
-**M1 (play a folder) works:** library scan, gapless playback, collection song list, now playing, mini player. Real screenshots from the app (headless render):
+- **M1 (play a folder): done.** Incremental library scan, gapless playback, song list, now playing, mini player.
+- **M2 (collection): done** except search. Artists → albums → songs panes, albums grid, cover art (embedded + folder images), MPRIS media keys and desktop media widgets.
+- **AppImage:** portable build for glibc 2.35+ distros, tested on 9 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
-| collection | now playing |
+| collection › artists | now playing |
 |---|---|
-| ![collection](docs/screenshots/m1-collection.png) | ![now playing](docs/screenshots/m1-now-playing.png) |
-| **first run** | **quickplay** |
-| ![first run](docs/screenshots/m1-first-run.png) | ![quickplay](docs/screenshots/m1-quickplay.png) |
+| ![artists](design/app/m2-collection-artists.png) | ![now playing](design/app/m2-now-playing.png) |
 
-The design targets for later milestones are in [`design/`](design/).
+More renders, plus the original design targets, are in [`design/`](design/).
 
 ## Building
 
