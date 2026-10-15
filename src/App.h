@@ -212,6 +212,7 @@ private:
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
     void activate(const QString &id, bool guest);
+    static void setAside(const QString &file);
     void applySearch();
     void refreshPlaylist();
     void refreshQuickplay();

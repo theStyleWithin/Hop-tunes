@@ -57,6 +57,14 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_player, &Player::currentChanged, this, [this] { emit statsChanged(); djTopUp(); });
 }
 
+// Moves a damaged SQLite file (and its -wal/-shm companions) to "<file>.damaged-<time>".
+void App::setAside(const QString &file)
+{
+    const QString stamp = QString::number(QDateTime::currentSecsSinceEpoch());
+    for (const QString &suffix : {QString(), QStringLiteral("-wal"), QStringLiteral("-shm")})
+        if (QFile::exists(file + suffix)) QFile::rename(file + suffix, file + QStringLiteral(".damaged-") + stamp + suffix);
+}
+
 App::~App()
 {
     saveProfileSettings();
@@ -67,8 +75,14 @@ bool App::init()
 {
     Paths::ensureDirs();
     if (!m_index.open(Paths::indexDbPath())) {
-        qWarning("hop-tunes: cannot open %s: %s", qPrintable(Paths::indexDbPath()), qPrintable(m_index.lastError()));
-        return false;
+        // The index is only a cache of tags; if it is damaged, keep a copy aside and rebuild.
+        qWarning("hop-tunes: track index unreadable (%s); rebuilding it", qPrintable(m_index.lastError()));
+        m_index.close();
+        setAside(Paths::indexDbPath());
+        if (!m_index.open(Paths::indexDbPath())) {
+            qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::indexDbPath()), qPrintable(m_index.lastError()));
+            return false;
+        }
     }
     if (!m_store.load()) {
         // Never overwrite an unreadable profile list: set it aside and start fresh.
@@ -262,8 +276,14 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_loadingSettings = false;
     emit appearanceChanged();
-    if (!m_db.open(guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite")))
-        qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
+    const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
+    if (!m_db.open(dbPath) && !guest) {
+        // Damaged: keep it aside for recovery and start this profile's lists afresh,
+        // rather than running without playlists and play counts at all.
+        qWarning("hop-tunes: profile database unreadable (%s); set aside, starting a new one", qPrintable(m_db.lastError()));
+        setAside(dbPath);
+        if (!m_db.open(dbPath)) qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
+    }
     m_stats = m_db.allStats();
     m_search.clear();
     m_djSeed.clear();

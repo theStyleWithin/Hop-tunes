@@ -25,8 +25,14 @@ First stable release.
 - `--help` and `--version`, a man page, and an About section with keyboard shortcuts.
 - **Packages**: Flatpak, AUR (`hop-tunes`, `hop-tunes-git`) and the portable AppImage.
 
+- **Release kits** for AUR and Flathub publishers, verified by real `makepkg`/`namcap` and
+  `flatpak-builder`/`flatpak-builder-lint` before every release.
+
 ### Fixed
 - Building against Qt 6.4 (Ubuntu 24.04, Debian system Qt).
+- A damaged track index no longer stops Hop-tunes from starting (it is set aside and
+  rebuilt); a damaged profile database is set aside and started afresh.
+- Junk entries in damaged or binary playlist files are ignored.
 
 ## [0.1.0] - 2026-10-14
 

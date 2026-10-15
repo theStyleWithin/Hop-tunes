@@ -1,0 +1,151 @@
+name: release-kit
+
+# Builds the hand-off kits for AUR and Flathub publishers from the release source tarball,
+# proves them with real makepkg/namcap on Arch and a real flatpak-builder build plus
+# flatpak-builder-lint, and only then attaches them to a tagged release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-kit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: Version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"
+          else v=$(sed -n 's/^project(hop-tunes VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt); fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Make the kits
+        run: |
+          # A tag must match the version in CMakeLists.txt.
+          cmake_ver=$(sed -n 's/^project(hop-tunes VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          [ "$cmake_ver" = "${{ steps.ver.outputs.version }}" ] || { echo "::error::tag v${{ steps.ver.outputs.version }} but CMakeLists.txt says $cmake_ver"; exit 1; }
+          packaging/release-kit/make-kit.sh "${{ steps.ver.outputs.version }}" . kit
+          cat kit/KIT-SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with: { name: release-kit, path: kit, if-no-files-found: error }
+
+  aur-check:
+    needs: kit
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Arch build tools and dependencies
+        run: |
+          for i in 1 2 3; do pacman -Syu --noconfirm --needed base-devel git namcap cmake ninja \
+            qt6-base qt6-declarative taglib sqlite glib2 gstreamer gst-plugins-base gst-plugins-good \
+            hicolor-icon-theme && break; sleep 15; done
+      - uses: actions/download-artifact@v4
+        with: { name: release-kit, path: kit }
+      - name: makepkg the kit's hop-tunes package
+        run: |
+          set -e
+          ver="${{ needs.kit.outputs.version }}"
+          useradd -m builder
+          mkdir -p /tmp/w && tar xzf "kit/hop-tunes-$ver-aur-kit.tar.gz" -C /tmp/w
+          pkg="/tmp/w/hop-tunes-$ver-aur-kit/hop-tunes"
+          # The release asset is not online yet: give makepkg the same file locally. makepkg
+          # still verifies it against the kit's sha256sums.
+          cp "kit/hop-tunes-$ver.tar.gz" "$pkg/"
+          chown -R builder /tmp/w
+          su builder -c "cd '$pkg' && makepkg --noconfirm --nodeps -f" > /tmp/makepkg.log 2>&1 || { tail -60 /tmp/makepkg.log; exit 1; }
+          tail -15 /tmp/makepkg.log
+          # The kit's .SRCINFO must be exactly what makepkg would write.
+          su builder -c "cd '$pkg' && makepkg --printsrcinfo" | diff -u "$pkg/.SRCINFO" -
+          su builder -c "cd '/tmp/w/hop-tunes-$ver-aur-kit/hop-tunes-git' && makepkg --printsrcinfo" | diff -u "/tmp/w/hop-tunes-$ver-aur-kit/hop-tunes-git/.SRCINFO" -
+      - name: namcap, install, run
+        run: |
+          set -e
+          ver="${{ needs.kit.outputs.version }}"
+          k="/tmp/w/hop-tunes-$ver-aur-kit"
+          namcap "$k/hop-tunes/PKGBUILD" "$k/hop-tunes-git/PKGBUILD" | tee /tmp/namcap.txt
+          namcap "$k"/hop-tunes/*.pkg.tar.zst | tee -a /tmp/namcap.txt
+          if grep -q " E: " /tmp/namcap.txt; then echo "::error::namcap reported errors"; exit 1; fi
+          pacman -U --noconfirm "$k"/hop-tunes/*.pkg.tar.zst
+          hop-tunes --version | grep -q "hop-tunes $ver"
+          QT_QPA_PLATFORM=offscreen HOPTUNES_AUDIO_SINK=fakesink HOPTUNES_NO_MPRIS=1 HOPTUNES_PROFILE=CI \
+            HOPTUNES_SCREENSHOT=/tmp/shot.png timeout 60 hop-tunes | grep "hop-tunes selftest:"
+      - name: makepkg hop-tunes-git (main only)
+        if: github.event_name != 'pull_request'
+        run: |
+          set -e
+          ver="${{ needs.kit.outputs.version }}"
+          su builder -c "cd '/tmp/w/hop-tunes-$ver-aur-kit/hop-tunes-git' && makepkg --noconfirm --nodeps -f" > /tmp/git.log 2>&1 || { tail -60 /tmp/git.log; exit 1; }
+          tail -5 /tmp/git.log
+
+  flathub-check:
+    needs: kit
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:kde-6.8
+      options: --privileged
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: release-kit, path: kit }
+      - name: Unpack the Flathub kit
+        shell: bash
+        run: |
+          set -e
+          ver="${{ needs.kit.outputs.version }}"
+          tar xzf "kit/hop-tunes-$ver-flathub-kit.tar.gz"
+          d="hop-tunes-$ver-flathub-kit"
+          # Build the very same manifest, with the tarball read from disk instead of the
+          # not-yet-published URL (flatpak-builder still checks its sha256).
+          sed "s|^        url: https://github.com/theStyleWithin/Hop-tunes/releases/download/.*|        path: $PWD/kit/hop-tunes-$ver.tar.gz|" \
+            "$d/io.github.thestylewithin.hoptunes.yml" > local-build.yml
+          grep -n "path: \|sha256:" local-build.yml
+          cp "$d/io.github.thestylewithin.hoptunes.yml" kit-manifest.yml
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: hop-tunes-kit-check.flatpak
+          manifest-path: local-build.yml
+          cache-key: flathub-kit-${{ hashFiles('local-build.yml') }}
+          upload-artifact: false
+      - name: Run inside the sandbox
+        shell: bash
+        run: |
+          set -e
+          flatpak-builder --run flatpak_app local-build.yml hop-tunes --version | grep -q "hop-tunes ${{ needs.kit.outputs.version }}"
+      - name: flatpak-builder-lint (Flathub's own checks)
+        shell: bash
+        run: |
+          set -e
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.flatpak.Builder
+          lint() { flatpak run --command=flatpak-builder-lint org.flatpak.Builder "$@"; }
+          lint manifest kit-manifest.yml
+          lint builddir flatpak_app
+          if [ -d repo ]; then lint repo repo; fi
+
+  publish:
+    needs: [kit, aur-check, flathub-check]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: release-kit, path: kit }
+      - name: Attach the kits to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          # The AppImage workflow creates the release; wait for it.
+          for i in $(seq 1 60); do gh release view "$tag" >/dev/null 2>&1 && break; sleep 30; done
+          cd kit && gh release upload "$tag" hop-tunes-*.tar.gz KIT-SHA256SUMS --clobber

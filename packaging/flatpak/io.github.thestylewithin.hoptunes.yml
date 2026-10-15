@@ -7,7 +7,6 @@ runtime: org.kde.Platform
 runtime-version: '6.8'
 sdk: org.kde.Sdk
 command: hop-tunes
-rename-icon: io.github.thestylewithin.hoptunes
 
 finish-args:
   - --share=ipc

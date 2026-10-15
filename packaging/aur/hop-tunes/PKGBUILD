@@ -14,12 +14,14 @@ optdepends=('gst-libav: AAC, ALAC and WMA playback'
             'pipewire-pulse: sound through PipeWire (most desktops already have it)')
 makedepends=('cmake' 'ninja')
 checkdepends=('qt6-declarative')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-# Filled in with `updpkgsums` once the v$pkgver tag is published.
+# The release's own source tarball (attached to the GitHub release), so the checksum never
+# changes the way GitHub's generated archives can.
+source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
+# The release kit fills this in; see packaging/release-kit/.
 sha256sums=('SKIP')
 
 build() {
-  cmake -B build -S "Hop-tunes-$pkgver" -G Ninja \
+  cmake -B build -S "$pkgname-$pkgver" -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DHOPTUNES_BUILD_TESTS=ON
@@ -33,5 +35,5 @@ check() {
 
 package() {
   DESTDIR="$pkgdir" cmake --install build
-  install -Dm644 "Hop-tunes-$pkgver/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$pkgname-$pkgver/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

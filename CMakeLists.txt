@@ -105,6 +105,12 @@ if(HOPTUNES_BUILD_TESTS)
         add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/qml.qrc assets/assets.qrc)
         target_link_libraries(test_ui PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Test)
         target_compile_definitions(test_ui PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
+
+        # Damaged files, odd names, broken databases and playlists must never crash or block startup.
+        add_executable(test_robust tests/test_robust.cpp src/App.cpp)
+        target_link_libraries(test_robust PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::Test)
+        add_test(NAME robustness COMMAND test_robust)
+        set_tests_properties(robustness PROPERTIES TIMEOUT 180)
         add_test(NAME ui COMMAND test_ui)
         set_tests_properties(ui PROPERTIES TIMEOUT 120)
     endif()

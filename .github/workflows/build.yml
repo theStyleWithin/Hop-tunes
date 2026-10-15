@@ -36,35 +36,3 @@ jobs:
         # logged.sh repeats the failing output as an annotation, readable through the API.
         run: .github/scripts/logged.sh ctest ctest --test-dir build --output-on-failure
 
-  # Real makepkg + namcap on Arch, with this checkout as the release tarball.
-  aur:
-    runs-on: ubuntu-latest
-    container: archlinux:latest
-    steps:
-      - name: Arch build tools and dependencies
-        run: |
-          for i in 1 2 3; do pacman -Syu --noconfirm --needed base-devel git namcap cmake ninja \
-            qt6-base qt6-declarative taglib sqlite glib2 gstreamer gst-plugins-base gst-plugins-good \
-            hicolor-icon-theme && break; sleep 15; done
-      - uses: actions/checkout@v5
-      - name: makepkg hop-tunes
-        run: |
-          set -e
-          ver=$(sed -n 's/^project(hop-tunes VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-          useradd -m builder
-          mkdir -p /tmp/pkg
-          cp packaging/aur/hop-tunes/PKGBUILD /tmp/pkg/
-          tar czf "/tmp/pkg/hop-tunes-$ver.tar.gz" --exclude=./.git --transform "s,^\.,Hop-tunes-$ver," .
-          sed -i "s|^pkgver=.*|pkgver=$ver|; s|^source=.*|source=(\"hop-tunes-$ver.tar.gz\")|" /tmp/pkg/PKGBUILD
-          chown -R builder /tmp/pkg
-          su builder -c "cd /tmp/pkg && makepkg --noconfirm --nodeps -f" 2>&1 | tail -40
-          ls /tmp/pkg/*.pkg.tar.zst
-      - name: namcap and install
-        run: |
-          set -e
-          namcap packaging/aur/hop-tunes/PKGBUILD packaging/aur/hop-tunes-git/PKGBUILD || true
-          namcap /tmp/pkg/*.pkg.tar.zst || true
-          pacman -U --noconfirm /tmp/pkg/*.pkg.tar.zst
-          hop-tunes --version
-          test -f /usr/share/metainfo/io.github.thestylewithin.hoptunes.metainfo.xml
-          test -f /usr/share/man/man1/hop-tunes.1.gz || test -f /usr/share/man/man1/hop-tunes.1

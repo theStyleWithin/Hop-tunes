@@ -27,7 +27,11 @@ Built on Ubuntu 22.04, so it needs **glibc 2.35 or newer** (any x86_64 desktop d
 | Linux Mint 22 | ✅ tested every build |
 | Fedora 41 | ✅ tested every build |
 | Arch Linux (and Arch-based: CachyOS, EndeavourOS, Manjaro, SteamOS 3) | ✅ tested every build (Arch) |
-| openSUSE Tumbleweed | ✅ tested every build |
+| openSUSE Tumbleweed, openSUSE Leap 15.6 | ✅ tested every build |
+| Fedora 42, AlmaLinux / RHEL 10 | ✅ tested every build |
+| Debian testing, Ubuntu (latest interim release) | ✅ tested every build |
+| Manjaro, CachyOS | ✅ tested every build |
+| Void Linux (glibc) | ✅ tested every build |
 | Real X11 session (Xvfb) | ✅ tested every build |
 | Real Wayland session (Weston) | ✅ tested every build |
 | AlmaLinux / RHEL 9 (glibc 2.34) | ❌ below the floor: the app starts, but some codecs need glibc 2.35 |
