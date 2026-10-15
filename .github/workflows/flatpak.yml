@@ -35,8 +35,9 @@ jobs:
         run: |
           set -e
           # Runs the built app inside the Flatpak sandbox (no display needed for --version).
-          ls -d flatpak_app* .flatpak-builder 2>/dev/null || true
-          sh .github/scripts/logged.sh flatpak-run flatpak-builder --run flatpak_app packaging/flatpak/io.github.thestylewithin.hoptunes.yml hop-tunes --version | tee version.txt
+          # Containers have no FUSE and no machine-id; neither matters for this check.
+          [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
+          sh .github/scripts/logged.sh flatpak-run flatpak-builder --disable-rofiles-fuse --run flatpak_app packaging/flatpak/io.github.thestylewithin.hoptunes.yml hop-tunes --version | tee version.txt
           grep -q "hop-tunes" version.txt
           test -f Hop-tunes-x86_64.flatpak
 

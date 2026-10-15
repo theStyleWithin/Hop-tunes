@@ -77,11 +77,14 @@ jobs:
           ver="${{ needs.kit.outputs.version }}"
           k="/tmp/w/hop-tunes-$ver-aur-kit"
           namcap "$k/hop-tunes/PKGBUILD" "$k/hop-tunes-git/PKGBUILD" | tee /tmp/namcap.txt
-          namcap "$k"/hop-tunes/*.pkg.tar.zst | tee -a /tmp/namcap.txt
+          # The automatic -debug package trips a known namcap false positive (build-id links
+          # into /usr/bin); check the real package.
+          main=$(ls "$k"/hop-tunes/hop-tunes-$ver-*.pkg.tar.zst | grep -v -- '-debug-')
+          namcap "$main" | tee -a /tmp/namcap.txt
           # Every finding becomes an annotation; errors fail the job, warnings do not.
           grep " W: " /tmp/namcap.txt | sed 's/^/::warning title=namcap::/' || true
           if grep " E: " /tmp/namcap.txt | sed 's/^/::error title=namcap::/' | grep .; then exit 1; fi
-          pacman -U --noconfirm "$k"/hop-tunes/*.pkg.tar.zst
+          pacman -U --noconfirm "$main"
           hop-tunes --version | grep -q "hop-tunes $ver"
           out=$(QT_QPA_PLATFORM=offscreen HOPTUNES_AUDIO_SINK=fakesink HOPTUNES_NO_MPRIS=1 HOPTUNES_PROFILE=CI \
             HOPTUNES_SCREENSHOT=/tmp/shot.png timeout 60 hop-tunes 2>&1) || true
@@ -127,8 +130,9 @@ jobs:
       - name: Run inside the sandbox
         shell: bash
         run: |
-          ls -d flatpak_app* 2>/dev/null || true
-          out=$(flatpak-builder --run flatpak_app local-build.yml hop-tunes --version 2>&1); code=$?
+          # Containers have no FUSE and no machine-id; neither matters for this check.
+          [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
+          out=$(flatpak-builder --disable-rofiles-fuse --run flatpak_app local-build.yml hop-tunes --version 2>&1); code=$?
           echo "$out"
           if [ $code -ne 0 ] || ! grep -q "hop-tunes ${{ needs.kit.outputs.version }}" <<<"$out"; then
             echo "::error title=flatpak run::$(tail -25 <<<"$out" | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')"; exit 1
