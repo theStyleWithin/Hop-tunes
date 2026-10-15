@@ -57,8 +57,8 @@ jobs:
 
       - name: Validate desktop entry and AppStream metadata
         run: |
-          desktop-file-validate packaging/io.github.thestylewithin.Hop_tunes.desktop
-          appstreamcli validate --no-net --explain packaging/io.github.thestylewithin.Hop_tunes.metainfo.xml || true
+          desktop-file-validate packaging/io.github.thestylewithin.Hop-tunes.desktop
+          appstreamcli validate --no-net --explain packaging/io.github.thestylewithin.Hop-tunes.metainfo.xml || true
 
       - name: Build AppImage
         run: .github/scripts/logged.sh build-appimage packaging/appimage/build-appimage.sh "${{ steps.ver.outputs.version }}"

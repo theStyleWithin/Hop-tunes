@@ -323,7 +323,7 @@ GVariant *Mpris::onGetProperty(GDBusConnection *, const char *, const char *, co
         if (name == "CanQuit" || name == "CanRaise") return g_variant_new_boolean(TRUE);
         if (name == "HasTrackList") return g_variant_new_boolean(FALSE);
         if (name == "Identity") return g_variant_new_string("Hop-tunes");
-        if (name == "DesktopEntry") return g_variant_new_string("io.github.thestylewithin.Hop_tunes");
+        if (name == "DesktopEntry") return g_variant_new_string("io.github.thestylewithin.Hop-tunes");
         if (name == "SupportedUriSchemes") return strv({"file"});
         if (name == "SupportedMimeTypes")
             return strv({"audio/mpeg", "audio/flac", "audio/ogg", "audio/opus", "audio/mp4", "audio/x-m4a", "audio/wav", "audio/x-ms-wma"});

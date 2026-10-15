@@ -118,9 +118,9 @@ jobs:
           # Build the very same manifest, with the tarball read from disk instead of the
           # not-yet-published URL (flatpak-builder still checks its sha256).
           sed "s|^        url: https://github.com/theStyleWithin/Hop-tunes/releases/download/.*|        path: $PWD/kit/hop-tunes-$ver.tar.gz|" \
-            "$d/io.github.thestylewithin.Hop_tunes.yml" > local-build.yml
+            "$d/io.github.thestylewithin.Hop-tunes.yml" > local-build.yml
           grep -n "path: \|sha256:" local-build.yml
-          mkdir -p lint && cp "$d/io.github.thestylewithin.Hop_tunes.yml" lint/   # the linter wants the app-id file name
+          mkdir -p lint && cp "$d/io.github.thestylewithin.Hop-tunes.yml" lint/   # the linter wants the app-id file name
       - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
           bundle: hop-tunes-kit-check.flatpak
@@ -136,7 +136,7 @@ jobs:
           [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
           flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           flatpak install --user -y --noninteractive hop-tunes-kit-check.flatpak 2>&1 | tail -5
-          out=$(flatpak run --command=hop-tunes io.github.thestylewithin.Hop_tunes --version 2>&1); code=$?
+          out=$(flatpak run --command=hop-tunes io.github.thestylewithin.Hop-tunes --version 2>&1); code=$?
           echo "$out"
           if [ $code -ne 0 ] || ! grep -q "hop-tunes ${{ needs.kit.outputs.version }}" <<<"$out"; then
             echo "::error title=flatpak run::$(tail -25 <<<"$out" | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')"; exit 1
@@ -153,7 +153,7 @@ jobs:
           # One annotation per finding (the linter prints JSON); any error fails the job.
           fail=0
           # (No "repo" lint: it checks screenshot mirroring that only Flathub's build infra does.)
-          for target in "manifest lint/io.github.thestylewithin.Hop_tunes.yml" "builddir flatpak_app"; do
+          for target in "manifest lint/io.github.thestylewithin.Hop-tunes.yml" "builddir flatpak_app"; do
             set -- $target
             lint "$@" > /tmp/lint.out 2>&1; code=$?
             echo "== lint $target (exit $code)"; cat /tmp/lint.out

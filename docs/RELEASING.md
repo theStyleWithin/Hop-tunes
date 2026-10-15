@@ -7,7 +7,7 @@ A release is one git tag. Everything else is automatic and checked before it is 
 1. Make sure `main` is green (build, appimage, flatpak and release-kit checks).
 2. Set the version in `CMakeLists.txt` (`project(hop-tunes VERSION x.y.z ...)`), add a
    `## [x.y.z] - YYYY-MM-DD` section to `CHANGELOG.md` and a `<release>` entry to
-   `packaging/io.github.thestylewithin.Hop_tunes.metainfo.xml`. Merge that.
+   `packaging/io.github.thestylewithin.Hop-tunes.metainfo.xml`. Merge that.
 3. Tag and push: `git tag vx.y.z && git push origin vx.y.z`.
 
 ## What the tag produces

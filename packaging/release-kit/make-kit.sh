@@ -8,7 +8,7 @@
 #                                     HEAD when the tag does not exist, e.g. in CI tests)
 #   hop-tunes-<v>-aur-kit.tar.gz      hop-tunes/ and hop-tunes-git/: PKGBUILD + .SRCINFO,
 #                                     checksums filled in, plus SUBMIT-AUR.md
-#   hop-tunes-<v>-flathub-kit.tar.gz  io.github.thestylewithin.Hop_tunes.yml pointing at the
+#   hop-tunes-<v>-flathub-kit.tar.gz  io.github.thestylewithin.Hop-tunes.yml pointing at the
 #                                     source tarball (url + sha256), plus SUBMIT-FLATHUB.md
 #   KIT-SHA256SUMS
 # source-url-base defaults to the GitHub release download URL for v<v>.
@@ -44,14 +44,14 @@ pack "hop-tunes-$ver-aur-kit" "$out/hop-tunes-$ver-aur-kit.tar.gz"
 # 3. Flathub kit: same manifest as CI, but building the release tarball.
 fh="$work/hop-tunes-$ver-flathub-kit"
 mkdir -p "$fh"
-python3 - "$repo/packaging/flatpak/io.github.thestylewithin.Hop_tunes.yml" "$fh/io.github.thestylewithin.Hop_tunes.yml" "$base/$src" "$sha" <<'PY'
+python3 - "$repo/packaging/flatpak/io.github.thestylewithin.Hop-tunes.yml" "$fh/io.github.thestylewithin.Hop-tunes.yml" "$base/$src" "$sha" <<'PY'
 import sys
 src, dst, url, sha = sys.argv[1:]
 text = open(src).read()
 start = text.index("      # CI builds the checked-out tree.")
 text = text[:start] + f"      - type: archive\n        url: {url}\n        sha256: {sha}\n"
-text = text.replace("# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.Hop_tunes.yml",
-                    "# Local build:  flatpak-builder --user --install --force-clean build-dir io.github.thestylewithin.Hop_tunes.yml")
+text = text.replace("# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.Hop-tunes.yml",
+                    "# Local build:  flatpak-builder --user --install --force-clean build-dir io.github.thestylewithin.Hop-tunes.yml")
 open(dst, "w").write(text)
 PY
 sed "s/@VERSION@/$ver/g; s/@SHA256@/$sha/g" "$repo/packaging/release-kit/SUBMIT-FLATHUB.md" > "$fh/SUBMIT-FLATHUB.md"

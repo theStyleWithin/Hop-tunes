@@ -152,7 +152,7 @@ shuffle and repeat.
 | Profiles (settings, playlists, play counts, history) | `~/.local/share/hop-tunes/profiles/` |
 | Cover art cache (safe to delete) | `~/.cache/hop-tunes/` |
 
-The Flatpak keeps the same folders under `~/.var/app/io.github.thestylewithin.Hop_tunes/`.
+The Flatpak keeps the same folders under `~/.var/app/io.github.thestylewithin.Hop-tunes/`.
 
 ## Troubleshooting
 
@@ -171,7 +171,7 @@ must be added with *+ add folder*, which grants access to them.
 
 **I forgot my profile PIN.** Because a PIN is only a curtain, you can remove it. Close
 Hop-tunes and run `hop-tunes --forget-pin "Your Name"` (Flatpak:
-`flatpak run io.github.thestylewithin.Hop_tunes --forget-pin "Your Name"`). Your playlists,
+`flatpak run io.github.thestylewithin.Hop-tunes --forget-pin "Your Name"`). Your playlists,
 history and settings are not affected.
 
 **The window doesn't open on a very old distro (AppImage).** The AppImage needs glibc 2.35
@@ -185,7 +185,7 @@ Found a bug? Please open an issue: https://github.com/theStyleWithin/Hop-tunes/i
 
 ## Uninstalling
 
-- **Flatpak:** `flatpak uninstall io.github.thestylewithin.Hop_tunes` (add `--delete-data` to
+- **Flatpak:** `flatpak uninstall io.github.thestylewithin.Hop-tunes` (add `--delete-data` to
   remove your profiles too).
 - **AUR:** `sudo pacman -R hop-tunes`.
 - **AppImage:** delete the file.

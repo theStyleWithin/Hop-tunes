@@ -1,9 +1,9 @@
 # Flatpak build of Hop-tunes.
-# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.Hop_tunes.yml
+# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.Hop-tunes.yml
 # The KDE runtime provides Qt 6 and (from the freedesktop base) GStreamer with the base and
 # good plugins plus gst-libav; AAC, WMA and other codecs come from the runtime's
 # codecs-extra extension, which Flatpak installs with the runtime.
-id: io.github.thestylewithin.Hop_tunes
+id: io.github.thestylewithin.Hop-tunes
 runtime: org.kde.Platform
 runtime-version: '6.11'
 sdk: org.kde.Sdk
