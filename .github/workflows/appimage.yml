@@ -120,7 +120,7 @@ jobs:
                       dbus alsa-lib wayland ;;
             xbps)   retry sh -c 'xbps-install -Syu xbps && xbps-install -Syu' && \
                     retry xbps-install -y mesa fontconfig dejavu-fonts-ttf libX11 libxcb libxkbcommon glib \
-                      dbus-libs alsa-lib wayland coreutils bash ;;
+                      dbus-libs alsa-lib wayland coreutils bash tar gzip ;;
             zypper) retry zypper -n in Mesa-libEGL1 Mesa-libGL1 fontconfig dejavu-fonts libX11-6 libX11-xcb1 libxcb1 \
                       libxkbcommon0 libglib-2_0-0 libdbus-1-3 libasound2 libwayland-client0 libwayland-cursor0 \
                       libwayland-egl1 gzip tar ;;

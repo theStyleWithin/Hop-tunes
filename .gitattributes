@@ -1,4 +1,3 @@
 # Left out of release source tarballs (git archive); not needed to build.
 design/ export-ignore
 zune-teardown/ export-ignore
-.github/ export-ignore

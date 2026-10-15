@@ -54,6 +54,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: release-kit, path: kit }
       - name: makepkg the kit's hop-tunes package
+        shell: bash
         run: |
           set -e
           ver="${{ needs.kit.outputs.version }}"
@@ -70,19 +71,25 @@ jobs:
           su builder -c "cd '$pkg' && makepkg --printsrcinfo" | diff -u "$pkg/.SRCINFO" -
           su builder -c "cd '/tmp/w/hop-tunes-$ver-aur-kit/hop-tunes-git' && makepkg --printsrcinfo" | diff -u "/tmp/w/hop-tunes-$ver-aur-kit/hop-tunes-git/.SRCINFO" -
       - name: namcap, install, run
+        shell: bash
         run: |
           set -e
           ver="${{ needs.kit.outputs.version }}"
           k="/tmp/w/hop-tunes-$ver-aur-kit"
           namcap "$k/hop-tunes/PKGBUILD" "$k/hop-tunes-git/PKGBUILD" | tee /tmp/namcap.txt
           namcap "$k"/hop-tunes/*.pkg.tar.zst | tee -a /tmp/namcap.txt
-          if grep -q " E: " /tmp/namcap.txt; then echo "::error::namcap reported errors"; exit 1; fi
+          # Every finding becomes an annotation; errors fail the job, warnings do not.
+          grep " W: " /tmp/namcap.txt | sed 's/^/::warning title=namcap::/' || true
+          if grep " E: " /tmp/namcap.txt | sed 's/^/::error title=namcap::/' | grep .; then exit 1; fi
           pacman -U --noconfirm "$k"/hop-tunes/*.pkg.tar.zst
           hop-tunes --version | grep -q "hop-tunes $ver"
-          QT_QPA_PLATFORM=offscreen HOPTUNES_AUDIO_SINK=fakesink HOPTUNES_NO_MPRIS=1 HOPTUNES_PROFILE=CI \
-            HOPTUNES_SCREENSHOT=/tmp/shot.png timeout 60 hop-tunes | grep "hop-tunes selftest:"
+          out=$(QT_QPA_PLATFORM=offscreen HOPTUNES_AUDIO_SINK=fakesink HOPTUNES_NO_MPRIS=1 HOPTUNES_PROFILE=CI \
+            HOPTUNES_SCREENSHOT=/tmp/shot.png timeout 60 hop-tunes 2>&1) || true
+          echo "$out"
+          grep -q "hop-tunes selftest:" <<<"$out" || { echo "::error title=installed app::$(tail -25 <<<"$out" | tr '\n' ' ')"; exit 1; }
       - name: makepkg hop-tunes-git (main only)
         if: github.event_name != 'pull_request'
+        shell: bash
         run: |
           set -e
           ver="${{ needs.kit.outputs.version }}"
@@ -120,8 +127,12 @@ jobs:
       - name: Run inside the sandbox
         shell: bash
         run: |
-          set -e
-          flatpak-builder --run flatpak_app local-build.yml hop-tunes --version | grep -q "hop-tunes ${{ needs.kit.outputs.version }}"
+          ls -d flatpak_app* 2>/dev/null || true
+          out=$(flatpak-builder --run flatpak_app local-build.yml hop-tunes --version 2>&1); code=$?
+          echo "$out"
+          if [ $code -ne 0 ] || ! grep -q "hop-tunes ${{ needs.kit.outputs.version }}" <<<"$out"; then
+            echo "::error title=flatpak run::$(tail -25 <<<"$out" | sed 's/%/%25/g' | tr '\n' '\001' | sed 's/\x01/%0A/g')"; exit 1
+          fi
       - name: flatpak-builder-lint (Flathub's own checks)
         shell: bash
         run: |

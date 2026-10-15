@@ -35,7 +35,8 @@ jobs:
         run: |
           set -e
           # Runs the built app inside the Flatpak sandbox (no display needed for --version).
-          flatpak-builder --run flatpak_app packaging/flatpak/io.github.thestylewithin.hoptunes.yml hop-tunes --version | tee version.txt
+          ls -d flatpak_app* .flatpak-builder 2>/dev/null || true
+          sh .github/scripts/logged.sh flatpak-run flatpak-builder --run flatpak_app packaging/flatpak/io.github.thestylewithin.hoptunes.yml hop-tunes --version | tee version.txt
           grep -q "hop-tunes" version.txt
           test -f Hop-tunes-x86_64.flatpak
 
