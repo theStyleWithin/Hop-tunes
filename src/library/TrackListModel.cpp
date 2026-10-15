@@ -25,6 +25,8 @@ QVariant TrackListModel::data(const QModelIndex &index, int role) const
     case YearRole:        return t.year;
     case DurationRole:    return formatDuration(t.durationMs);
     case PathRole:        return t.path;
+    case HeartedRole:     return m_stats ? m_stats->value(t.path).hearted : false;
+    case PlayCountRole:   return m_stats ? m_stats->value(t.path).playCount : 0;
     }
     return {};
 }
@@ -35,6 +37,7 @@ QHash<int, QByteArray> TrackListModel::roleNames() const
         {TrackIdRole, "trackId"}, {TitleRole, "title"}, {ArtistRole, "artist"},
         {AlbumRole, "album"}, {AlbumArtistRole, "albumArtist"}, {TrackNoRole, "trackNo"},
         {YearRole, "year"}, {DurationRole, "duration"}, {PathRole, "path"},
+        {HeartedRole, "hearted"}, {PlayCountRole, "playCount"},
     };
 }
 
@@ -44,6 +47,12 @@ void TrackListModel::setTracks(const QList<Track> &tracks)
     m_tracks = tracks;
     endResetModel();
     emit countChanged();
+}
+
+void TrackListModel::statsChanged(const QString &path)
+{
+    for (int i = 0; i < m_tracks.size(); ++i)
+        if (m_tracks[i].path == path) emit dataChanged(index(i), index(i), {HeartedRole, PlayCountRole});
 }
 
 QString TrackListModel::formatDuration(qint64 ms)

@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** Draft v0.4 (M1, M2 and M3 built) · **Date:** 2026-10-14 · **Platform:** Linux first
+**Status:** Draft v0.5 (M1–M4 built) · **Date:** 2026-10-15 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -74,7 +74,7 @@ $XDG_DATA_HOME/hop-tunes/            (~/.local/share/hop-tunes)
 └── profiles/
     ├── profiles.json                list: id, name, accent, avatar, has_pin, created
     └── <profile-uuid>/
-        ├── profile.sqlite           playlists, play stats, ratings, quickplay, podcasts (M4)
+        ├── profile.sqlite           play stats, hearts, history, playlists, quickplay pins
         ├── settings.json            watched folders, volume; more settings as they land
         └── avatar.png               256 px square, cropped from the picture the user picked
 $XDG_CONFIG_HOME/hop-tunes/hop-tunes.conf   app-wide (Qt settings format)
@@ -121,7 +121,7 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 - **Pinned:** user-pinned albums, artists and playlists.
 - **History:** recently played.
 - **New:** recently added to the library.
-- **Smart DJ:** pick an artist, and Hop-tunes builds an endless mix from the *local* library using tag similarity (genre, year, co-occurrence in playlists, play history). No network.
+- **Smart DJ:** pick an artist, and Hop-tunes builds an endless mix from the *local* library using tag similarity (genre, year), hearts and play history. No network. *(Built in M4: weighted sampling around the artist's genres and era, same artist spread apart, often-skipped songs played less, topped up automatically near the end of the queue. Co-occurrence in playlists is a later refinement.)*
 
 ### 4.5 Visual language (original)
 - Typography-first: large, light-weight sans-serif with generous whitespace. Use an open font (Inter, Selawik-style alternatives, Noto Sans), **not** Segoe/Zune Pro.
@@ -209,10 +209,18 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 
 ## 7. Playlists
 
-- Manual playlists with drag and drop.
+- Manual playlists. *(M4 reorders with "move up / move down" in the song menu; drag and drop comes with the M5 polish pass.)*
 - **Smart playlists:** rule builder (genre is …, rating ≥ …, added in last N days, play count < …, etc.), live-updating.
 - Auto lists: Most played, Recently added, Never played, Hearted.
 - Export to `.m3u8` with relative paths.
+- *Implementation notes (M4):* playlists, stats, history and pins live in each profile's
+  `profile.sqlite`, keyed by file path so they survive a rebuilt index. Imported playlists
+  are matched to the library by exact path, by path relative to the playlist, then by
+  trailing `artist/album/file`, so a Zune `.zpl` written on Windows (`C:\Users\…\Zune\…`)
+  still finds the same songs on Linux. A play counts after half the song (or 4 minutes);
+  moving on before 1 s is ignored, after that it counts as a skip. Search is an in-memory,
+  accent- and case-insensitive word match over title, artist, album artist, album and genre
+  (fast enough for tens of thousands of songs; FTS5 stays an option if libraries outgrow it).
 
 ---
 
@@ -304,7 +312,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | ✅ **M1: Play a folder** | Scanner + index DB + GStreamer gapless playback + song list | Can pick a folder and play an album gaplessly |
 | ✅ **M2: Collection** | Artists/albums/songs pivots, art grid, cover art, mini player, MPRIS. *Search moved to M4.* | Daily-driver usable for one person |
 | **M3: Profiles** ✅ | Profile create/pick/switch/delete, PIN, per-profile settings, guest mode (per-profile stats arrive with play history in M4) | Two people can share one install without seeing each other's data |
-| **M4: Playlists & Quickplay** | Manual + smart playlists, import m3u/zpl, Quickplay pins/history/new, instant search | — |
+| **M4: Playlists & Quickplay** ✅ | Manual + smart playlists, auto lists, import m3u/m3u8/pls/xspf/zpl/wpl, export m3u8, Quickplay pins/history/new, smart DJ, instant search, hearts and play counts per profile, play next / add to queue | — |
 | **M5: Now Playing & polish** | Art mosaic, transitions, themes/accents, ReplayGain, crossfade | Feels "seamless" |
 | **M6: Ship 1.0** | Flatpak, AppImage, AUR, user docs | Published |
 | **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |

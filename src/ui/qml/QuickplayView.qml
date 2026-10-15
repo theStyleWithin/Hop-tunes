@@ -4,31 +4,166 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import "Theme.js" as Theme
 
-// quickplay (design/screens/3). Pins, history and Smart DJ arrive in M4; for now: shuffle everything.
+// quickplay (spec §4.4, design/screens/3): pinned, history, new, and smart DJ.
 Item {
-    ColumnLayout {
-        anchors { fill: parent; leftMargin: 48; topMargin: 36 }
-        spacing: 16
-        Label { text: "smart dj"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
-        Rectangle {
-            color: Theme.panel
-            implicitWidth: 320; implicitHeight: col.implicitHeight + 40
-            ColumnLayout {
-                id: col
-                anchors { fill: parent; margins: 20 }
-                spacing: 14
-                Label { text: "play your whole library in random order"; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } wrapMode: Text.WordWrap; Layout.fillWidth: true }
-                Label { text: hop.songs.count + " songs"; color: Theme.text; font { family: Theme.font; pixelSize: 30; weight: Font.Light } }
-                Button {
-                    text: "shuffle all"
-                    enabled: hop.songs.count > 0
-                    onClicked: hop.shuffleAll()
-                    contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 17; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    background: Rectangle { implicitWidth: 140; implicitHeight: 44; color: parent.enabled ? hop.accent : Theme.dim }
+    id: root
+    signal openAlbum()
+
+    component Strip: ColumnLayout {
+        id: strip
+        property string title
+        property var tiles: []
+        property string empty: ""
+        spacing: 12
+        Layout.fillWidth: true
+        Label { text: strip.title; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
+        Label { visible: strip.tiles.length === 0; text: strip.empty; color: Theme.dim; font { family: Theme.font; pixelSize: 15 } }
+        ListView {
+            visible: strip.tiles.length > 0
+            Layout.fillWidth: true
+            Layout.preferredHeight: 196
+            orientation: ListView.Horizontal
+            spacing: 18
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            model: strip.tiles
+            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+            delegate: AbstractButton {
+                id: t
+                required property var modelData
+                objectName: "tile_" + strip.title + "_" + modelData.title
+                width: 150; height: 196
+                hoverEnabled: true
+                onClicked: hop.playTile(modelData.kind, modelData.ref)
+                Accessible.name: "play " + modelData.title
+                ToolTip.visible: hovered; ToolTip.delay: 800; ToolTip.text: "click to play · right-click for more"
+                MouseArea {
+                    anchors.fill: parent; acceptedButtons: Qt.RightButton
+                    onClicked: function (mouse) { tileMenu.tile = t.modelData; tileMenu.popup(t, mouse.x, mouse.y) }
                 }
+                contentItem: ColumnLayout {
+                    spacing: 4
+                    Item {
+                        Layout.preferredWidth: 150; Layout.preferredHeight: 150
+                        AlbumArt { anchors.fill: parent; key: t.modelData.title; source: t.modelData.art || ""; opacity: t.hovered ? 0.8 : 1 }
+                        Rectangle {   // artists read as round, like the Zune artist tiles
+                            visible: t.modelData.kind === "artist"
+                            anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
+                            color: "#cc111113"; width: kindLabel.implicitWidth + 12; height: 22
+                            Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                        }
+                        Rectangle {
+                            visible: t.modelData.kind === "playlist"
+                            anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
+                            color: "#cc111113"; width: plLabel.implicitWidth + 12; height: 22
+                            Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                        }
+                        Label {
+                            visible: t.hovered
+                            anchors.centerIn: parent
+                            text: "▶"; color: "#ffffff"; font.pixelSize: 34
+                        }
+                    }
+                    Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } elide: Text.ElideRight; Layout.fillWidth: true }
+                }
+                background: Item { }
             }
         }
-        Label { text: "pinned albums, history and new arrivals are coming in a later milestone."; color: Theme.faint; font { family: Theme.font; pixelSize: 14 } }
-        Item { Layout.fillHeight: true }
+    }
+
+    Menu {
+        id: tileMenu
+        property var tile: ({})
+        background: Rectangle { implicitWidth: 230; color: Theme.panel; border { width: 1; color: Theme.line } }
+        component TItem: MenuItem {
+            id: mi
+            contentItem: Label { text: mi.text; leftPadding: 6; color: Theme.text; font { family: Theme.font; pixelSize: 15 } }
+            background: Rectangle { implicitHeight: 36; color: mi.highlighted ? Theme.hover : "transparent" }
+        }
+        TItem { text: "play"; onTriggered: hop.playTile(tileMenu.tile.kind, tileMenu.tile.ref) }
+        TItem {
+            text: "show in collection"; visible: tileMenu.tile.kind === "album"; height: visible ? implicitHeight : 0
+            onTriggered: if (hop.showAlbum(tileMenu.tile.ref)) root.openAlbum()
+        }
+        TItem {
+            text: "smart DJ from this artist"; visible: tileMenu.tile.kind !== "playlist"; height: visible ? implicitHeight : 0
+            onTriggered: hop.startDj(tileMenu.tile.kind === "artist" ? tileMenu.tile.ref : tileMenu.tile.subtitle)
+        }
+        TItem {
+            text: tileMenu.tile.pinned ? "unpin" : "pin to quickplay"
+            onTriggered: tileMenu.tile.pinned ? hop.unpinTile(tileMenu.tile.kind, tileMenu.tile.ref)
+                                              : hop.pinTile(tileMenu.tile.kind, tileMenu.tile.ref, tileMenu.tile.title)
+        }
+    }
+
+    Flickable {
+        anchors.fill: parent
+        contentHeight: col.implicitHeight + 40
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar { }
+
+        ColumnLayout {
+            id: col
+            x: 48; y: 24
+            width: parent.width - 96
+            spacing: 30
+
+            // ---- smart DJ ----
+            Rectangle {
+                Layout.fillWidth: true
+                implicitHeight: dj.implicitHeight + 40
+                color: Theme.panel
+                RowLayout {
+                    id: dj
+                    anchors { fill: parent; margins: 20 }
+                    spacing: 20
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 6
+                        Label { text: "smart dj"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
+                        Label {
+                            text: hop.djSeed !== "" ? "playing an endless mix around " + hop.djSeed + "."
+                                                    : "pick an artist and hop-tunes keeps playing music like it, from your own library. nothing goes online."
+                            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                            wrapMode: Text.WordWrap; Layout.fillWidth: true
+                        }
+                    }
+                    ComboBox {
+                        id: djPick
+                        objectName: "djArtist"
+                        model: hop.djArtists
+                        implicitWidth: 260
+                        enabled: hop.djArtists.length > 0
+                        font { family: Theme.font; pixelSize: 16 }
+                        contentItem: Label { text: djPick.displayText; leftPadding: 12; color: Theme.text; font: djPick.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
+                        background: Rectangle { implicitHeight: 44; color: Theme.bg; border { width: 1; color: djPick.activeFocus ? hop.accent : Theme.line } }
+                        popup.background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
+                        delegate: ItemDelegate {
+                            required property int index
+                            required property var modelData
+                            width: djPick.width
+                            highlighted: djPick.highlightedIndex === index
+                            contentItem: Label { text: modelData; color: Theme.text; font: djPick.font }
+                            background: Rectangle { color: highlighted ? Theme.hover : "transparent" }
+                        }
+                    }
+                    Button {
+                        objectName: "djStart"
+                        text: "start mix"
+                        enabled: hop.djArtists.length > 0
+                        onClicked: hop.startDj(djPick.currentText)
+                        contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 16; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        background: Rectangle { implicitWidth: 130; implicitHeight: 44; color: parent.enabled ? (parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent) : Theme.line }
+                    }
+                    PlainButton { text: "shuffle all"; enabled: hop.librarySize > 0; onClicked: hop.shuffleAll() }
+                }
+            }
+
+            Strip { title: "pinned"; tiles: hop.quickplayPinned; empty: "right-click an album, artist or playlist and choose “pin to quickplay”." }
+            Strip { title: "history"; tiles: hop.quickplayHistory; empty: "albums you play show up here." }
+            Strip { title: "new"; tiles: hop.quickplayNew; empty: "recently added albums show up here." }
+        }
     }
 }

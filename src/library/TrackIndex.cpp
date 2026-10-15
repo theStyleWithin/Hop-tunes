@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "library/TrackIndex.h"
 
+#include <QDateTime>
 #include <QFileInfo>
 #include <QMutexLocker>
+
+#include "core/Sql.h"
 
 #include <sqlite3.h>
 
@@ -27,43 +30,13 @@ QString Track::displayAlbum() const
     return album.isEmpty() ? QStringLiteral("unknown album") : album;
 }
 
-// ---- small RAII statement wrapper ---------------------------------------------
-
 namespace {
 
-class Stmt {
-public:
-    Stmt(sqlite3 *db, const char *sql) { sqlite3_prepare_v2(db, sql, -1, &m_s, nullptr); }
-    ~Stmt() { sqlite3_finalize(m_s); }
-    Stmt(const Stmt &) = delete;
-    Stmt &operator=(const Stmt &) = delete;
-
-    bool ok() const { return m_s != nullptr; }
-    void bind(int i, const QString &v)
-    {
-        const QByteArray u = v.toUtf8();
-        sqlite3_bind_text(m_s, i, u.constData(), u.size(), SQLITE_TRANSIENT);
-    }
-    void bind(int i, qint64 v) { sqlite3_bind_int64(m_s, i, v); }
-    void bind(int i, int v) { sqlite3_bind_int(m_s, i, v); }
-    int step() { return sqlite3_step(m_s); }
-    void reset() { sqlite3_reset(m_s); sqlite3_clear_bindings(m_s); }
-
-    qint64 i64(int c) const { return sqlite3_column_int64(m_s, c); }
-    int i32(int c) const { return sqlite3_column_int(m_s, c); }
-    QString str(int c) const
-    {
-        const auto *t = reinterpret_cast<const char *>(sqlite3_column_text(m_s, c));
-        return t ? QString::fromUtf8(t, sqlite3_column_bytes(m_s, c)) : QString();
-    }
-
-private:
-    sqlite3_stmt *m_s = nullptr;
-};
+using hop::sql::Stmt;
 
 constexpr const char *kTrackColumns =
     "id, path, mtime, size, duration_ms, codec, bitrate, sample_rate, title, artist, "
-    "album_artist, album, genre, disc, track_no, year, art";
+    "album_artist, album, genre, disc, track_no, year, art, added";
 
 Track readTrack(const Stmt &s)
 {
@@ -73,7 +46,7 @@ Track readTrack(const Stmt &s)
     t.bitrate = s.i32(6);     t.sampleRate = s.i32(7);  t.title = s.str(8);
     t.artist = s.str(9);      t.albumArtist = s.str(10); t.album = s.str(11);
     t.genre = s.str(12);      t.disc = s.i32(13);       t.trackNo = s.i32(14);
-    t.year = s.i32(15);       t.art = s.str(16);
+    t.year = s.i32(15);       t.art = s.str(16);        t.added = s.i64(17);
     return t;
 }
 
@@ -174,6 +147,17 @@ bool TrackIndex::migrate()
         if (!ok) { exec("ROLLBACK"); return false; }
         version = 2;
     }
+    if (version < 3) {
+        // v3: when a file first appeared in the library ("recently added"). Existing rows
+        // use their file time, the best available guess.
+        const bool ok = exec("BEGIN")
+            && exec("ALTER TABLE track ADD COLUMN added INTEGER NOT NULL DEFAULT 0")
+            && exec("UPDATE track SET added = mtime")
+            && exec("PRAGMA user_version=3")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
+        version = 3;
+    }
     return true;
 }
 
@@ -199,8 +183,8 @@ bool TrackIndex::upsert(const QList<Track> &tracks)
     if (!exec("BEGIN IMMEDIATE")) return false;
     Stmt s(m_db,
            "INSERT INTO track (path, mtime, size, duration_ms, codec, bitrate, sample_rate, title, "
-           "  artist, album_artist, album, genre, disc, track_no, year, art) "
-           "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) "
+           "  artist, album_artist, album, genre, disc, track_no, year, art, added) "
+           "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17) "
            "ON CONFLICT(path) DO UPDATE SET mtime=excluded.mtime, size=excluded.size, "
            "  duration_ms=excluded.duration_ms, codec=excluded.codec, bitrate=excluded.bitrate, "
            "  sample_rate=excluded.sample_rate, title=excluded.title, artist=excluded.artist, "
@@ -214,6 +198,7 @@ bool TrackIndex::upsert(const QList<Track> &tracks)
         s.bind(10, t.albumArtist); s.bind(11, t.album);    s.bind(12, t.genre);
         s.bind(13, t.disc);      s.bind(14, t.trackNo);    s.bind(15, t.year);
         s.bind(16, t.art);
+        s.bind(17, t.added > 0 ? t.added : QDateTime::currentSecsSinceEpoch());   // kept on update
         if (s.step() != SQLITE_DONE) {
             m_error = QString::fromUtf8(sqlite3_errmsg(m_db));
             exec("ROLLBACK");

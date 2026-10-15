@@ -94,6 +94,7 @@ Rectangle {
                                   onClicked: root.player.hasTrack ? root.player.toggle() : hop.playSongs(0)
                                   Accessible.name: root.player.playing ? "pause" : "play" }
                 TransportButton { glyph: "next"; iconSize: 24; implicitWidth: 52; onClicked: root.player.next(); Accessible.name: "next" }
+                HeartButton { size: 26; visible: root.player.hasTrack; on: hop.currentHearted; onClicked: hop.toggleHeartCurrent() }
             }
         }
 
@@ -122,7 +123,7 @@ Rectangle {
                         topPadding: 6; bottomPadding: 6
                     }
                 }
-                Label { text: "gapless · crossfade off"; color: "#8a8a93"; font { family: Theme.font; pixelSize: 13 } topPadding: 8 }
+                Label { text: (hop.djSeed !== "" ? "smart dj · " + hop.djSeed : "gapless · crossfade off"); color: "#8a8a93"; font { family: Theme.font; pixelSize: 13 } topPadding: 8 }
             }
         }
     }

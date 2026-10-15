@@ -108,6 +108,29 @@ void Player::setQueue(const QList<Track> &tracks, int start)
     startAt(qBound(0, start, int(tracks.size()) - 1));
 }
 
+void Player::enqueue(const QList<Track> &tracks)
+{
+    if (tracks.isEmpty()) return;
+    if (!hasTrack()) { setQueue(tracks, 0); return; }
+    {
+        QMutexLocker lock(&m_gaplessMutex);
+        m_queue.append(tracks);
+    }
+    emit queueChanged();
+}
+
+void Player::playNext(const QList<Track> &tracks)
+{
+    if (tracks.isEmpty()) return;
+    if (!hasTrack()) { setQueue(tracks, 0); return; }
+    {
+        QMutexLocker lock(&m_gaplessMutex);
+        const int at = (m_pendingIndex >= 0 ? m_pendingIndex : m_index) + 1;
+        for (int i = 0; i < tracks.size(); ++i) m_queue.insert(at + i, tracks[i]);
+    }
+    emit queueChanged();
+}
+
 void Player::startAt(int index)
 {
     if (!m_playbin || index < 0 || index >= m_queue.size()) return;

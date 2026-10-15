@@ -3,6 +3,7 @@
 
 #include "core/ProfileStore.h"
 #include "library/CollectionModels.h"
+#include "library/ProfileDb.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
 #include "library/TrackListModel.h"
@@ -50,6 +51,21 @@ class App : public QObject {
     Q_PROPERTY(QStringList accents READ accents CONSTANT)
     Q_PROPERTY(QString suggestedFolder READ suggestedFolder CONSTANT)
     Q_PROPERTY(QUrl suggestedFolderUrl READ suggestedFolderUrl CONSTANT)
+    // search (spec §4.2)
+    Q_PROPERTY(QString searchText READ searchText WRITE setSearchText NOTIFY searchChanged)
+    Q_PROPERTY(int librarySize READ librarySize NOTIFY libraryChanged)
+    // playlists (spec §7)
+    Q_PROPERTY(QVariantList playlists READ playlists NOTIFY playlistsChanged)
+    Q_PROPERTY(QString selectedPlaylist READ selectedPlaylist NOTIFY playlistSelectionChanged)
+    Q_PROPERTY(QVariantMap selectedPlaylistInfo READ selectedPlaylistInfo NOTIFY playlistSelectionChanged)
+    Q_PROPERTY(hop::TrackListModel *playlistSongs READ playlistSongs CONSTANT)
+    // quickplay (spec §4.4)
+    Q_PROPERTY(QVariantList quickplayPinned READ quickplayPinned NOTIFY quickplayChanged)
+    Q_PROPERTY(QVariantList quickplayHistory READ quickplayHistory NOTIFY quickplayChanged)
+    Q_PROPERTY(QVariantList quickplayNew READ quickplayNew NOTIFY quickplayChanged)
+    Q_PROPERTY(QStringList djArtists READ djArtists NOTIFY libraryChanged)
+    Q_PROPERTY(QString djSeed READ djSeed NOTIFY djChanged)
+    Q_PROPERTY(bool currentHearted READ currentHearted NOTIFY statsChanged)
 
 public:
     explicit App(QObject *parent = nullptr);
@@ -84,6 +100,54 @@ public:
     QString suggestedFolder() const;
     QUrl suggestedFolderUrl() const { const QString f = suggestedFolder(); return f.isEmpty() ? QUrl() : QUrl::fromLocalFile(f); }
     ProfileStore *profileStore() { return &m_store; }
+    ProfileDb *profileDb() { return &m_db; }
+
+    QString searchText() const { return m_search; }
+    void setSearchText(const QString &text);
+    int librarySize() const { return int(m_library.size()); }
+    QVariantList playlists() const;
+    QString selectedPlaylist() const { return m_selPlaylist; }
+    QVariantMap selectedPlaylistInfo() const;
+    TrackListModel *playlistSongs() { return &m_playlistSongs; }
+    QVariantList quickplayPinned() const { return m_qpPinned; }
+    QVariantList quickplayHistory() const { return m_qpHistory; }
+    QVariantList quickplayNew() const { return m_qpNew; }
+    QStringList djArtists() const;
+    QString djSeed() const { return m_djSeed; }
+    bool currentHearted() const;
+
+    // playlists: keys are "pl:<id>" for the profile's own and "auto:<name>" for built-ins.
+    Q_INVOKABLE void selectPlaylist(const QString &key);
+    Q_INVOKABLE void playPlaylist(int startRow = 0);
+    Q_INVOKABLE QString createPlaylist(const QString &name, const QStringList &paths = {});   // returns key
+    Q_INVOKABLE QString createSmartPlaylist(const QString &name, const QString &rulesJson);
+    Q_INVOKABLE bool renamePlaylist(const QString &key, const QString &name);
+    Q_INVOKABLE bool setSmartRules(const QString &key, const QString &rulesJson);
+    Q_INVOKABLE bool deletePlaylist(const QString &key);
+    Q_INVOKABLE bool addToPlaylist(const QString &key, const QStringList &paths);
+    Q_INVOKABLE bool removeFromPlaylist(int row);                     // in the selected playlist
+    Q_INVOKABLE bool movePlaylistItem(int from, int to);
+    Q_INVOKABLE QString importPlaylist(const QUrl &file);             // "" or a message
+    Q_INVOKABLE QString exportPlaylist(const QString &key, const QUrl &file);
+    Q_INVOKABLE int smartPreviewCount(const QString &rulesJson) const;
+    Q_INVOKABLE QStringList albumPaths(int allAlbumsRow) const;       // for "add album to playlist"
+    Q_INVOKABLE QStringList selectedAlbumPaths() const;
+
+    // queue + hearts
+    Q_INVOKABLE void playNextPaths(const QStringList &paths);
+    Q_INVOKABLE void enqueuePaths(const QStringList &paths);
+    Q_INVOKABLE void toggleHeart(const QString &path);
+    Q_INVOKABLE void toggleHeartCurrent();
+
+    // quickplay
+    Q_INVOKABLE void pinTile(const QString &kind, const QString &ref, const QString &label);
+    Q_INVOKABLE void unpinTile(const QString &kind, const QString &ref);
+    Q_INVOKABLE bool isPinned(const QString &kind, const QString &ref) const;
+    Q_INVOKABLE QString albumRef(int allAlbumsRow) const;
+    Q_INVOKABLE QString selectedAlbumRef() const;
+    Q_INVOKABLE void playTile(const QString &kind, const QString &ref);
+    Q_INVOKABLE bool showAlbum(const QString &ref);                   // select it in collection › artists
+    Q_INVOKABLE void startDj(const QString &artist);
 
     // Each returns "" on success or a short message for the UI.
     Q_INVOKABLE QString createProfile(const QString &name, const QString &accent, const QString &pin, const QUrl &folder);
@@ -117,6 +181,12 @@ signals:
     void libraryChanged();
     void profileChanged();
     void profilesChanged();
+    void searchChanged();
+    void playlistsChanged();
+    void playlistSelectionChanged();
+    void quickplayChanged();
+    void djChanged();
+    void statsChanged();
 
 private:
     void reload();
@@ -124,10 +194,32 @@ private:
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
     void activate(const QString &id, bool guest);
+    void applySearch();
+    void refreshPlaylist();
+    void refreshQuickplay();
+    QList<Track> tracksForPaths(const QStringList &paths) const;
+    QList<Track> playlistTracks(const QString &key) const;
+    QList<Track> tracksForAlbumRef(const QString &ref) const;
+    QVariantMap tile(const QString &kind, const QString &ref, const QString &label) const;
+    void onPosition();
+    void onTrackChanged();
+    void djTopUp();
     void saveProfileSettings();
     QVariantMap profileMap(const Profile &p) const;
 
     ProfileStore m_store;
+    ProfileDb m_db;
+    QHash<QString, TrackStats> m_stats;
+    QList<Track> m_library;                 // everything under the profile's folders
+    QHash<QString, int> m_libraryIndex;     // path -> row in m_library
+    Collection m_fullCollection;            // unfiltered, for quickplay
+    QString m_search;
+    QString m_selPlaylist;
+    TrackListModel m_playlistSongs;
+    QVariantList m_qpPinned, m_qpHistory, m_qpNew;
+    QString m_djSeed;
+    quint32 m_djRound = 0;
+    struct Listen { QString path; qint64 maxPos = 0; qint64 duration = 0; bool counted = false; } m_listen;
     QString m_profileId;          // empty when no profile is open
     bool m_guest = false;
     QStringList m_legacyFolders;  // pre-profile (M1/M2) setting, adopted by the first profile
