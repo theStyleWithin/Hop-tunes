@@ -174,5 +174,5 @@ jobs:
           gh release delete continuous --yes --cleanup-tag 2>/dev/null || true
           gh release create continuous --prerelease --target "$GITHUB_SHA" \
             --title "Hop-tunes continuous build (${{ needs.build.outputs.version }})" \
-            --notes "Latest automatic build from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Download the .AppImage, make it executable (chmod +x) and run it. Tested on Ubuntu 22.04/24.04, Debian 12/13, Linux Mint 22, Fedora 41, Arch and openSUSE Tumbleweed (headless, X11 and Wayland)." \
+            --notes "IN DEVELOPMENT: DO NOT DOWNLOAD. Unfinished test build for development only. Latest automatic build from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Download the .AppImage, make it executable (chmod +x) and run it. Tested on Ubuntu 22.04/24.04, Debian 12/13, Linux Mint 22, Fedora 41, Arch and openSUSE Tumbleweed (headless, X11 and Wayland)." \
             Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS

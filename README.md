@@ -1,5 +1,9 @@
-# Hop-tunes
-An open source version of Microsoft Zune 
+# **A local-first music player inspired by the Zune software**
+
+**Hop-tunes** · Linux · GPL-3.0 · no accounts, no tracking
+
+> [!WARNING]
+> **In development: do not download.** Hop-tunes is unfinished and not ready for everyday use. Builds may change or break without notice, and there are no stable releases yet.
 
 ## Docs
 
