@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "library/Scanner.h"
 
+#include "library/CoverArt.h"
 #include "library/TagReader.h"
 #include "library/TrackIndex.h"
 
@@ -30,11 +31,12 @@ void Scanner::start(const QStringList &folders)
     if (!m_running.testAndSetAcquire(0, 1)) return;
     m_cancel.storeRelease(0);
     emit started();
-    m_future = QtConcurrent::run([this, folders] {
+    const QString artDir = m_artDir;
+    m_future = QtConcurrent::run([this, folders, artDir] {
         const Result r = scanFolders(m_index, folders, &m_cancel, [this](int done, int total) {
             QMetaObject::invokeMethod(this, [this, done, total] { emit progress(done, total); },
                                       Qt::QueuedConnection);
-        });
+        }, artDir);
         QMetaObject::invokeMethod(this, [this, r] {
             m_running.storeRelease(0);
             emit finished(r.added, r.updated, r.removed, r.total);
@@ -44,9 +46,12 @@ void Scanner::start(const QStringList &folders)
 
 Scanner::Result Scanner::scanFolders(TrackIndex *index, const QStringList &folders,
                                      const QAtomicInt *cancelFlag,
-                                     const std::function<void(int, int)> &progress)
+                                     const std::function<void(int, int)> &progress,
+                                     const QString &artCacheDir)
 {
     Result r;
+    // Cover art is looked up once per (directory, album): tracks of an album share it.
+    QHash<QString, QString> artMemo;
     auto cancelled = [cancelFlag] { return cancelFlag && cancelFlag->loadAcquire(); };
 
     for (const QString &rawFolder : folders) {
@@ -84,7 +89,14 @@ Scanner::Result Scanner::scanFolders(TrackIndex *index, const QStringList &folde
             const qint64 mtime = fi.lastModified().toSecsSinceEpoch();
             if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size()) continue;
             (k == known.constEnd() ? r.added : r.updated)++;
-            batch.append(TagReader::read(fi));
+            Track t = TagReader::read(fi);
+            if (!artCacheDir.isEmpty()) {
+                const QString key = fi.absolutePath() + QLatin1Char('\x1f') + t.album;
+                auto m = artMemo.constFind(key);
+                if (m == artMemo.constEnd()) m = artMemo.insert(key, CoverArt::find(path, artCacheDir));
+                t.art = *m;
+            }
+            batch.append(t);
             if (batch.size() >= 200) { index->upsert(batch); batch.clear(); }
             if (progress && (i % 50 == 0)) progress(i, total);
         }

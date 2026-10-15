@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Unit tests for the library layer: track index + incremental scanner.
+#include "library/CoverArt.h"
 #include "library/Scanner.h"
 #include "library/TagReader.h"
 #include "library/TrackIndex.h"
@@ -9,6 +10,11 @@
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <QtTest>
+
+#include <sqlite3.h>
+#include <taglib/attachedpictureframe.h>
+#include <taglib/id3v2tag.h>
+#include <taglib/wavfile.h>
 
 using namespace hop;
 
@@ -31,6 +37,26 @@ bool writeWav(const QString &path, int ms)
     f.write(h);
     f.write(QByteArray(int(dataBytes), '\0'));
     return true;
+}
+
+// A tiny valid PNG (1x1) so the art bytes are realistic.
+QByteArray tinyPng()
+{
+    return QByteArray::fromHex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                               "1f15c4890000000d4944415478da63f8cfc0f01f0005000201a4c0c6a00000000049454e44ae426082");
+}
+
+bool embedPng(const QString &wavPath, const QByteArray &png)
+{
+    TagLib::RIFF::WAV::File f(QFile::encodeName(wavPath).constData());
+    if (!f.isValid()) return false;
+    auto *frame = new TagLib::ID3v2::AttachedPictureFrame;
+    frame->setMimeType("image/png");
+    frame->setType(TagLib::ID3v2::AttachedPictureFrame::FrontCover);
+    frame->setPicture(TagLib::ByteVector(png.constData(), uint(png.size())));
+    f.ID3v2Tag()->addFrame(frame);
+    f.ID3v2Tag()->setAlbum("Art Album");
+    return f.save();
 }
 
 Track makeTrack(const QString &path, const QString &albumArtist, const QString &album, int disc, int no)
@@ -144,6 +170,72 @@ private slots:
         // A folder that is missing (unplugged drive) must not wipe its tracks.
         r = Scanner::scanFolders(&idx, {root + "/does-not-exist"});
         QCOMPARE(r.total, 1);
+    }
+
+    void coverArtEmbeddedAndFolder()
+    {
+        QTemporaryDir dir;
+        const QString root = QFileInfo(dir.path()).canonicalFilePath();
+        const QString cache = root + "/cache";
+        QVERIFY(QDir(root).mkpath("withart"));
+        QVERIFY(QDir(root).mkpath("folderart"));
+        QVERIFY(QDir(root).mkpath("noart"));
+        QVERIFY(writeWav(root + "/withart/a.wav", 300));
+        QVERIFY(writeWav(root + "/withart/b.wav", 300));
+        QVERIFY(embedPng(root + "/withart/a.wav", tinyPng()));
+        QVERIFY(embedPng(root + "/withart/b.wav", tinyPng()));
+        QVERIFY(writeWav(root + "/folderart/c.wav", 300));
+        QFile cover(root + "/folderart/Cover.JPG");
+        QVERIFY(cover.open(QIODevice::WriteOnly));
+        cover.write("not really a jpeg");
+        cover.close();
+        QVERIFY(writeWav(root + "/noart/d.wav", 300));
+
+        const CoverArt::Picture pic = CoverArt::embedded(root + "/withart/a.wav");
+        QCOMPARE(pic.data, tinyPng());
+        QCOMPARE(pic.mime, QStringLiteral("image/png"));
+
+        TrackIndex idx;
+        QVERIFY(idx.open(QStringLiteral(":memory:")));
+        Scanner::scanFolders(&idx, {root}, nullptr, {}, cache);
+        QHash<QString, QString> art;
+        for (const Track &t : idx.tracksUnder({root})) art.insert(QFileInfo(t.path).fileName(), t.art);
+        QVERIFY(art.value("a.wav").startsWith(cache) && art.value("a.wav").endsWith(".png"));
+        QCOMPARE(art.value("b.wav"), art.value("a.wav"));                // same cover stored once
+        QCOMPARE(QDir(cache).entryList(QDir::Files).size(), 1);
+        QFile stored(art.value("a.wav"));
+        QVERIFY(stored.open(QIODevice::ReadOnly));
+        QCOMPARE(stored.readAll(), tinyPng());
+        QCOMPARE(art.value("c.wav"), root + "/folderart/Cover.JPG");      // case-insensitive folder image
+        QVERIFY(art.value("d.wav").isEmpty());
+    }
+
+    void migratesVersion1Database()
+    {
+        QTemporaryDir dir;
+        const QString db = dir.filePath("old.sqlite");
+        {   // An index written by Hop-tunes 0.1 (schema v1, no art column).
+            sqlite3 *h = nullptr;
+            QCOMPARE(sqlite3_open(db.toUtf8().constData(), &h), SQLITE_OK);
+            const char *sql =
+                "CREATE TABLE track (id INTEGER PRIMARY KEY, path TEXT NOT NULL UNIQUE, mtime INTEGER NOT NULL DEFAULT 0,"
+                " size INTEGER NOT NULL DEFAULT 0, duration_ms INTEGER NOT NULL DEFAULT 0, codec TEXT NOT NULL DEFAULT '',"
+                " bitrate INTEGER NOT NULL DEFAULT 0, sample_rate INTEGER NOT NULL DEFAULT 0, title TEXT NOT NULL DEFAULT '',"
+                " artist TEXT NOT NULL DEFAULT '', album_artist TEXT NOT NULL DEFAULT '', album TEXT NOT NULL DEFAULT '',"
+                " genre TEXT NOT NULL DEFAULT '', disc INTEGER NOT NULL DEFAULT 0, track_no INTEGER NOT NULL DEFAULT 0,"
+                " year INTEGER NOT NULL DEFAULT 0);"
+                "INSERT INTO track (path, mtime, size, title) VALUES ('/m/old.mp3', 123, 456, 'Old Song');"
+                "PRAGMA user_version=1;";
+            QCOMPARE(sqlite3_exec(h, sql, nullptr, nullptr, nullptr), SQLITE_OK);
+            sqlite3_close(h);
+        }
+        TrackIndex idx;
+        QVERIFY2(idx.open(db), qPrintable(idx.lastError()));
+        const QList<Track> all = idx.tracksUnder({QStringLiteral("/m")});
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all.first().title, QStringLiteral("Old Song"));    // data kept
+        QVERIFY(all.first().art.isEmpty());
+        QCOMPARE(idx.stampsUnder("/m").value("/m/old.mp3").mtime, qint64(0));   // forces one re-read for art
     }
 
     void asyncScannerSignals()

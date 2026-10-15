@@ -17,11 +17,12 @@ QString dataDir()     { return xdg(QStandardPaths::GenericDataLocation); }
 QString sharedDir()   { return dataDir() + QStringLiteral("/shared"); }
 QString indexDbPath() { return sharedDir() + QStringLiteral("/index.sqlite"); }
 QString cacheDir()    { return xdg(QStandardPaths::GenericCacheLocation); }
+QString artCacheDir() { return cacheDir() + QStringLiteral("/art"); }
 
 bool ensureDirs()
 {
     bool ok = true;
-    for (const QString &d : {dataDir(), sharedDir(), cacheDir()}) {
+    for (const QString &d : {dataDir(), sharedDir(), cacheDir(), artCacheDir()}) {
         if (!QDir().mkpath(d)) { ok = false; continue; }
         QFile::setPermissions(d, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     }

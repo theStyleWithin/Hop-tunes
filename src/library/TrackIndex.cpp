@@ -63,7 +63,7 @@ private:
 
 constexpr const char *kTrackColumns =
     "id, path, mtime, size, duration_ms, codec, bitrate, sample_rate, title, artist, "
-    "album_artist, album, genre, disc, track_no, year";
+    "album_artist, album, genre, disc, track_no, year, art";
 
 Track readTrack(const Stmt &s)
 {
@@ -73,7 +73,7 @@ Track readTrack(const Stmt &s)
     t.bitrate = s.i32(6);     t.sampleRate = s.i32(7);  t.title = s.str(8);
     t.artist = s.str(9);      t.albumArtist = s.str(10); t.album = s.str(11);
     t.genre = s.str(12);      t.disc = s.i32(13);       t.trackNo = s.i32(14);
-    t.year = s.i32(15);
+    t.year = s.i32(15);       t.art = s.str(16);
     return t;
 }
 
@@ -162,6 +162,17 @@ bool TrackIndex::migrate()
             && exec("PRAGMA user_version=1")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 1;
+    }
+    if (version < 2) {
+        // v2: cover art. Zeroing mtime makes the next scan re-read every file once to find art.
+        const bool ok = exec("BEGIN")
+            && exec("ALTER TABLE track ADD COLUMN art TEXT NOT NULL DEFAULT ''")
+            && exec("UPDATE track SET mtime = 0")
+            && exec("PRAGMA user_version=2")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
+        version = 2;
     }
     return true;
 }
@@ -188,13 +199,13 @@ bool TrackIndex::upsert(const QList<Track> &tracks)
     if (!exec("BEGIN IMMEDIATE")) return false;
     Stmt s(m_db,
            "INSERT INTO track (path, mtime, size, duration_ms, codec, bitrate, sample_rate, title, "
-           "  artist, album_artist, album, genre, disc, track_no, year) "
-           "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15) "
+           "  artist, album_artist, album, genre, disc, track_no, year, art) "
+           "VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16) "
            "ON CONFLICT(path) DO UPDATE SET mtime=excluded.mtime, size=excluded.size, "
            "  duration_ms=excluded.duration_ms, codec=excluded.codec, bitrate=excluded.bitrate, "
            "  sample_rate=excluded.sample_rate, title=excluded.title, artist=excluded.artist, "
            "  album_artist=excluded.album_artist, album=excluded.album, genre=excluded.genre, "
-           "  disc=excluded.disc, track_no=excluded.track_no, year=excluded.year");
+           "  disc=excluded.disc, track_no=excluded.track_no, year=excluded.year, art=excluded.art");
     if (!s.ok()) { m_error = QString::fromUtf8(sqlite3_errmsg(m_db)); exec("ROLLBACK"); return false; }
     for (const Track &t : tracks) {
         s.bind(1, t.path);       s.bind(2, t.mtime);       s.bind(3, t.size);
@@ -202,6 +213,7 @@ bool TrackIndex::upsert(const QList<Track> &tracks)
         s.bind(7, t.sampleRate); s.bind(8, t.title);       s.bind(9, t.artist);
         s.bind(10, t.albumArtist); s.bind(11, t.album);    s.bind(12, t.genre);
         s.bind(13, t.disc);      s.bind(14, t.trackNo);    s.bind(15, t.year);
+        s.bind(16, t.art);
         if (s.step() != SQLITE_DONE) {
             m_error = QString::fromUtf8(sqlite3_errmsg(m_db));
             exec("ROLLBACK");

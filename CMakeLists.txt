@@ -21,6 +21,7 @@ add_library(hoptunes_core STATIC
     src/library/Track.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
+    src/library/CoverArt.h    src/library/CoverArt.cpp
     src/library/Scanner.h     src/library/Scanner.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)

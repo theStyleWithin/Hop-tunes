@@ -11,6 +11,7 @@ namespace Paths {
     QString sharedDir();      // dataDir()/shared
     QString indexDbPath();    // sharedDir()/index.sqlite
     QString cacheDir();       // $XDG_CACHE_HOME/hop-tunes
+    QString artCacheDir();    // cacheDir()/art  (extracted cover images, content-addressed)
     bool ensureDirs();        // create the directories above (0700)
 }
 

@@ -15,6 +15,7 @@ namespace hop {
 
 App::App(QObject *parent) : QObject(parent)
 {
+    m_scanner.setArtCacheDir(Paths::artCacheDir());
     connect(&m_scanner, &Scanner::started, this, &App::scanningChanged);
     connect(&m_scanner, &Scanner::progress, this, [this](int done, int total) {
         m_scanDone = done;
