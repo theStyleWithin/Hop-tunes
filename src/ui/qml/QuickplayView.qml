@@ -9,7 +9,7 @@ Item {
     ColumnLayout {
         anchors { fill: parent; leftMargin: 48; topMargin: 36 }
         spacing: 16
-        Label { text: "smart dj"; color: Theme.accent; font { family: Theme.font; pixelSize: 24 } }
+        Label { text: "smart dj"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
         Rectangle {
             color: Theme.panel
             implicitWidth: 320; implicitHeight: col.implicitHeight + 40
@@ -24,7 +24,7 @@ Item {
                     enabled: hop.songs.count > 0
                     onClicked: hop.shuffleAll()
                     contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 17; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    background: Rectangle { implicitWidth: 140; implicitHeight: 44; color: parent.enabled ? Theme.accent : Theme.dim }
+                    background: Rectangle { implicitWidth: 140; implicitHeight: 44; color: parent.enabled ? hop.accent : Theme.dim }
                 }
             }
         }

@@ -28,17 +28,24 @@ ApplicationWindow {
         onAccepted: hop.addFolder(selectedFolder)
     }
 
-    Shortcut { sequence: "Space"; onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
-    Shortcut { sequences: ["Ctrl+Right", "Media Next"]; onActivated: hop.player.next() }
-    Shortcut { sequences: ["Ctrl+Left", "Media Previous"]; onActivated: hop.player.previous() }
-    Shortcut { sequence: "Ctrl+1"; onActivated: win.view = "collection" }
-    Shortcut { sequence: "Ctrl+2"; onActivated: win.view = "now playing" }
-    Shortcut { sequence: "Ctrl+3"; onActivated: win.view = "quickplay" }
-    Shortcut { sequence: "Ctrl+,"; onActivated: win.view = "settings" }
+    Shortcut { sequence: "Space"; enabled: hop.profileReady; onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
+    Shortcut { sequences: ["Ctrl+Right", "Media Next"]; enabled: hop.profileReady; onActivated: hop.player.next() }
+    Shortcut { sequences: ["Ctrl+Left", "Media Previous"]; enabled: hop.profileReady; onActivated: hop.player.previous() }
+    Shortcut { sequence: "Ctrl+1"; enabled: hop.profileReady; onActivated: win.view = "collection" }
+    Shortcut { sequence: "Ctrl+2"; enabled: hop.profileReady; onActivated: win.view = "now playing" }
+    Shortcut { sequence: "Ctrl+3"; enabled: hop.profileReady; onActivated: win.view = "quickplay" }
+    Shortcut { sequence: "Ctrl+,"; enabled: hop.profileReady; onActivated: win.view = "settings" }
+
+    ProfileGate {
+        anchors.fill: parent
+        visible: !hop.profileReady
+        z: 10
+    }
 
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
+        visible: hop.profileReady
 
         // pivots
         RowLayout {
@@ -65,6 +72,26 @@ ApplicationWindow {
                 }
             }
             Item { Layout.fillWidth: true }
+            // who's listening: click to switch profile (playback stops, no restart)
+            AbstractButton {
+                id: chip
+                objectName: "profileChip"
+                hoverEnabled: true
+                onClicked: hop.leaveProfile()
+                Accessible.name: "switch profile (" + (hop.profile.name || "") + ")"
+                ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: "switch profile"
+                contentItem: Row {
+                    spacing: 12
+                    Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: hop.profile.name || ""
+                        color: chip.hovered ? Theme.text : Theme.muted
+                        font { family: Theme.font; pixelSize: 18 }
+                    }
+                    ProfileAvatar { profile: hop.profile; size: 40 }
+                }
+                background: Item { }
+            }
         }
 
         StackLayout {

@@ -62,7 +62,7 @@ Rectangle {
                 background: Rectangle {
                     x: seek.leftPadding; y: seek.topPadding + seek.availableHeight / 2 - height / 2
                     width: seek.availableWidth; height: 4; color: "#34343a"
-                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: Theme.accent }
+                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: hop.accent }
                 }
                 handle: Rectangle {
                     x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width)

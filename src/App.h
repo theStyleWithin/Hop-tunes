@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "core/ProfileStore.h"
 #include "library/CollectionModels.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
@@ -9,12 +10,16 @@
 
 #include <QObject>
 #include <QStringList>
+#include <QHash>
 #include <QUrl>
+#include <QVariantList>
+#include <QVariantMap>
 
 namespace hop {
 
-// The object QML talks to: library, scanning, playback. Profiles (spec §3) arrive in
-// M3; until then the watched folders live in the app settings.
+// The object QML talks to: profiles, library, scanning, playback. Nothing loads until a
+// profile (or guest mode) is open; each profile has its own watched folders and settings
+// over the one shared track index (spec §3).
 class App : public QObject {
     Q_OBJECT
     Q_PROPERTY(hop::TrackListModel *songs READ songs CONSTANT)
@@ -36,10 +41,20 @@ class App : public QObject {
     Q_PROPERTY(QString selectedAlbumArt READ selectedAlbumArt NOTIFY selectionChanged)
     Q_PROPERTY(int selectedAlbumYear READ selectedAlbumYear NOTIFY selectionChanged)
     Q_PROPERTY(QStringList mosaicArt READ mosaicArt NOTIFY libraryChanged)   // cover URLs for now playing
+    // profiles (spec §3)
+    Q_PROPERTY(bool profileReady READ profileReady NOTIFY profileChanged)
+    Q_PROPERTY(bool guest READ guest NOTIFY profileChanged)
+    Q_PROPERTY(QVariantMap profile READ profile NOTIFY profileChanged)
+    Q_PROPERTY(QVariantList profiles READ profiles NOTIFY profilesChanged)
+    Q_PROPERTY(QString accent READ accent NOTIFY profileChanged)
+    Q_PROPERTY(QStringList accents READ accents CONSTANT)
+    Q_PROPERTY(QString suggestedFolder READ suggestedFolder CONSTANT)
+    Q_PROPERTY(QUrl suggestedFolderUrl READ suggestedFolderUrl CONSTANT)
 
 public:
     explicit App(QObject *parent = nullptr);
-    bool init();   // opens the index, loads the library, starts a background rescan
+    ~App() override;
+    bool init();   // opens the index and the profile list; opens a profile if that needs no choice
 
     TrackListModel *songs() { return &m_songs; }
     Player *player() { return &m_player; }
@@ -60,6 +75,28 @@ public:
     int selectedAlbumYear() const;
     QStringList mosaicArt() const { return m_mosaicArt; }
 
+    bool profileReady() const { return m_guest || !m_profileId.isEmpty(); }
+    bool guest() const { return m_guest; }
+    QVariantMap profile() const;
+    QVariantList profiles() const;
+    QString accent() const;
+    QStringList accents() const;
+    QString suggestedFolder() const;
+    QUrl suggestedFolderUrl() const { const QString f = suggestedFolder(); return f.isEmpty() ? QUrl() : QUrl::fromLocalFile(f); }
+    ProfileStore *profileStore() { return &m_store; }
+
+    // Each returns "" on success or a short message for the UI.
+    Q_INVOKABLE QString createProfile(const QString &name, const QString &accent, const QString &pin, const QUrl &folder);
+    Q_INVOKABLE QString openProfile(const QString &id, const QString &pin = {});
+    Q_INVOKABLE bool profileNeedsPin(const QString &id) const;
+    Q_INVOKABLE void openGuest();
+    Q_INVOKABLE void leaveProfile();                        // stop playback, back to the picker
+    Q_INVOKABLE QString renameProfile(const QString &name);
+    Q_INVOKABLE QString setProfileAccent(const QString &accent);
+    Q_INVOKABLE QString setProfilePin(const QString &currentPin, const QString &newPin);   // newPin "" removes
+    Q_INVOKABLE QString setProfileAvatar(const QUrl &image);    // empty url removes
+    Q_INVOKABLE QString removeProfile();                    // the open profile; never touches music
+
     Q_INVOKABLE void selectArtist(int row);
     Q_INVOKABLE void selectAlbum(int row);          // row in artistAlbums
     Q_INVOKABLE void openAlbum(int allAlbumsRow);   // from the albums grid: select its artist + album
@@ -78,12 +115,24 @@ signals:
     void scanProgressChanged();
     void selectionChanged();
     void libraryChanged();
+    void profileChanged();
+    void profilesChanged();
 
 private:
     void reload();
     void saveFolders();
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
+    void activate(const QString &id, bool guest);
+    void saveProfileSettings();
+    QVariantMap profileMap(const Profile &p) const;
+
+    ProfileStore m_store;
+    QString m_profileId;          // empty when no profile is open
+    bool m_guest = false;
+    QStringList m_legacyFolders;  // pre-profile (M1/M2) setting, adopted by the first profile
+    struct PinLock { int fails = 0; qint64 until = 0; };
+    QHash<QString, PinLock> m_pinLocks;
 
     TrackIndex m_index;
     Scanner m_scanner{&m_index};
@@ -92,6 +141,7 @@ private:
     QStringList m_folders;
     int m_scanDone = 0;
     int m_scanTotal = 0;
+    bool m_rescanPending = false;
 
     Collection m_collection;
     ArtistListModel m_artists;

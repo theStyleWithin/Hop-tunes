@@ -31,9 +31,9 @@ ItemDelegate {
     contentItem: RowLayout {
         spacing: 16
         Label { text: row.current ? "▶" : (row.trackNo > 0 ? row.trackNo : ""); Layout.preferredWidth: 28
-                color: row.current ? Theme.accent : "#8a8a93"; font { family: Theme.font; pixelSize: 14 } }
+                color: row.current ? hop.accent : "#8a8a93"; font { family: Theme.font; pixelSize: 14 } }
         Label { text: row.title; Layout.fillWidth: true; Layout.preferredWidth: 4; elide: Text.ElideRight
-                color: row.current ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: 16 } }
+                color: row.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 16 } }
         Label { visible: row.wide; text: row.artist; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
                 color: Theme.text2; font { family: Theme.font; pixelSize: 15 } }
         Label { visible: row.wide; text: row.album; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight

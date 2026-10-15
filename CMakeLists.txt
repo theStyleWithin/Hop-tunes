@@ -18,6 +18,7 @@ pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 # ---- core library: no GUI, no GStreamer (unit-testable) ---------------------
 add_library(hoptunes_core STATIC
     src/core/Paths.h          src/core/Paths.cpp
+    src/core/ProfileStore.h src/core/ProfileStore.cpp
     src/library/Track.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
@@ -70,6 +71,10 @@ if(HOPTUNES_BUILD_TESTS)
     target_link_libraries(test_library PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME library COMMAND test_library)
 
+    add_executable(test_profiles tests/test_profiles.cpp)
+    target_link_libraries(test_profiles PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME profiles COMMAND test_profiles)
+
     add_executable(test_player tests/test_player.cpp)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
     # Run the playback tests against both GStreamer engines.
@@ -85,4 +90,12 @@ if(HOPTUNES_BUILD_TESTS)
     target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
     add_test(NAME mpris COMMAND test_mpris)
     set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
+
+    # Profile flows driven through the real QML UI, offscreen.
+    if(HOPTUNES_BUILD_APP)
+        add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/qml.qrc assets/assets.qrc)
+        target_link_libraries(test_ui PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+        add_test(NAME ui COMMAND test_ui)
+        set_tests_properties(ui PROPERTIES TIMEOUT 120)
+    endif()
 endif()

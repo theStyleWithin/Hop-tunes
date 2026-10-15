@@ -44,3 +44,9 @@ Screenshots of Hop-tunes itself, rendered headless from the actual build. The sa
 | ![artists](app/m2-collection-artists.png) | ![albums](app/m2-collection-albums.png) | ![now playing](app/m2-now-playing.png) |
 
 M2 adds the three-pane artists view, the albums grid, real cover art (embedded or `cover.jpg`) and a Now Playing mosaic built from your own covers.
+
+| who's listening? | first run | PIN curtain | settings › profile |
+|---|---|---|---|
+| ![picker](app/m3-profile-picker.png) | ![create](app/m3-profile-create.png) | ![pin](app/m3-profile-pin.png) | ![settings](app/m3-profile-settings.png) |
+
+M3 adds local profiles. These renders come from the automated UI test (`HOPTUNES_UI_SHOTS=<dir> ./test_ui`), which drives the real screens: create a profile with a PIN, enter a wrong PIN, switch profiles, and change the colour and picture.

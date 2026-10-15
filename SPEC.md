@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** Draft v0.3 (M1 and M2 built) · **Date:** 2026-10-14 · **Platform:** Linux first
+**Status:** Draft v0.4 (M1, M2 and M3 built) · **Date:** 2026-10-14 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -74,13 +74,24 @@ $XDG_DATA_HOME/hop-tunes/            (~/.local/share/hop-tunes)
 └── profiles/
     ├── profiles.json                list: id, name, accent, avatar, has_pin, created
     └── <profile-uuid>/
-        ├── profile.sqlite           playlists, play stats, ratings, quickplay, podcasts
-        ├── settings.toml
-        └── avatar.png
-$XDG_CONFIG_HOME/hop-tunes/app.toml   app-wide: last profile, window geometry
-$XDG_CACHE_HOME/hop-tunes/            thumbnails, waveform cache (safe to delete)
+        ├── profile.sqlite           playlists, play stats, ratings, quickplay, podcasts (M4)
+        ├── settings.json            watched folders, volume; more settings as they land
+        └── avatar.png               256 px square, cropped from the picture the user picked
+$XDG_CONFIG_HOME/hop-tunes/hop-tunes.conf   app-wide (Qt settings format)
+$XDG_CACHE_HOME/hop-tunes/            cover art cache, thumbnails (safe to delete)
 ```
-PINs are stored as Argon2id hashes in `profiles.json`. Files are created with `0600` permissions.
+- PINs are stored in `profiles.json` as salted **PBKDF2-HMAC-SHA256** hashes
+  (`pbkdf2-sha256$<iterations>$<salt>$<hash>`, 120 000 iterations), built from QtCore so the
+  feature adds no dependency. A 4–8 digit PIN can be brute-forced by anyone who can read the
+  file, whatever the hash, which is why the UI calls it a privacy curtain. After 5 wrong PINs
+  the profile waits 30 s.
+- `profiles.json` and `settings.json` are written atomically with `0600` permissions; profile
+  folders are `0700`. Profile ids must be UUIDs, so a hand-edited file cannot point outside
+  `profiles/`. An unreadable `profiles.json` is moved aside, never overwritten.
+- **Upgrading from M1/M2:** the folders from the old app-wide setting are adopted by the first
+  profile created, then the old setting is removed.
+- Guest mode writes nothing to `profiles/`. It watches `~/Music`; files it scans still land
+  in the shared index cache, which holds no personal data.
 
 ---
 
@@ -292,7 +303,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | **M0: Skeleton** | Repo layout, CMake, Qt/QML window, CI (GitHub Actions), licence | Empty app builds and runs in CI |
 | ✅ **M1: Play a folder** | Scanner + index DB + GStreamer gapless playback + song list | Can pick a folder and play an album gaplessly |
 | ✅ **M2: Collection** | Artists/albums/songs pivots, art grid, cover art, mini player, MPRIS. *Search moved to M4.* | Daily-driver usable for one person |
-| **M3: Profiles** | Profile create/pick/switch/delete, PIN, per-profile stats/settings, guest mode | Two people can share one install without seeing each other's data |
+| **M3: Profiles** ✅ | Profile create/pick/switch/delete, PIN, per-profile settings, guest mode (per-profile stats arrive with play history in M4) | Two people can share one install without seeing each other's data |
 | **M4: Playlists & Quickplay** | Manual + smart playlists, import m3u/zpl, Quickplay pins/history/new, instant search | — |
 | **M5: Now Playing & polish** | Art mosaic, transitions, themes/accents, ReplayGain, crossfade | Feels "seamless" |
 | **M6: Ship 1.0** | Flatpak, AppImage, AUR, user docs | Published |
