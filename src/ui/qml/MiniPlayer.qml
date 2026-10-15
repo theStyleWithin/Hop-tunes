@@ -29,7 +29,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
                 spacing: 14
-                AlbumArt { key: player.album; Layout.preferredWidth: 48; Layout.preferredHeight: 48; visible: player.hasTrack }
+                AlbumArt { key: player.album; source: player.artUrl; Layout.preferredWidth: 48; Layout.preferredHeight: 48; visible: player.hasTrack }
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true

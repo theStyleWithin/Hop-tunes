@@ -2,6 +2,7 @@
 #include "playback/Player.h"
 
 #include <QMutexLocker>
+#include <QUrl>
 #include <QtGlobal>
 
 #include <gst/gst.h>
@@ -80,6 +81,10 @@ Player::~Player()
 
 QString Player::title() const  { return hasTrack() ? m_queue[m_index].displayTitle() : QString(); }
 QString Player::artist() const { return hasTrack() ? m_queue[m_index].displayArtist() : QString(); }
+QString Player::artUrl() const
+{
+    return (hasTrack() && !m_queue[m_index].art.isEmpty()) ? QUrl::fromLocalFile(m_queue[m_index].art).toString() : QString();
+}
 QString Player::album() const  { return hasTrack() ? m_queue[m_index].displayAlbum() : QString(); }
 
 void Player::setVolume(double v)

@@ -29,6 +29,7 @@ Rectangle {
                 required property int index
                 width: (mosaic.width - 7 * 6) / 8; height: width
                 key: "tile" + ((index * 7 + 3) % 11) + root.player.album
+                source: hop.mosaicArt.length > 0 ? hop.mosaicArt[(index * 7 + 3) % hop.mosaicArt.length] : ""
             }
         }
         SequentialAnimation on drift {
@@ -72,7 +73,7 @@ Rectangle {
             Layout.alignment: Qt.AlignBottom
             spacing: 20
 
-            AlbumArt { key: root.player.album; Layout.preferredWidth: 200; Layout.preferredHeight: 200; visible: root.player.hasTrack }
+            AlbumArt { key: root.player.album; source: root.player.artUrl; Layout.preferredWidth: 200; Layout.preferredHeight: 200; visible: root.player.hasTrack }
             Label { text: root.player.hasTrack ? root.player.artist : ""; color: Theme.text2; font { family: Theme.font; pixelSize: 28; weight: Font.Light } }
             Label {
                 text: root.player.hasTrack ? root.player.title : "nothing playing"

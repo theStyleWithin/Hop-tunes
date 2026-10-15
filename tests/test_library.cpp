@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Unit tests for the library layer: track index + incremental scanner.
+#include "library/CollectionModels.h"
 #include "library/CoverArt.h"
 #include "library/Scanner.h"
 #include "library/TagReader.h"
@@ -236,6 +237,28 @@ private slots:
         QCOMPARE(all.first().title, QStringLiteral("Old Song"));    // data kept
         QVERIFY(all.first().art.isEmpty());
         QCOMPARE(idx.stampsUnder("/m").value("/m/old.mp3").mtime, qint64(0));   // forces one re-read for art
+    }
+
+    void collectionGrouping()
+    {
+        auto t = [](const char *artist, const char *album, int year, const char *art = "") {
+            Track x; x.artist = artist; x.album = album; x.year = year; x.art = art; return x;
+        };
+        QList<Track> tracks = {t("The Zebras", "Stripes", 2001), t("The Zebras", "Stripes", 2001, "/a.png"),
+                               t("The Zebras", "Later", 2020), t("Alpha", "First", 0), t("", "", 0),
+                               t("beta", "B", 1999)};
+        Collection c;
+        c.build(tracks);
+        QCOMPARE(c.albums().size(), 5);
+        QStringList names;
+        for (const Artist &a : c.artists()) names << a.name;
+        // case-insensitive, "The" ignored for sorting, unknown artist last
+        QCOMPARE(names, QStringList({"Alpha", "beta", "The Zebras", "unknown artist"}));
+        const Artist &z = c.artists()[2];
+        QCOMPARE(z.songCount, 3);
+        QCOMPARE(c.albums()[z.albumIndices[0]].title, QStringLiteral("Later"));   // newest first
+        QCOMPARE(c.albums()[z.albumIndices[1]].art, QStringLiteral("/a.png"));    // first art found
+        QCOMPARE(c.albums()[z.albumIndices[1]].trackRows, QList<int>({0, 1}));
     }
 
     void asyncScannerSignals()

@@ -22,6 +22,8 @@ add_library(hoptunes_core STATIC
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
     src/library/CoverArt.h    src/library/CoverArt.cpp
+    src/library/CollectionModels.h src/library/CollectionModels.cpp
+    src/library/TrackListModel.h src/library/TrackListModel.cpp
     src/library/Scanner.h     src/library/Scanner.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
@@ -43,7 +45,6 @@ if(HOPTUNES_BUILD_APP)
     add_executable(hop-tunes
         src/main.cpp
         src/App.h                    src/App.cpp
-        src/library/TrackListModel.h src/library/TrackListModel.cpp
         src/ui/qml.qrc
         assets/assets.qrc
     )
