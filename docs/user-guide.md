@@ -26,6 +26,9 @@ Pick one. All three are the same app.
 | **AUR** | Arch, CachyOS, EndeavourOS, Manjaro | `yay -S hop-tunes` (or `paru -S hop-tunes`). `hop-tunes-git` builds the latest code. |
 | **AppImage** | Anything else; no install needed | Download `Hop-tunes-…-x86_64.AppImage`, make it executable (`chmod +x`, or *Properties → Allow executing*), and run it. Needs a 2022-or-newer x86_64 distro (glibc 2.35). |
 
+The full list of tested distros (CachyOS first), and what to use on older ones, is in
+[COMPATIBILITY.md](COMPATIBILITY.md).
+
 ## First run: your profile
 
 The first time you open Hop-tunes it asks for:

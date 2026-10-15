@@ -39,6 +39,8 @@ with the ones from that release's kit (or let Flathub's external data checker do
 
 ## Notes
 
+- `COMPATIBILITY.md` (in this kit) lists the distros Hop-tunes is tested on, with CachyOS first, and explains that distros from before 2022 may not work with the AppImage. Feel free to link it from the package page.
+
 - Permissions: Wayland with X11 fallback, GPU, sound (PulseAudio/PipeWire), the Music folder
   read-only, and the MPRIS name for media keys. Other music folders are added through the
   file chooser (document portal), so no home-folder access is needed.

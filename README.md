@@ -13,11 +13,14 @@
 | **Arch / CachyOS (AUR)** | `yay -S hop-tunes` (or `hop-tunes-git` for the latest code) |
 | **AppImage** | download, `chmod +x`, run. Any x86_64 distro from 2022 on |
 
+**Tested on 16 distros, with CachyOS first.** See [which distros Hop-tunes runs on](docs/COMPATIBILITY.md). Distros older than 2022 may not work with the AppImage; use the Flatpak there.
+
 The [user guide](docs/user-guide.md) covers everything from the first run to troubleshooting.
 
 ## Docs
 
 - [`docs/user-guide.md`](docs/user-guide.md): how to use Hop-tunes.
+- [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md): tested distros (CachyOS first) and what to use on older ones.
 - [`CHANGELOG.md`](CHANGELOG.md): what changed in each version.
 - [`SPEC.md`](SPEC.md): product and technical spec: a local-first, login-free music player with local profiles.
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md): open-source components and their licenses; trademark notice.

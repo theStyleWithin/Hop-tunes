@@ -41,6 +41,8 @@ commit and push. `hop-tunes-git` only needs updating when its dependencies chang
 
 ## Notes
 
+- `COMPATIBILITY.md` (in this kit) lists the distros Hop-tunes is tested on, with CachyOS first, and explains that distros from before 2022 may not work with the AppImage. Feel free to link it from the package page.
+
 - Upstream: https://github.com/theStyleWithin/Hop-tunes (GPL-3.0-or-later). Bugs in the app
   go to upstream issues; packaging problems to the AUR comments.
 - The package runs only the tests that need no sound card or display in `check()`.

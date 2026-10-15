@@ -39,6 +39,7 @@ for p in hop-tunes hop-tunes-git; do
   else (cd "$aur/$p" && bash "$repo/packaging/aur/srcinfo.sh" PKGBUILD > .SRCINFO); fi
 done
 sed "s/@VERSION@/$ver/g; s/@SHA256@/$sha/g" "$repo/packaging/release-kit/SUBMIT-AUR.md" > "$aur/SUBMIT-AUR.md"
+cp "$repo/docs/COMPATIBILITY.md" "$aur/"
 pack "hop-tunes-$ver-aur-kit" "$out/hop-tunes-$ver-aur-kit.tar.gz"
 
 # 3. Flathub kit: same manifest as CI, but building the release tarball.
@@ -55,6 +56,7 @@ text = text.replace("# Local build:  flatpak-builder --user --install --force-cl
 open(dst, "w").write(text)
 PY
 sed "s/@VERSION@/$ver/g; s/@SHA256@/$sha/g" "$repo/packaging/release-kit/SUBMIT-FLATHUB.md" > "$fh/SUBMIT-FLATHUB.md"
+cp "$repo/docs/COMPATIBILITY.md" "$fh/"
 pack "hop-tunes-$ver-flathub-kit" "$out/hop-tunes-$ver-flathub-kit.tar.gz"
 
 (cd "$out" && sha256sum "$src" "hop-tunes-$ver-aur-kit.tar.gz" "hop-tunes-$ver-flathub-kit.tar.gz" > KIT-SHA256SUMS)
