@@ -33,7 +33,7 @@ Menu {
         arrow: Label { x: mi.width - width - 10; anchors.verticalCenter: parent.verticalCenter; visible: !!mi.subMenu; text: "›"; color: Theme.muted; font.pixelSize: 18 }
         background: Rectangle { implicitHeight: 36; color: mi.highlighted ? Theme.hover : "transparent" }
     }
-    delegate: MItem { }
+    delegate: Component { MItem { } }   // wrapped explicitly: Qt 6.4 does not auto-wrap inline components
     background: Rectangle { implicitWidth: 260; color: Theme.panel; border { width: 1; color: Theme.line } }
 
     MItem { text: "play"; onTriggered: m.playRequested() }
@@ -46,10 +46,12 @@ Menu {
         background: Rectangle { implicitWidth: 260; color: Theme.panel; border { width: 1; color: Theme.line } }
         Instantiator {
             model: m.manualPlaylists
-            delegate: MItem {
-                required property var modelData
-                text: modelData.name
-                onTriggered: hop.addToPlaylist(modelData.key, m.paths)
+            delegate: Component {
+                MItem {
+                    required property var modelData
+                    text: modelData.name
+                    onTriggered: hop.addToPlaylist(modelData.key, m.paths)
+                }
             }
             onObjectAdded: function (index, object) { addMenu.insertItem(index, object) }
             onObjectRemoved: function (index, object) { addMenu.removeItem(object) }
