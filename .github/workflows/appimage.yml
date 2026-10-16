@@ -191,8 +191,15 @@ jobs:
           gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$GITHUB_REF" --jq .content | base64 -d > CHANGELOG.md
           awk -v v="$ver" '$0 ~ "^## \\[?"v"\\]?" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
           [ -s notes.md ] || echo "Hop-tunes $ver" > notes.md
-          gh release create "v$ver" --verify-tag --title "Hop-tunes $ver" --notes-file notes.md \
-            Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS
+          files="$(ls Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync) SHA256SUMS"
+          # The release may already exist (made on github.com, which also creates the tag):
+          # then fill in its title and notes and attach the files.
+          if gh release view "v$ver" >/dev/null 2>&1; then
+            gh release edit "v$ver" --title "Hop-tunes $ver" --notes-file notes.md
+            gh release upload "v$ver" $files --clobber
+          else
+            gh release create "v$ver" --verify-tag --title "Hop-tunes $ver" --notes-file notes.md $files
+          fi
 
       - name: Publish to the continuous pre-release
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
