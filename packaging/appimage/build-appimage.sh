@@ -102,6 +102,16 @@ done
 mkdir -p "$APPDIR/apprun-hooks"
 cp "$ROOT/packaging/appimage/apprun-hooks/"*.sh "$APPDIR/apprun-hooks/"
 
+# linuxdeploy's generated AppRun only sources the hook it knows about by name
+# (linuxdeploy-plugin-gstreamer.sh) — it has no mechanism to pick up hop-tunes-fallback-
+# libs.sh on its own, so every fallback-dir library above would otherwise never actually
+# be found at runtime (confirmed by reading the generated AppRun: this is why fixing one
+# missing library in CI kept surfacing another instead of actually fixing anything). Patch
+# it in by hand, right before the final exec, which is still present at this point because
+# the pack step below reuses this AppRun rather than regenerating it.
+sed -i 's|^exec "\$this_dir"/AppRun\.wrapped|source "$this_dir"/apprun-hooks/"hop-tunes-fallback-libs.sh"\n\nexec "$this_dir"/AppRun.wrapped|' "$APPDIR/AppRun"
+grep -q 'hop-tunes-fallback-libs.sh' "$APPDIR/AppRun" || { echo "ERROR: failed to wire the fallback-libs hook into AppRun"; exit 1; }
+
 # Report what the AppImage still expects from the host (for the compatibility notes) —
 # only what's left after the fallback-bundling pass above.
 echo "== libraries expected from the host system:"
