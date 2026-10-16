@@ -23,6 +23,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ### Removed
 - The planned optional MusicBrainz/Cover Art Archive lookup (`SPEC.md` §6) was dropped
   before being built: it doesn't fit an offline-only player, opt-in or not.
+- The planned podcasts feature (RSS/OPML subscriptions, `SPEC.md` §8) is dropped for the
+  same reason, before being built: it was the only thing in the spec that needed network
+  access at all, and that doesn't fit an always-offline player. Collection's sub-pivots
+  are now just music and videos.
 
 ## [1.0.0] - 2026-10-15
 

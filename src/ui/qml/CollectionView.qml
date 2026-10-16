@@ -8,7 +8,7 @@ Item {
     id: root
     signal addFolderRequested()
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
-    property string collectionTab: "music"   // music | videos (spec §4.1; podcasts: v1.2)
+    property string collectionTab: "music"   // music | videos (spec §4.1)
     function showArtists() { mode = "artists"; collectionTab = "music" }
 
     TrackMenu {
@@ -37,7 +37,7 @@ Item {
         anchors.fill: parent
         spacing: 0
 
-        // music · videos · podcasts
+        // music · videos
         RowLayout {
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 14
             spacing: 28
@@ -59,7 +59,6 @@ Item {
                                       font { family: Theme.font; pixelSize: 22 } }
                 background: Item {}
             }
-            Label { text: "podcasts"; color: Theme.faint; font { family: Theme.font; pixelSize: 22 } }
             Item { Layout.fillWidth: true }
             Label {
                 visible: hop.scanning && root.collectionTab === "music"
