@@ -3,7 +3,7 @@
 **Hop-tunes** · Linux · GPL-3.0 · no accounts, no tracking
 
 > [!WARNING]
-> **In development: do not download.** Hop-tunes is unfinished and not ready for everyday use. Builds may change or break without notice, and there are no stable releases yet.
+> **Feature complete. Download at your own risk.** Hop-tunes 1.0 includes every planned feature and passes its automated test suite on 16 Linux distributions, but it has not yet been tested by the developer on real hardware. If you choose to try it, you do so at your own risk. Running it in a virtual machine is recommended.
 
 ## Install
 
