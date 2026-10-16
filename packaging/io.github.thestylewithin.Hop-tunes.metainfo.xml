@@ -82,6 +82,20 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.3.0" date="2026-10-16">
+      <description>
+        <p>Quality-of-life release: per-profile album edits and drag-reorder everywhere, a
+          tidier Quickplay.</p>
+        <ul>
+          <li>An album's cover and title can be edited right in the Collection grid, and its
+            tracks dragged into a custom order live, even mid-playback. The songs tab now
+            drags and reorders the same way too. All of it is per-profile and private —
+            never seen by another profile sharing the same install.</li>
+          <li>Quickplay's pinned strip now groups into artists/albums/playlists sections
+            instead of one mixed row.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.2.0" date="2026-10-16">
       <description>
         <p>Fixes video playback on real hardware.</p>

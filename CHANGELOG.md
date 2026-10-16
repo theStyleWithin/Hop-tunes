@@ -2,7 +2,7 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.0] - 2026-10-16
 
 ### Added
 - **M6 quality of life: per-profile album overrides, and live drag-reorder everywhere.**
@@ -13,6 +13,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   playlists. All of it is per-profile and private (`SPEC.md` §3.3): none of it is ever
   visible to another profile sharing the same install, and guest mode keeps the live
   reorder for the session but saves nothing.
+- Quickplay's *pinned* strip now groups into labelled artists/albums/playlists sub-rows
+  instead of one mixed row, so a few pins of different kinds don't read as clutter.
 
 ## [1.2.0] - 2026-10-16
 
@@ -100,6 +102,7 @@ First release, feature complete.
 First preview: library scanning, gapless playback, artists/albums/songs, cover art, Now
 Playing, media keys (MPRIS) and the portable AppImage.
 
+[1.3.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.3.0
 [1.2.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.2.0
 [1.1.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.1.0
 [1.0.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0
