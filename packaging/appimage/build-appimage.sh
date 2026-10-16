@@ -69,7 +69,11 @@ for d in wayland-shell-integration wayland-decoration-client wayland-graphics-in
 done
 
 # Host-first fallback libraries (see apprun-hooks/hop-tunes-fallback-libs.sh).
-FALLBACK_LIBS="libOpenGL.so.0 libGLdispatch.so.0 libcom_err.so.2 libgpg-error.so.0 libfribidi.so.0"
+# libjack.so.0: Ubuntu's libmpv links JACK support in directly (confirmed via ldd on
+# libmpv.so.2), but linuxdeploy's own exclude-list skips it like the others here, so it
+# never ends up in the AppImage's regular lib directory even though it's installed on the
+# build machine (libjack0, above) — it needs the same explicit fallback-dir treatment.
+FALLBACK_LIBS="libOpenGL.so.0 libGLdispatch.so.0 libcom_err.so.2 libgpg-error.so.0 libfribidi.so.0 libjack.so.0"
 for lib in $FALLBACK_LIBS; do
   src=$(ls "$ARCH_LIB/$lib" /lib/x86_64-linux-gnu/$lib 2>/dev/null | head -1 || true)
   if [ -n "$src" ]; then mkdir -p "$APPDIR/usr/lib/fallback/$lib"; cp -L "$src" "$APPDIR/usr/lib/fallback/$lib/"
