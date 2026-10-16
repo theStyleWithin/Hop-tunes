@@ -82,6 +82,19 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.0" date="2026-10-16">
+      <description>
+        <p>Fixes video playback on real hardware.</p>
+        <ul>
+          <li>Video playback could fail to start with "mpv_create failed" depending on the
+            system's locale, while music played fine — found testing v1.1.0 on a Steam Deck
+            running CachyOS Handheld Edition. The video engine now works regardless of the
+            desktop's locale settings.</li>
+          <li>Settings' folder list is now called "media folders" instead of "music
+            folders", since it has fed both the music and video scanners since M7.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.1.0" date="2026-10-16">
       <description>
         <p>M7: video playback, and a step further toward always-offline.</p>
