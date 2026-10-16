@@ -47,17 +47,20 @@ pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 pkg_check_modules(GST_PBUTILS REQUIRED IMPORTED_TARGET gstreamer-pbutils-1.0)
 pkg_check_modules(GST_APP     REQUIRED IMPORTED_TARGET gstreamer-app-1.0)
 pkg_check_modules(GST_VIDEO   REQUIRED IMPORTED_TARGET gstreamer-video-1.0)
-# libmpv is the video *playback* engine (spec §5b) — not REQUIRED, unlike everything else
-# above: it's not yet packaged for the Flatpak build (see that manifest's comment), and a
-# build with no libmpv.pc should still produce a working, music-only Hop-tunes rather than
-# fail to configure. MpvCore.cpp/MpvVideoItem.cpp each carry a stub implementation (#else
-# branch, no mpv/* headers) for exactly this case; library scanning/probing (VideoScanner
-# etc.) needs only gstreamer-plugins-base above, so Videos still scans and lists without
-# libmpv — only actually opening a video needs it.
+# libmpv is the primary video *playback* engine (spec §5b) — not REQUIRED, unlike
+# everything else above: it's not yet packaged for the Flatpak build (see that manifest's
+# comment), and a build with no libmpv.pc should still produce a fully working Hop-tunes
+# rather than fail to configure. MpvCore.cpp/MpvVideoItem.cpp each carry a stub
+# implementation (#else branch, no mpv/* headers) for exactly this case — when
+# HOPTUNES_HAVE_MPV is off, App::videoEngine() falls back to GstVideoPlayer (GStreamer's
+# own qml6glsink/glsinkbin, needing no new dependency beyond gstreamer-plugins-base
+# above) if that's available, else "none". Library scanning/probing (VideoScanner etc.)
+# needs only gstreamer-plugins-base regardless, so Videos always scans and lists.
 pkg_check_modules(MPV IMPORTED_TARGET mpv)
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
     src/playback/MpvCore.h    src/playback/MpvCore.cpp
+    src/playback/GstVideoPlayer.h src/playback/GstVideoPlayer.cpp
     src/platform/Mpris.h      src/platform/Mpris.cpp
     src/library/VideoProbe.h     src/library/VideoProbe.cpp
     src/library/VideoThumbnail.h src/library/VideoThumbnail.cpp

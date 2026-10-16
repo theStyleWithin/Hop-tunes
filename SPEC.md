@@ -153,26 +153,37 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ## 5b. Video (modern resolutions, including 4K) ✅ M7
 
-*Implementation status: built and unit-tested (probing, scanning, thumbnails, the mpv
-core's load/play/pause/seek/subtitle-track logic headless, resume persistence), and the
-UI compiles and runs (Videos grid verified with a real screenshot, `design/app/m7-videos.png`).
-**Not verified**: real GPU hardware decoding, real on-screen rendering, and 4K/HDR
-material — this was built and tested in a sandbox with no GPU and no attached display.
-The render-thread glue (`src/ui/MpvVideoItem.cpp`) follows mpv's documented render API
-precisely, but "follows the docs" and "proven on real hardware" are different claims; the
-performance targets below are the spec's design goals, not measured results. One
-deliberate deviation from this section as originally written: audio and video do **not**
-share one literal C++ `PlaybackEngine` interface — GStreamer (`Player`) and libmpv
-(`MpvCore`/`MpvVideoItem`) stay fully separate, unified only where the UI actually needs
-one shared idea (MPRIS, the App-level API), which was simpler and lower-risk than forcing
-a shared abstraction over two unrelated native APIs. libmpv is **not yet packaged for the
-Flatpak build** (see that manifest's comment) — the AppImage, AUR and a plain build all
-have it; Hop-tunes degrades gracefully without it (`HOPTUNES_HAVE_MPV`, see
-`CMakeLists.txt`): the Videos grid still scans and lists, only opening a video needs
-libmpv. Deferred, not built: chapters on the seek bar, a per-profile default subtitle
-language (mpv's own subtitle auto-selection is used instead), an explicit 5.1/7.1 downmix
-control (mpv's audio output handles this on its own), and the optional Jellyfin-folder
-note below.*
+*Implementation status: built and tested — probing, scanning, thumbnails, resume
+persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with
+unit tests. Two engines exist, chosen at build time and reported at runtime as
+`hop.videoEngine` ("mpv" | "gstreamer" | "none"):
+- **libmpv** (`MpvCore`/`MpvVideoItem`), the primary engine — the spec's original choice,
+  richer subtitle styling (ASS/SSA), `hwdec=auto-safe`. Its render-thread glue follows
+  mpv's documented render API precisely, but that on-screen render path could **not** be
+  exercised in the sandbox this was built in (no GPU, no attached display) — "follows the
+  docs" and "proven on real hardware" are different claims, and the performance targets
+  below are the spec's design goals, not measured results.
+- **GStreamer** (`GstVideoPlayer`/`GstVideoSurfaceView.qml`, via gst-plugins-good's
+  `qml6glsink` + gst-plugins-base's `glsinkbin` — ordinary GStreamer plugins, no new kind
+  of dependency), the fallback used when libmpv isn't available (`HOPTUNES_HAVE_MPV` off
+  — currently the Flatpak build; see its manifest's comment on whether the KDE runtime
+  actually ships those two plugins). Unlike the mpv path, this one **was** verified with
+  real on-screen rendering end to end (software GL via llvmpipe under Xvfb in that same
+  sandbox — a real frame of a real test video, visibly advancing; see the commit history
+  for how) — more than the mpv path's render code can currently claim.
+- **Neither** (`hop.videoEngine === "none"`): the Videos grid still scans, probes and
+  lists files; opening one shows a plain "no video engine is available" message instead
+  of a crash.
+
+One deliberate deviation from this section as originally written: audio and video do
+**not** share one literal C++ `PlaybackEngine` interface — three engines now (GStreamer
+`Player` for music, libmpv, GStreamer-via-qml6glsink for video) stay fully separate,
+unified only where the UI actually needs one shared idea (MPRIS, the App-level API,
+VideoPlayerView.qml's property surface), which was simpler and lower-risk than forcing a
+shared abstraction over unrelated native APIs. Deferred, not built: chapters on the seek
+bar, a per-profile default subtitle language (each engine's own auto-selection is used
+instead), an explicit 5.1/7.1 downmix control (each engine's audio output handles this on
+its own), and the optional Jellyfin-folder note below.*
 
 Zune 4.8 (built August 2011, codename "Dorado") is a **32-bit** app with its **own bundled 2011-era decoders** (`ZuneH264Dec.dll`, `ZUNEMP4SDECD.dll`, `ZuneDXVA2.dll`, `ZuneEvr.dll`), and it ignores the system's codecs. That explains why it falls over on modern HD/4K files. It wasn't built for:
 - **H.264 at 4K** (High profile, level 5.1/5.2), which is beyond what 2011 PC media players were tuned for;

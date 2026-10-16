@@ -6,14 +6,16 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ### Added
 - **M7: video playback.** A `collection › videos` grid (scanning, GStreamer-probed codec/
-  resolution/duration, frame-grab thumbnails, 4K/HDR/codec badges) and a video player on
-  `libmpv`, with hardware decode (`hwdec=auto-safe` with automatic software fallback),
-  subtitle auto-loading (embedded tracks and same-name `.srt`/`.ass` sidecar files) and
-  per-video resume position. See [`SPEC.md` §5b](SPEC.md#5b-video-modern-resolutions-including-4k)
-  for exactly what's verified (builds, passes its tests, runs) versus not (real GPU
-  hardware decoding and real on-screen rendering — built without either available).
-  Builds without `libmpv` too (Flatpak, until it's packaged there): everything else,
-  including the Videos grid itself, is unaffected.
+  resolution/duration, frame-grab thumbnails, 4K/HDR/codec badges) and a video player with
+  two engines: **libmpv** (richer subtitles, `hwdec=auto-safe`) where available, falling
+  back to **GStreamer**'s own Qt video sink (`qml6glsink`) where it isn't — currently the
+  Flatpak build, with no extra dependency beyond what Hop-tunes already uses for music.
+  Both engines auto-load subtitles (embedded tracks and same-name `.srt`/`.ass` sidecar
+  files) and remember a resume position. See [`SPEC.md`
+  §5b](SPEC.md#5b-video-modern-resolutions-including-4k) for exactly what's verified —
+  notably, the GStreamer path's on-screen rendering was checked end to end (a real video,
+  visibly playing); the libmpv path's render code follows mpv's documented API but
+  couldn't be checked against real GPU hardware or a real display.
 - **Live library updates.** Folders are watched (inotify via `QFileSystemWatcher`,
   debounced ~1.5 s), so a song or video dropped into a watched folder appears without a
   manual rescan. Purely local — no network involved.

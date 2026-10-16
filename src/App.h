@@ -11,6 +11,7 @@
 #include "library/VideoIndex.h"
 #include "library/VideoListModel.h"
 #include "library/VideoScanner.h"
+#include "playback/GstVideoPlayer.h"
 #include "playback/Player.h"
 
 #include <QObject>
@@ -85,6 +86,9 @@ class App : public QObject {
     Q_PROPERTY(QString videoPlayerPath READ videoPlayerPath NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerTitle READ videoPlayerTitle NOTIFY videoPlayerChanged)
     Q_PROPERTY(qint64 videoPlayerResumeMs READ videoPlayerResumeMs NOTIFY videoPlayerChanged)
+    // "mpv" | "gstreamer" | "none" — which engine VideoPlayerView.qml should instantiate.
+    Q_PROPERTY(QString videoEngine READ videoEngine CONSTANT)
+    Q_PROPERTY(hop::GstVideoPlayer *gstVideo READ gstVideo CONSTANT)
 
 public:
     explicit App(QObject *parent = nullptr);
@@ -149,6 +153,8 @@ public:
     QString videoPlayerPath() const { return m_videoPlayerPath; }
     QString videoPlayerTitle() const;
     qint64 videoPlayerResumeMs() const { return m_videoPlayerResumeMs; }
+    QString videoEngine() const;
+    GstVideoPlayer *gstVideo() { return &m_gstVideo; }
 
     // playlists: keys are "pl:<id>" for the profile's own and "auto:<name>" for built-ins.
     Q_INVOKABLE void selectPlaylist(const QString &key);
@@ -303,6 +309,7 @@ private:
     VideoIndex m_videoIndex;
     VideoScanner m_videoScanner{&m_videoIndex};
     VideoListModel m_videos;
+    GstVideoPlayer m_gstVideo;
     LibraryWatcher m_watcher;
     int m_videoScanDone = 0;
     int m_videoScanTotal = 0;

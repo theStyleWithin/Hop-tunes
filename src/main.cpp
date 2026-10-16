@@ -61,6 +61,12 @@ int main(int argc, char *argv[])
         }
     }
     gst_init(&argc, &argv);
+    // The GStreamer video fallback's QML type (GstVideoSurfaceView.qml, used when
+    // HOPTUNES_HAVE_MPV is off) only self-registers once its plugin .so is actually
+    // loaded — and VideoPlayerView.qml always parses that file's imports at startup,
+    // whichever engine ends up active. Force the load now, before QGuiApplication exists
+    // (verified necessary in exactly that order, not after).
+    if (GstElement *probe = gst_element_factory_make("qml6glsink", nullptr)) gst_object_unref(probe);
 
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));

@@ -45,6 +45,33 @@ bool writeWav(const QString &path, int ms)
     return true;
 }
 
+// A tiny VP8+Opus/Matroska clip (see test_video.cpp for the same recipe).
+bool writeTestVideo(const QString &path, int ms = 1000)
+{
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    GError *err = nullptr;
+    const QByteArray desc =
+        QStringLiteral("videotestsrc num-buffers=%1 ! video/x-raw,width=320,height=240,framerate=25/1 "
+                        "! vp8enc ! matroskamux name=mux ! filesink location=\"%2\" "
+                        "audiotestsrc num-buffers=%1 ! audioconvert ! opusenc ! mux.")
+            .arg(ms * 25 / 1000).arg(path).toUtf8();
+    GstElement *bin = gst_parse_launch(desc.constData(), &err);
+    if (err) { g_error_free(err); err = nullptr; }
+    if (!bin) return false;
+    gst_element_set_state(bin, GST_STATE_PLAYING);
+    GstBus *bus = gst_element_get_bus(bin);
+    bool ok = false;
+    if (GstMessage *msg = gst_bus_timed_pop_filtered(bus, 10 * GST_SECOND,
+            GstMessageType(GST_MESSAGE_EOS | GST_MESSAGE_ERROR))) {
+        ok = GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS;
+        gst_message_unref(msg);
+    }
+    gst_object_unref(bus);
+    gst_element_set_state(bin, GST_STATE_NULL);
+    gst_object_unref(bin);
+    return ok && QFile::exists(path);
+}
+
 void writeBytes(const QString &path, const QByteArray &data)
 {
     QDir().mkpath(QFileInfo(path).absolutePath());
@@ -268,6 +295,30 @@ private slots:
         QVERIFY(big.save(m_home.filePath(QStringLiteral("big.jpg"))));
         QCOMPARE(app.setProfileAvatar(QUrl::fromLocalFile(m_home.filePath(QStringLiteral("big.jpg")))), QString());   // scaled down
         QCOMPARE(QImage(app.profileStore()->avatarPath(app.profile().value("id").toString())).size(), QSize(256, 256));
+        app.player()->setQueue({}, 0);
+    }
+
+    // Opening a video file (file manager "open with", CLI) routes to the video player —
+    // tested here, with no QQmlApplicationEngine/window at all (unlike test_ui), because
+    // hop.videoPlayerOpen becoming true is exactly what makes VideoPlayerView.qml
+    // instantiate a real engine-backed surface item; in a build where that engine is the
+    // GStreamer fallback (HOPTUNES_HAVE_MPV off), doing that under test_ui's software Qt
+    // Quick backend was confirmed (by testing) to crash during window teardown — the same
+    // category of risk already flagged for MpvVideoItem. App-level behaviour belongs here.
+    void openingAVideoFileOpensThePlayer()
+    {
+        App app;
+        QVERIFY(app.init());
+        if (!app.profileReady()) QCOMPARE(app.createProfile(QStringLiteral("Vid"), QStringLiteral("#7cc4ff"), {}, {}), QString());
+        const QString clip = m_home.filePath(QStringLiteral("clip.mkv"));
+        QVERIFY(writeTestVideo(clip));
+
+        QVERIFY(!app.videoPlayerOpen());
+        app.openFiles({clip});
+        QVERIFY(app.videoPlayerOpen());
+        QCOMPARE(QFileInfo(app.videoPlayerPath()).canonicalFilePath(), QFileInfo(clip).canonicalFilePath());
+        app.closeVideoPlayer(0, 0);
+        QVERIFY(!app.videoPlayerOpen());
         app.player()->setQueue({}, 0);
     }
 };

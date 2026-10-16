@@ -24,5 +24,6 @@
     <file>qml/VideoThumb.qml</file>
     <file>qml/VideosView.qml</file>
     <file>qml/VideoPlayerView.qml</file>
+    <file>qml/GstVideoSurfaceView.qml</file>
   </qresource>
 </RCC>

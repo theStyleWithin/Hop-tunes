@@ -73,9 +73,12 @@ music folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, 
   through the tracks it found, including off.
 - **Resume**: closing a video partway through picks up where you left off next time,
   unless you were close enough to the end that it counts as finished.
-- Video needs `libmpv`, a separate dependency from music playback (see **Building**, or
-  your distro package for `libmpv`/`mpv`). If it's missing, the Videos grid still lists
-  files — opening one just won't work, and tells you why.
+- Video plays through `libmpv` if it's installed (see **Building**, or your distro
+  package for `libmpv`/`mpv`), with better subtitle styling and hardware decode. Without
+  it — as in the Flatpak build today — Hop-tunes falls back to GStreamer's own Qt video
+  sink instead, which needs no extra install beyond what Hop-tunes already uses for
+  music. Either way the Videos grid works the same; if truly neither is available,
+  opening a video shows a plain message instead of a crash.
 
 ## Playing music
 

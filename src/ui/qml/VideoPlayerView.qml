@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 import HopTunes.Video
 
 // Full-window video playback (spec §5b). Only ever instantiated while hop.videoPlayerOpen
@@ -29,20 +30,73 @@ Rectangle {
                 readonly property real chrome: idle ? 0.0 : 1.0
                 Component.onCompleted: wake()
 
-                Timer { id: idleTimer; interval: 3500; running: !surface.paused; onTriggered: page.idle = true }
-                Timer { interval: 5000; running: !surface.paused; repeat: true; onTriggered: hop.saveVideoProgress(surface.position, surface.duration) }
+                // Nothing (yet, or hop.videoEngine === "none") until the Loader below
+                // resolves: a null-object stand-in keeps every binding below safe to
+                // evaluate without guarding each one individually.
+                QtObject {
+                    id: nullSurface
+                    readonly property bool paused: true
+                    readonly property bool idle: true
+                    readonly property real position: 0
+                    readonly property real duration: 0
+                    readonly property string hwdecActive: ""
+                    readonly property string error: ""
+                    readonly property var subtitleTracks: []
+                    function play() {}
+                    function pause() {}
+                    function togglePause() {}
+                    function seek(ms) {}
+                    function stop() {}
+                    function setSubtitleTrack(id) {}
+                    function setResumePosition(ms) {}
+                }
+                readonly property var surface: surfaceLoader.item || nullSurface
+
+                Timer { id: idleTimer; interval: 3500; running: !page.surface.paused; onTriggered: page.idle = true }
+                Timer {
+                    interval: 5000; running: !page.surface.paused; repeat: true
+                    onTriggered: hop.saveVideoProgress(page.surface.position, page.surface.duration)
+                }
                 MouseArea { anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton; onPositionChanged: page.wake(); z: 100 }
                 Keys.onPressed: function (e) { page.wake(); e.accepted = false }
 
-                VideoSurface {
-                    id: surface
-                    objectName: "videoSurface"
+                // Two backing engines (spec §5b): VideoSurface (MpvVideoItem, libmpv) where
+                // built with it, GstVideoSurfaceView (GStreamer's qml6glsink) otherwise —
+                // see CMakeLists.txt's HOPTUNES_HAVE_MPV. Both expose the same property/
+                // method surface, so everything below just talks to "surface" either way.
+                Loader {
+                    id: surfaceLoader
                     anchors.fill: parent
-                    Component.onCompleted: {
-                        setResumePosition(hop.videoPlayerResumeMs)
-                        source = hop.videoPlayerPath
-                        play()
+                    sourceComponent: hop.videoEngine === "mpv" ? mpvSurface
+                                     : (hop.videoEngine === "gstreamer" ? gstSurface : null)
+                    onLoaded: {
+                        item.setResumePosition(hop.videoPlayerResumeMs)
+                        // The GStreamer engine wraps Qt's own GL context on open, which
+                        // needs that context to actually exist — true once the window has
+                        // rendered at least one frame, which it normally has long before a
+                        // video is opened, but not guaranteed (confirmed by testing: an
+                        // automated/scripted launch that opens a video within the first
+                        // frame or two hits "could not initialize window system"). One
+                        // real rendered frame, not a guessed delay, removes the race.
+                        function openIt() { item.source = hop.videoPlayerPath; item.play() }
+                        const win = root.Window.window
+                        if (win) {
+                            function onFrame() { win.afterRendering.disconnect(onFrame); openIt() }
+                            win.afterRendering.connect(onFrame)
+                            win.requestUpdate()
+                        } else {
+                            openIt()
+                        }
                     }
+                }
+                Component { id: mpvSurface; VideoSurface { objectName: "videoSurface" } }
+                Component { id: gstSurface; GstVideoSurfaceView { objectName: "videoSurface" } }
+
+                Label {
+                    visible: hop.videoEngine === "none"
+                    anchors.centerIn: parent
+                    text: "no video engine is available in this build"
+                    color: "white"; font { family: Theme.font; pixelSize: 18 }
                 }
 
                 function closeAndBack() {

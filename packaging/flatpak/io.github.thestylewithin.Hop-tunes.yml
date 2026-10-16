@@ -4,14 +4,24 @@
 # good plugins plus gst-libav; AAC, WMA and other codecs come from the runtime's
 # codecs-extra extension, which Flatpak installs with the runtime.
 #
-# Video (spec §5b) is built against libmpv (CMakeLists.txt's `mpv` pkg-config dependency),
-# which is NOT in the KDE runtime and has no module here yet — building it needs its own
-# ffmpeg/libass module chain, which wasn't written here because it couldn't be verified
-# with a real flatpak-builder run in the sandbox this was developed in, and a wrong guess
-# would break every Flatpak build rather than just leave a feature out. Until that module
-# lands, the Flatpak build has no video playback: `collection › videos` scans and lists
-# files normally, but opening one fails (no libmpv.so to load). Audio playback and every
-# other feature are unaffected.
+# Video (spec §5b): the primary engine is libmpv (CMakeLists.txt's `mpv` pkg-config
+# dependency), which is NOT in the KDE runtime and has no module here yet — building it
+# needs its own ffmpeg/libass module chain, which wasn't written here because it couldn't
+# be verified with a real flatpak-builder run in the sandbox this was developed in, and a
+# wrong guess would break every Flatpak build rather than just leave a feature out.
+#
+# Without libmpv, Hop-tunes falls back to a second engine built entirely on GStreamer
+# (gst-plugins-good's qml6glsink + gst-plugins-base's glsinkbin — both ordinary GStreamer
+# plugins, ordinary packages: gstreamer1.0-qt6 and gstreamer1.0-gl on Debian/Ubuntu), which
+# this manifest's `runtime: org.kde.Platform` already pulls GStreamer and Qt6 from. This
+# path was verified end to end in the sandbox this was built in — including real on-screen
+# rendering of a playing video — more than the libmpv path's render code could claim (see
+# SPEC.md §5b). Whether the KDE runtime specifically bundles gstreamer1.0-qt6/-gl (as
+# opposed to just gst-plugins-good/-base's other plugins) is the one thing that couldn't be
+# checked here with no flatpak-builder available: if it does, Flatpak gets real video
+# playback for free; if not, `collection › videos` still scans and lists files normally,
+# opening one just won't work (hop.videoEngine reads "none"), same as before this engine
+# existed. Either way audio playback and every other feature are unaffected.
 id: io.github.thestylewithin.Hop-tunes
 runtime: org.kde.Platform
 runtime-version: '6.11'

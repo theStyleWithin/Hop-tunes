@@ -38,13 +38,13 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 - **M5 (now playing & polish): done.** Crossfade (0–12 s; albums stay gapless), even volume with ReplayGain (per song or per album), shuffle and repeat (also from desktop media widgets), a volume control, dark and light themes (or match the system), smooth transitions with a "reduce motion" option, drag-to-reorder for the queue and playlists, and Now Playing controls that fade away while you listen.
 - **M6 (ship 1.0): done.** Released as [v1.0.0](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0). Flatpak (KDE 6.11 runtime, music folder read-only, other folders through the file chooser), AUR packages `hop-tunes` and `hop-tunes-git`, a user guide, changelog, man page, third-party notices, an About section with keyboard shortcuts, `--help`/`--version`/`--forget-pin`, opening files from a file manager (a second launch reuses the open window), and tagged GitHub releases with the AppImage and Flatpak attached. Version 1.0.0.
 - **AppImage:** [download it from the v1.0.0 release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0). Portable build for glibc 2.35+ distros, tested on 18 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
-- **M7 (video): built.** A `collection › videos` grid (scanning, thumbnails, codec/resolution/HDR badges) and a video player on `libmpv`, with hardware decode (`hwdec=auto-safe`), subtitle auto-loading and resume position. Builds, passes its tests and runs — **not yet verified on real GPU hardware or a real display** (built in a sandboxed environment with neither); see [`SPEC.md` §5b](SPEC.md#5b-video-modern-resolutions-including-4k) for exactly what's checked and what isn't. Not in the Flatpak build yet (libmpv isn't packaged there); AppImage, AUR and a plain build all have it.
+- **M7 (video): built.** A `collection › videos` grid (scanning, thumbnails, codec/resolution/HDR badges) and a video player with two engines: **libmpv** (richer subtitle styling, hardware decode via `hwdec=auto-safe`) where it's available, falling back to **GStreamer** (`qml6glsink`) where it isn't — currently the Flatpak build, since libmpv isn't packaged there yet. Both engines auto-load subtitles and remember a resume position. The GStreamer path was verified with real on-screen rendering (a real video, visibly playing); the libmpv path's render code follows mpv's documented API but couldn't be checked against a real GPU or display in the sandbox this was built in — see [`SPEC.md` §5b](SPEC.md#5b-video-modern-resolutions-including-4k) for exactly what's checked and what isn't. AppImage, AUR and a plain build all ship libmpv.
 
 **New in M7: video**
 
-| videos grid |
-|---|
-| ![videos](design/app/m7-videos.png) |
+| videos grid | playing (GStreamer fallback engine) |
+|---|---|
+| ![videos](design/app/m7-videos.png) | ![playing](design/app/m7-video-playing-gstreamer-fallback.png) |
 
 **New in M5: polish, themes and playback options**
 
@@ -91,11 +91,14 @@ sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative taglib s
 sudo apt install cmake ninja-build g++ pkg-config qt6-base-dev qt6-declarative-dev \
     qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs \
     qml6-module-qtquick-templates qml6-module-qtqml-workerscript \
-    libtag1-dev libsqlite3-dev libmpv-dev libgstreamer1.0-dev gstreamer1.0-plugins-good gstreamer1.0-libav
+    libtag1-dev libsqlite3-dev libmpv-dev libgstreamer1.0-dev gstreamer1.0-plugins-good gstreamer1.0-libav \
+    gstreamer1.0-gl gstreamer1.0-qt6
 ```
 
-`libmpv`/`mpv` is video playback (spec §5b); everything else still builds and runs without
-it (`collection › videos` just can't open anything) if it's ever missing.
+`libmpv`/`mpv` is the primary video engine (spec §5b); without it, Hop-tunes falls back to
+`gstreamer1.0-gl` + `gstreamer1.0-qt6` (GStreamer's own Qt video sink) instead — have
+either one and video works, have neither and `collection › videos` still lists files, it
+just can't open them.
 
 **Build, test, run**
 ```sh

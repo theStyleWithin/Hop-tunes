@@ -5,6 +5,7 @@
 #include "library/Smart.h"
 #include "library/TagReader.h"
 #include "library/VideoProbe.h"
+#include "playback/GstVideoPlayer.h"
 
 #include <QCoreApplication>
 #include <QColor>
@@ -522,6 +523,15 @@ void App::reloadVideos()
 QString App::videoPlayerTitle() const
 {
     return m_videoPlayerPath.isEmpty() ? QString() : QFileInfo(m_videoPlayerPath).completeBaseName();
+}
+
+QString App::videoEngine() const
+{
+#ifdef HOPTUNES_HAVE_MPV
+    return QStringLiteral("mpv");
+#else
+    return GstVideoPlayer::available() ? QStringLiteral("gstreamer") : QStringLiteral("none");
+#endif
 }
 
 void App::playVideo(int row)

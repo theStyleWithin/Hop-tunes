@@ -7,6 +7,7 @@
 #include "library/VideoProbe.h"
 #include "library/VideoScanner.h"
 #include "library/VideoThumbnail.h"
+#include "playback/GstVideoPlayer.h"
 #include "playback/MpvCore.h"
 
 #include <QFile>
@@ -191,6 +192,64 @@ private slots:
         QVERIFY(core.open(clip));
         QVERIFY(loaded.wait(10000));
         QTRY_VERIFY_WITH_TIMEOUT(!core.subtitleTracks().isEmpty(), 3000);
+    }
+
+    // The GStreamer fallback engine (spec §5b, used when HOPTUNES_HAVE_MPV is off —
+    // currently Flatpak). HOPTUNES_VIDEO_SINK=fakesink bypasses the real qml6glsink/
+    // glsinkbin chain entirely (same idea as HOPTUNES_AUDIO_SINK for Player.cpp), so this
+    // doesn't depend on those plugins being installed, and attachSurface(nullptr) is valid
+    // — nothing here needs a real QQuickItem, unlike the on-screen render path.
+    void gstVideoPlayerLoadsPlaysSeeksAndReportsDuration()
+    {
+        QTemporaryDir dir;
+        const QString clip = dir.filePath(QStringLiteral("clip.mkv"));
+        QVERIFY(writeTestClip(clip, 320, 240, 2000));
+
+        qputenv("HOPTUNES_VIDEO_SINK", "fakesink sync=true");
+        GstVideoPlayer player;
+        player.attachSurface(nullptr);
+        QVERIFY2(player.error().isEmpty(), qPrintable(player.error()));
+
+        QSignalSpy loaded(&player, &GstVideoPlayer::fileLoaded);
+        QSignalSpy durationChanged(&player, &GstVideoPlayer::durationChanged);
+        QVERIFY(player.openSource(clip));
+        QVERIFY(loaded.wait(10000));
+        QVERIFY(durationChanged.wait(5000) || player.duration() > 0);
+        QVERIFY(player.duration() > 1500 && player.duration() < 2600);
+        QVERIFY(!player.paused());
+
+        player.pause();
+        QTRY_VERIFY_WITH_TIMEOUT(player.paused(), 2000);
+
+        player.seek(1000);
+        QTRY_VERIFY_WITH_TIMEOUT(player.position() > 500, 3000);
+
+        player.play();
+        QTRY_VERIFY_WITH_TIMEOUT(!player.paused(), 2000);
+        qunsetenv("HOPTUNES_VIDEO_SINK");
+    }
+
+    void gstVideoPlayerFindsSidecarSubtitle()
+    {
+        QTemporaryDir dir;
+        const QString clip = dir.filePath(QStringLiteral("movie.mkv"));
+        QVERIFY(writeTestClip(clip, 320, 240, 1000));
+        QFile srt(dir.filePath(QStringLiteral("movie.srt")));
+        QVERIFY(srt.open(QIODevice::WriteOnly | QIODevice::Text));
+        // GStreamer's SRT typefind needs more than a one-liner to commit to a match
+        // (confirmed by testing — real subtitle files are never this short anyway).
+        QTextStream(&srt) << "1\n00:00:00,000 --> 00:00:00,900\nHello, this is a test subtitle line.\n\n"
+                              "2\n00:00:00,900 --> 00:00:01,900\nA second line to pad the file out a little more.\n\n";
+        srt.close();
+
+        qputenv("HOPTUNES_VIDEO_SINK", "fakesink sync=true");
+        GstVideoPlayer player;
+        player.attachSurface(nullptr);
+        QSignalSpy loaded(&player, &GstVideoPlayer::fileLoaded);
+        QVERIFY(player.openSource(clip));
+        QVERIFY(loaded.wait(10000));
+        QTRY_VERIFY_WITH_TIMEOUT(!player.subtitleTracks().isEmpty(), 3000);
+        qunsetenv("HOPTUNES_VIDEO_SINK");
     }
 
     void resumePositionRoundTripsAndForgetsWhenFinished()

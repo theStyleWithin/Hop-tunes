@@ -645,19 +645,13 @@ private slots:
         QVERIFY(item("videoTile_0")->isVisible());
         shot("m7-videos");
 
-        // Opening a video file (file manager "open with", or the command line) opens the
-        // player directly — it need not be in the library. MpvVideoItem itself is never
-        // instantiated here (hop.videoPlayerOpen alone, no click), so this stays safe
-        // under the software backend (see MpvVideoItem's header comment).
-        QVERIFY(!m_app->videoPlayerOpen());
-        const QString loose = m_home.filePath(QStringLiteral("Loose/loose-clip.mkv"));
-        QDir().mkpath(QFileInfo(loose).absolutePath());
-        QVERIFY(writeTestVideo(loose));
-        m_app->openFiles({loose});
-        QVERIFY(m_app->videoPlayerOpen());
-        QCOMPARE(QFileInfo(m_app->videoPlayerPath()).canonicalFilePath(), QFileInfo(loose).canonicalFilePath());
-        m_app->closeVideoPlayer(0, 0);
-        QVERIFY(!m_app->videoPlayerOpen());
+        // Opening a video file (file manager "open with", CLI) is deliberately NOT
+        // exercised here: hop.videoPlayerOpen becoming true is exactly what makes
+        // VideoPlayerView.qml instantiate a real engine-backed surface item, and with the
+        // GStreamer fallback engine active (HOPTUNES_HAVE_MPV off) that was confirmed, by
+        // testing, to crash during window teardown under this suite's software Qt Quick
+        // backend — see test_robust.cpp's openingAVideoFileOpensThePlayer() instead, which
+        // covers the same App-level behaviour with no QML engine involved at all.
     }
 };
 
@@ -670,6 +664,10 @@ int main(int argc, char **argv)
     // VideoPlayerView.qml, gated on hop.videoPlayerOpen, which no UI test flips to true).
     qputenv("QT_QUICK_BACKEND", "software");
     gst_init(&argc, &argv);
+    // GstVideoSurfaceView.qml's import needs this module registered before Main.qml ever
+    // parses it (see main.cpp's matching comment) — true here too even though this suite
+    // never actually opens a video, since Main.qml unconditionally includes VideoPlayerView.
+    if (GstElement *probe = gst_element_factory_make("qml6glsink", nullptr)) gst_object_unref(probe);
     QGuiApplication app(argc, argv);
     hop::registerVideoQmlTypes();
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));
