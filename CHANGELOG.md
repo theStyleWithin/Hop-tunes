@@ -4,7 +4,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [1.0.0] - 2026-10-15
 
-First stable release.
+First release, feature complete.
+
+> **Download at your own risk.** Hop-tunes 1.0 passes its automated test suite on 16 Linux
+> distributions, but it has not yet been tested by the developer on real hardware. If you
+> choose to try it, you do so at your own risk. Running it in a virtual machine is recommended.
+> See [which distros it runs on](https://github.com/theStyleWithin/Hop-tunes/blob/main/docs/COMPATIBILITY.md).
 
 ### Added
 - **Local profiles** instead of accounts: a "who's listening?" picker, optional PIN (a privacy
