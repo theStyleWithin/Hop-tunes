@@ -82,6 +82,20 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.0" date="2026-10-16">
+      <description>
+        <p>M7: video playback, and a step further toward always-offline.</p>
+        <ul>
+          <li>A collection › videos grid with thumbnails, codec/resolution/HDR badges, and
+            a full-window player (libmpv, falling back to GStreamer where it isn't available)
+            with subtitles and resume position</li>
+          <li>Live library updates: a song or video dropped into a watched folder appears
+            without a manual rescan</li>
+          <li>The planned MusicBrainz lookup and podcasts (RSS) features were dropped before
+            being built — neither fits an always-offline player</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-10-15">
       <description>
         <p>First stable release.</p>
