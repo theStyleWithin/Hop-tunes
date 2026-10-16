@@ -41,6 +41,12 @@ ApplicationWindow {
         z: 10
     }
 
+    VideoPlayerView {
+        anchors.fill: parent
+        visible: hop.profileReady && hop.videoPlayerOpen
+        z: 20
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0

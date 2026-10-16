@@ -4,6 +4,8 @@
 #include "core/Paths.h"
 #include "library/Smart.h"
 #include "library/TagReader.h"
+#include "library/VideoProbe.h"
+#include "playback/GstVideoPlayer.h"
 
 #include <QCoreApplication>
 #include <QColor>
@@ -38,7 +40,27 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         emit scanningChanged();
         if (added || updated || removed || m_songs.count() == 0) reload();
         if (m_rescanPending) { m_rescanPending = false; rescan(); }
+        m_watcher.setFolders(m_folders);   // pick up any subfolder the scan just found
     });
+
+    // Video (spec §5b): kept as its own scanner/index (see VideoScanner's header comment),
+    // but driven by the same "folders" list and the same rescan()/reload() call sites.
+    m_videoScanner.setThumbCacheDir(Paths::videoThumbCacheDir());
+    connect(&m_videoScanner, &VideoScanner::started, this, &App::videoScanProgressChanged);
+    connect(&m_videoScanner, &VideoScanner::progress, this, [this](int done, int total) {
+        m_videoScanDone = done;
+        m_videoScanTotal = total;
+        emit videoScanProgressChanged();
+    });
+    connect(&m_videoScanner, &VideoScanner::finished, this, [this](int added, int updated, int removed, int) {
+        emit videoScanProgressChanged();
+        if (added || updated || removed || m_videos.count() == 0) reloadVideos();
+        if (m_videoScanRescanPending) { m_videoScanRescanPending = false; m_videoScanner.start(m_folders); }
+        m_watcher.setFolders(m_folders);
+    });
+    // Live library updates (spec §6): a local inotify watch, nothing more — see
+    // LibraryWatcher's header comment. Debounced, so one rescan covers a whole copy.
+    connect(&m_watcher, &LibraryWatcher::changed, this, [this] { rescan(); });
     for (TrackListModel *m : {&m_songs, &m_albumSongs, &m_playlistSongs}) m->setStats(&m_stats);
     m_openTimer.setSingleShot(true);
     m_openTimer.setInterval(250);
@@ -69,6 +91,7 @@ App::~App()
 {
     saveProfileSettings();
     m_scanner.cancel();
+    m_videoScanner.cancel();
 }
 
 bool App::init()
@@ -83,6 +106,13 @@ bool App::init()
             qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::indexDbPath()), qPrintable(m_index.lastError()));
             return false;
         }
+    }
+    if (!m_videoIndex.open(Paths::videoIndexDbPath())) {
+        qWarning("hop-tunes: video index unreadable (%s); rebuilding it", qPrintable(m_videoIndex.lastError()));
+        m_videoIndex.close();
+        setAside(Paths::videoIndexDbPath());
+        if (!m_videoIndex.open(Paths::videoIndexDbPath()))
+            qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::videoIndexDbPath()), qPrintable(m_videoIndex.lastError()));
     }
     if (!m_store.load()) {
         // Never overwrite an unreadable profile list: set it aside and start fresh.
@@ -307,6 +337,8 @@ void App::leaveProfile()
     m_player.setQueue({}, 0);
     m_listen = {};
     m_scanner.cancel();
+    m_videoScanner.cancel();
+    m_videoPlayerOpen = false;
     m_db.close();
     m_stats.clear();
     m_search.clear();
@@ -399,6 +431,8 @@ QString App::removeProfile()
     m_player.setQueue({}, 0);
     m_listen = {};
     m_scanner.cancel();
+    m_videoScanner.cancel();
+    m_videoPlayerOpen = false;
     m_db.close();
     m_stats.clear();
     m_profileId.clear();          // nothing is written back for a profile being removed
@@ -435,10 +469,19 @@ void App::removeFolder(const QString &path)
 void App::rescan()
 {
     if (m_folders.isEmpty()) return;
-    if (m_scanner.isRunning()) { m_rescanPending = true; return; }   // e.g. right after a profile switch
-    m_scanDone = m_scanTotal = 0;
-    emit scanProgressChanged();
-    m_scanner.start(m_folders);
+    if (m_scanner.isRunning()) m_rescanPending = true;   // e.g. right after a profile switch
+    else {
+        m_scanDone = m_scanTotal = 0;
+        emit scanProgressChanged();
+        m_scanner.start(m_folders);
+    }
+    if (m_videoScanner.isRunning()) m_videoScanRescanPending = true;
+    else {
+        m_videoScanDone = m_videoScanTotal = 0;
+        emit videoScanProgressChanged();
+        m_videoScanner.start(m_folders);
+    }
+    m_watcher.setFolders(m_folders);
 }
 
 void App::playSongs(int row)
@@ -469,6 +512,54 @@ void App::reload()
     applySearch();
     refreshPlaylist();
     refreshQuickplay();
+    reloadVideos();
+}
+
+void App::reloadVideos()
+{
+    m_videos.setVideos(m_videoIndex.videosUnder(m_folders));
+}
+
+QString App::videoPlayerTitle() const
+{
+    return m_videoPlayerPath.isEmpty() ? QString() : QFileInfo(m_videoPlayerPath).completeBaseName();
+}
+
+QString App::videoEngine() const
+{
+#ifdef HOPTUNES_HAVE_MPV
+    return QStringLiteral("mpv");
+#else
+    return GstVideoPlayer::available() ? QStringLiteral("gstreamer") : QStringLiteral("none");
+#endif
+}
+
+void App::playVideo(int row)
+{
+    if (row < 0 || row >= m_videos.count()) return;
+    openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::openVideoFile(const QString &path)
+{
+    m_videoPlayerPath = path;
+    m_videoPlayerResumeMs = m_db.isOpen() ? m_db.videoProgress(path).positionMs : 0;
+    m_videoPlayerOpen = true;
+    emit videoPlayerChanged();
+}
+
+void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)
+{
+    saveVideoProgress(positionMs, durationMs);
+    m_videoPlayerOpen = false;
+    m_videoPlayerPath.clear();
+    emit videoPlayerChanged();
+}
+
+void App::saveVideoProgress(qint64 positionMs, qint64 durationMs)
+{
+    if (m_db.isOpen() && !m_videoPlayerPath.isEmpty() && positionMs > 0)
+        m_db.setVideoProgress(m_videoPlayerPath, positionMs, durationMs);
 }
 
 void App::applySearch()
@@ -579,7 +670,7 @@ int App::selectedAlbumYear() const
     return a ? a->year : 0;
 }
 
-void App::saveFolders() { saveProfileSettings(); }
+void App::saveFolders() { saveProfileSettings(); m_watcher.setFolders(m_folders); }
 
 // ---- listening stats ----------------------------------------------------------------
 // A play counts once half the song (or 4 minutes) has been heard; moving on before that
@@ -1000,14 +1091,19 @@ void App::openFiles(const QStringList &pathsOrUris)
     if (pathsOrUris.isEmpty()) return;
     if (!profileReady()) { m_pendingOpen += pathsOrUris; return; }
     QList<Track> q;
-    auto add = [this, &q](const QFileInfo &fi) {
-        if (!fi.isFile() || !TagReader::isAudioFile(fi)) return;
-        const QString path = fi.canonicalFilePath();
-        const int i = m_libraryIndex.value(path, -1);
-        if (i >= 0) { q.append(m_library[i]); return; }
-        Track t = TagReader::read(QFileInfo(path));
-        t.path = path;
-        q.append(t);
+    QString firstVideo;   // the video player shows one video, not a queue (spec §5b)
+    auto add = [this, &q, &firstVideo](const QFileInfo &fi) {
+        if (!fi.isFile()) return;
+        if (TagReader::isAudioFile(fi)) {
+            const QString path = fi.canonicalFilePath();
+            const int i = m_libraryIndex.value(path, -1);
+            if (i >= 0) { q.append(m_library[i]); return; }
+            Track t = TagReader::read(QFileInfo(path));
+            t.path = path;
+            q.append(t);
+        } else if (firstVideo.isEmpty() && VideoProbe::isVideoFile(fi)) {
+            firstVideo = fi.canonicalFilePath();
+        }
     };
     for (const QString &item : pathsOrUris) {
         const QString path = item.startsWith(QLatin1String("file:"), Qt::CaseInsensitive) ? QUrl(item).toLocalFile() : item;
@@ -1022,6 +1118,7 @@ void App::openFiles(const QStringList &pathsOrUris)
             add(fi);
         }
     }
+    if (!firstVideo.isEmpty()) openVideoFile(firstVideo);
     if (q.isEmpty()) return;
     m_djSeed.clear();
     emit djChanged();

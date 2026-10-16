@@ -18,6 +18,7 @@ pkgbase = hop-tunes-git
 	depends = gstreamer
 	depends = gst-plugins-base
 	depends = gst-plugins-good
+	depends = mpv
 	depends = hicolor-icon-theme
 	optdepends = gst-libav: AAC, ALAC and WMA playback
 	optdepends = gst-plugins-ugly: more MP3 and WMA files

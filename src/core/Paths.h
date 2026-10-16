@@ -13,6 +13,8 @@ namespace Paths {
     QString profilesDir();    // dataDir()/profiles  (profiles.json + one folder per profile)
     QString cacheDir();       // $XDG_CACHE_HOME/hop-tunes
     QString artCacheDir();    // cacheDir()/art  (extracted cover images, content-addressed)
+    QString videoIndexDbPath();  // sharedDir()/videos.sqlite (spec §5b)
+    QString videoThumbCacheDir(); // cacheDir()/video-thumbs (frame grabs, content-addressed)
     bool ensureDirs();        // create the directories above (0700)
 }
 

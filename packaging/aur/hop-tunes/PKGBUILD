@@ -7,7 +7,7 @@ arch=('x86_64' 'aarch64')
 url="https://github.com/theStyleWithin/Hop-tunes"
 license=('GPL-3.0-or-later')
 depends=('qt6-base' 'qt6-declarative' 'taglib' 'sqlite' 'glib2'
-         'gstreamer' 'gst-plugins-base' 'gst-plugins-good'
+         'gstreamer' 'gst-plugins-base' 'gst-plugins-good' 'mpv'
          'hicolor-icon-theme')
 optdepends=('gst-libav: AAC, ALAC and WMA playback'
             'gst-plugins-ugly: more MP3 and WMA files'

@@ -58,6 +58,28 @@ APE, Musepack and WMA. It scans in the background and only re-reads files that c
   title, artist, album or genre; case and accents don't matter, so "beyonce" finds "Beyoncé".
   `Esc` clears it.
 
+## Your videos
+
+Hop-tunes also plays video — `collection → videos` lists anything it finds under your
+music folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, `.ts`,
+`.m2ts`). Click a tile to play it full-window.
+
+- **Badges** on each tile show resolution (SD/720p/1080p/1440p/4K), codec and HDR, from a
+  quick probe at scan time.
+- **Hardware decoding** is used automatically when available, with a safe fallback to
+  software decoding — nothing to configure.
+- **Subtitles** load automatically: embedded tracks, or a same-named `.srt`/`.ass` file
+  next to the video (`movie.mkv` + `movie.srt`). The "CC" button in the player cycles
+  through the tracks it found, including off.
+- **Resume**: closing a video partway through picks up where you left off next time,
+  unless you were close enough to the end that it counts as finished.
+- Video plays through `libmpv` if it's installed (see **Building**, or your distro
+  package for `libmpv`/`mpv`), with better subtitle styling and hardware decode. Without
+  it — as in the Flatpak build today — Hop-tunes falls back to GStreamer's own Qt video
+  sink instead, which needs no extra install beyond what Hop-tunes already uses for
+  music. Either way the Videos grid works the same; if truly neither is available,
+  opening a video shows a plain message instead of a crash.
+
 ## Playing music
 
 - **Double-click** a song (or press `Enter`) to play from there. **Play album** plays the
@@ -71,9 +93,10 @@ APE, Musepack and WMA. It scans in the background and only re-reads files that c
   move it, click it to jump there, or use `×` to take it out. The controls fade away after a
   few seconds; move the mouse to bring them back.
 - **Hearts** (♡) mark favourites. They collect in the *hearted* list and guide the smart DJ.
-- **Opening files**: open music files or folders with Hop-tunes from your file manager, or run
-  `hop-tunes song.flac some-folder/`. They start playing even if they're not in your music
-  folders. If Hop-tunes is already open, they go to that window.
+- **Opening files**: open music or video files, or folders, with Hop-tunes from your file
+  manager, or run `hop-tunes song.flac movie.mkv some-folder/`. They start playing even if
+  they're not in your music folders (a video opens the player directly). If Hop-tunes is
+  already open, they go to that window.
 
 ## Playlists
 

@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** v1.0 (M1–M6 built; release tag pending) · **Date:** 2026-10-15 · **Platform:** Linux first
+**Status:** v1.0 shipped; M7 (video) built · **Date:** 2026-10-16 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -21,9 +21,9 @@ Hop-tunes is a simple, fast, local-first music player for Linux. Its organisatio
 | Zune / Microsoft / Windows Live sign-in | The core design principle: no accounts |
 | Marketplace, Zune Pass, rentals, purchases | The services are gone, and selling content is out of scope |
 | Zune Social, friends, cards | Needs a server and accounts |
-| Zune / KIN / Windows Phone device sync, MTPZ | Removed to stay simple and avoid MTPZ legal issues (may be revisited as a separate plugin later, see §11) |
+| Zune / KIN / Windows Phone device sync, MTPZ | Removed to stay simple and avoid MTPZ legal issues (may be revisited as a separate plugin later, see §10) |
 | Telemetry or "phone home" of any kind | Privacy |
-| Microsoft trademarks, logos, fonts, sounds, art | Legal: see §10 |
+| Microsoft trademarks, logos, fonts, sounds, art | Legal: see §9 |
 
 ---
 
@@ -46,7 +46,7 @@ A **profile** is a local, offline container for one person's listening world. It
 - **Launch:**
   - With one profile, it opens straight into it. No picker.
   - With two or more, a profile picker shows big tiles (name, avatar, accent colour), plus "Add profile".
-- **Optional PIN** per profile (4–8 digits). This is a **privacy curtain, not security**: it stops casual browsing, but anyone with access to the OS account can read the files. The UI says so plainly. An optional "encrypt this profile" mode is a later milestone (§12).
+- **Optional PIN** per profile (4–8 digits). This is a **privacy curtain, not security**: it stops casual browsing, but anyone with access to the OS account can read the files. The UI says so plainly. An optional "encrypt this profile" mode is a later milestone (§11).
 - **Switching** profiles from the top bar never needs a restart. Playback stops on switch.
 - **Removing** a profile deletes only that profile's data (playlists, history, settings). It **never** deletes music files.
 - **Guest mode:** a temporary profile that keeps no history and is wiped on exit.
@@ -61,7 +61,6 @@ A **profile** is a local, offline container for one person's listening world. It
 | Play counts, last played, skips, ratings, "hearts" | Per profile | |
 | Quickplay pins, history | Per profile | |
 | Settings (theme, accent, EQ, crossfade, ReplayGain, layout) | Per profile | |
-| Podcast subscriptions | Per profile | |
 
 A profile only *sees* tracks that live under its own watched folders, even though the index is shared.
 
@@ -101,7 +100,7 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ### 4.1 Navigation model
 - **Top pivots** in large lowercase type: **collection · now playing · quickplay · settings**.
-- Collection has **sub-pivots**: **music · videos · pictures · podcasts**. *v1 ships music*; **videos** follows in v1.1 (§5b); pictures comes later.
+- Collection has **sub-pivots**: **music · videos · pictures**. *v1 ships music*; **videos** follows in v1.1 (§5b); pictures comes later.
 - Inside music: **artists · albums · songs · genres · playlists**.
 - Navigation is flat and text-led, with no toolbar clutter. Back/forward arrows sit top-left, and a persistent **mini player** sits along the bottom.
 
@@ -146,12 +145,43 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 | ReplayGain (track/album), with tag fallback scanning | ✓ | *M5 uses the gain tags in the files (rgvolume + rglimiter, pre-amp ±15 dB, −6 dB for untagged songs). Scanning untagged files to compute their gain is left for a later release.* |
 | 10-band EQ + presets | v1.1 | Per profile |
 | Shuffle, repeat one/all, queue, play next | ✓ | *Shuffle keeps the playing song and restores the original order when switched off; repeat and shuffle are also controllable from desktop media widgets (MPRIS LoopStatus/Shuffle).* |
-| Playback speed for podcasts | v1.2 | `scaletempo` |
 | Resume position for long tracks / audiobooks (`.m4b`) | v1.1 | |
 
 ---
 
-## 5b. Video (modern resolutions, including 4K)
+## 5b. Video (modern resolutions, including 4K) ✅ M7
+
+*Implementation status: built and tested — probing, scanning, thumbnails, resume
+persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with
+unit tests. Two engines exist, chosen at build time and reported at runtime as
+`hop.videoEngine` ("mpv" | "gstreamer" | "none"):
+- **libmpv** (`MpvCore`/`MpvVideoItem`), the primary engine — the spec's original choice,
+  richer subtitle styling (ASS/SSA), `hwdec=auto-safe`. Its render-thread glue follows
+  mpv's documented render API precisely, but that on-screen render path could **not** be
+  exercised in the sandbox this was built in (no GPU, no attached display) — "follows the
+  docs" and "proven on real hardware" are different claims, and the performance targets
+  below are the spec's design goals, not measured results.
+- **GStreamer** (`GstVideoPlayer`/`GstVideoSurfaceView.qml`, via gst-plugins-good's
+  `qml6glsink` + gst-plugins-base's `glsinkbin` — ordinary GStreamer plugins, no new kind
+  of dependency), the fallback used when libmpv isn't available (`HOPTUNES_HAVE_MPV` off
+  — currently the Flatpak build; see its manifest's comment on whether the KDE runtime
+  actually ships those two plugins). Unlike the mpv path, this one **was** verified with
+  real on-screen rendering end to end (software GL via llvmpipe under Xvfb in that same
+  sandbox — a real frame of a real test video, visibly advancing; see the commit history
+  for how) — more than the mpv path's render code can currently claim.
+- **Neither** (`hop.videoEngine === "none"`): the Videos grid still scans, probes and
+  lists files; opening one shows a plain "no video engine is available" message instead
+  of a crash.
+
+One deliberate deviation from this section as originally written: audio and video do
+**not** share one literal C++ `PlaybackEngine` interface — three engines now (GStreamer
+`Player` for music, libmpv, GStreamer-via-qml6glsink for video) stay fully separate,
+unified only where the UI actually needs one shared idea (MPRIS, the App-level API,
+VideoPlayerView.qml's property surface), which was simpler and lower-risk than forcing a
+shared abstraction over unrelated native APIs. Deferred, not built: chapters on the seek
+bar, a per-profile default subtitle language (each engine's own auto-selection is used
+instead), an explicit 5.1/7.1 downmix control (each engine's audio output handles this on
+its own), and the optional Jellyfin-folder note below.*
 
 Zune 4.8 (built August 2011, codename "Dorado") is a **32-bit** app with its **own bundled 2011-era decoders** (`ZuneH264Dec.dll`, `ZUNEMP4SDECD.dll`, `ZuneDXVA2.dll`, `ZuneEvr.dll`), and it ignores the system's codecs. That explains why it falls over on modern HD/4K files. It wasn't built for:
 - **H.264 at 4K** (High profile, level 5.1/5.2), which is beyond what 2011 PC media players were tuned for;
@@ -190,7 +220,7 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 ### Library side
 - The **Videos** pivot lists items by type: movies, shows (series → season → episode, from folder names or filename patterns), music videos and other.
 - Thumbnails come from a frame grab, cached in `$XDG_CACHE_HOME`.
-- Video metadata is read with ffprobe-style probing at scan time (resolution, codec, HDR flag, duration). Badges like **4K · HDR · HEVC** appear on the tiles.
+- Video metadata is probed at scan time via GStreamer's `GstDiscoverer` (resolution, codec, duration; HDR is a heuristic — a BT.2020 colorimetry hint in the negotiated caps, not a full transfer-function check). Badges like **4K · HDR · HEVC** appear on the tiles.
 - Optional: point a Videos folder at the same library you already serve with Jellyfin. Hop-tunes only reads the files and never modifies Jellyfin's data.
 
 ---
@@ -202,8 +232,12 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 - **Tags:** read via TagLib (ID3v1/v2, Vorbis comments, MP4 atoms, APE, ASF/WMA). Handles album artist, compilations, disc numbers, and sort tags (`ALBUMARTISTSORT`, …).
 - **Artwork:** embedded art, then `cover.jpg`/`folder.jpg` in the folder, then a placeholder tile generated from album name + accent colour.
 - **Tag editing:** single and bulk edit, written back to the files (with a confirmation dialog), or stored only in Hop-tunes (a per-profile override, so the files stay untouched).
-- **Optional online metadata:** MusicBrainz / Cover Art Archive lookup. **Off by default**; switching it on is an explicit opt-in per profile, with no account needed.
 - **Import:** `.m3u` / `.m3u8` / `.pls` / `.xspf` playlists, and `.zpl` (Zune/WMP playlist XML) for people migrating from Zune.
+- *Implementation note (post-M7):* folders are watched live via inotify (`QFileSystemWatcher`),
+  debounced about 1.5 s after the last change, so a song or video dropped into a watched
+  folder appears without a manual rescan. Purely local file-system notification — no
+  network, nothing "phoned home" — the same offline guarantee as everything else here. A
+  manual "rescan" action remains for drives that were offline when something changed.
 
 ---
 
@@ -224,16 +258,9 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 
 ---
 
-## 8. Podcasts (v1.2, optional)
-- Subscribe by RSS URL or OPML import. No account.
-- Download or stream episodes, track played/unplayed state, auto-delete played episodes.
-- Network access happens only for podcasts and only when the user adds a feed.
+## 8. Architecture
 
----
-
-## 9. Architecture
-
-### 9.1 Recommended stack
+### 8.1 Recommended stack
 | Layer | Choice | Why |
 |---|---|---|
 | UI | **Qt 6 + QML** | Fluid animation and typography-heavy layouts are natural in QML. Native on KDE/CachyOS, good on GNOME, works on Steam Deck |
@@ -246,7 +273,7 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 | Packaging | Flatpak (Flathub), AppImage, AUR | |
 | Licence | **GPL-3.0-or-later** | Fits Qt (LGPL), GStreamer and TagLib; keeps forks open |
 
-### 9.2 Modules
+### 8.2 Modules
 ```
 hop-tunes/
 ├── src/core/        profiles, settings, paths, PIN hashing
@@ -260,7 +287,7 @@ hop-tunes/
 └── tests/
 ```
 
-### 9.3 Core data model (simplified)
+### 8.3 Core data model (simplified)
 ```
 shared/index.sqlite
   track(id, path UNIQUE, mtime, size, duration_ms, codec, bitrate, sample_rate,
@@ -280,7 +307,7 @@ profiles/<id>/profile.sqlite
 
 ---
 
-## 10. Legal and clean-room rules
+## 9. Legal and clean-room rules
 
 Hop-tunes is an **independent, original program**. It is inspired by how Zune behaved, and contains no Zune code or assets.
 
@@ -295,7 +322,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 
 ---
 
-## 11. Possible future (out of scope for v1)
+## 10. Possible future (out of scope for v1)
 - Pictures pivot.
 - Optional "sync to a folder / generic MTP player / phone" through a plugin (plain MTP via libmtp, **no** MTPZ).
 - Encrypted profiles (SQLCipher + key from PIN).
@@ -304,7 +331,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 
 ---
 
-## 12. Milestones
+## 11. Milestones
 
 | Milestone | Scope | Done when |
 |---|---|---|
@@ -315,12 +342,12 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | **M4: Playlists & Quickplay** ✅ | Manual + smart playlists, auto lists, import m3u/m3u8/pls/xspf/zpl/wpl, export m3u8, Quickplay pins/history/new, smart DJ, instant search, hearts and play counts per profile, play next / add to queue | — |
 | **M5: Now Playing & polish** ✅ | Art mosaic, transitions, themes/accents, ReplayGain, crossfade; also repeat/shuffle, volume in the mini player, drag reordering, idle-fading Now Playing controls | Feels "seamless" |
 | **M6: Ship 1.0** ✅ | Flatpak, AppImage, AUR, user docs; also man page, third-party notices, About section, opening files with single-instance hand-off, tagged releases | Published as v1.0.0 |
-| **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |
-| 1.1 / 1.2 | EQ, tag editing write-back, podcasts | — |
+| **M7: Video** ✅ | libmpv engine, Videos pivot, scanning/probing/thumbnails, subtitles, resume, `hwdec=auto-safe` | Builds, passes its tests, and runs — see §5b's implementation note for what's verified on real hardware vs. not |
+| 1.1 | EQ, tag editing write-back | — |
 
 ---
 
-## 13. Open questions
+## 12. Open questions
 
 - *Known GStreamer issue (found in M5 testing):* with GStreamer 1.24's playbin3 and an audio
   output running faster than real time (a test-only setup), skipping at the exact moment of a

@@ -10,7 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(HOPTUNES_BUILD_APP   "Build the desktop application" ON)
 option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(TAGLIB  REQUIRED IMPORTED_TARGET taglib)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
@@ -29,6 +29,10 @@ add_library(hoptunes_core STATIC
     src/library/CollectionModels.h src/library/CollectionModels.cpp
     src/library/TrackListModel.h src/library/TrackListModel.cpp
     src/library/Scanner.h     src/library/Scanner.cpp
+    src/library/Video.h
+    src/library/VideoIndex.h  src/library/VideoIndex.cpp
+    src/library/VideoListModel.h src/library/VideoListModel.cpp
+    src/library/LibraryWatcher.h src/library/LibraryWatcher.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3)
@@ -37,25 +41,56 @@ target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
+# Video (spec §5b): GstDiscoverer + a frame-grab pipeline for the library side (probing,
+# thumbnails), all parts of gst-plugins-base already required for audio. libmpv is the
+# actual video *playback* engine — a new dependency, music keeps GStreamer.
+pkg_check_modules(GST_PBUTILS REQUIRED IMPORTED_TARGET gstreamer-pbutils-1.0)
+pkg_check_modules(GST_APP     REQUIRED IMPORTED_TARGET gstreamer-app-1.0)
+pkg_check_modules(GST_VIDEO   REQUIRED IMPORTED_TARGET gstreamer-video-1.0)
+# libmpv is the primary video *playback* engine (spec §5b) — not REQUIRED, unlike
+# everything else above: it's not yet packaged for the Flatpak build (see that manifest's
+# comment), and a build with no libmpv.pc should still produce a fully working Hop-tunes
+# rather than fail to configure. MpvCore.cpp/MpvVideoItem.cpp each carry a stub
+# implementation (#else branch, no mpv/* headers) for exactly this case — when
+# HOPTUNES_HAVE_MPV is off, App::videoEngine() falls back to GstVideoPlayer (GStreamer's
+# own qml6glsink/glsinkbin, needing no new dependency beyond gstreamer-plugins-base
+# above) if that's available, else "none". Library scanning/probing (VideoScanner etc.)
+# needs only gstreamer-plugins-base regardless, so Videos always scans and lists.
+pkg_check_modules(MPV IMPORTED_TARGET mpv)
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
+    src/playback/MpvCore.h    src/playback/MpvCore.cpp
+    src/playback/GstVideoPlayer.h src/playback/GstVideoPlayer.cpp
     src/platform/Mpris.h      src/platform/Mpris.cpp
+    src/library/VideoProbe.h     src/library/VideoProbe.cpp
+    src/library/VideoThumbnail.h src/library/VideoThumbnail.cpp
+    src/library/VideoScanner.h   src/library/VideoScanner.cpp
 )
-target_link_libraries(hoptunes_playback PUBLIC hoptunes_core PkgConfig::GST PkgConfig::GIO)
+target_link_libraries(hoptunes_playback PUBLIC hoptunes_core Qt6::Gui PkgConfig::GST PkgConfig::GIO
+    PkgConfig::GST_PBUTILS PkgConfig::GST_APP PkgConfig::GST_VIDEO)
+if(MPV_FOUND)
+    target_link_libraries(hoptunes_playback PUBLIC PkgConfig::MPV)
+    target_compile_definitions(hoptunes_playback PUBLIC HOPTUNES_HAVE_MPV)
+else()
+    message(STATUS "libmpv not found: video playback disabled (library scanning still works)")
+endif()
 target_compile_options(hoptunes_playback PRIVATE -Wall -Wextra)
 
 # ---- desktop app --------------------------------------------------------------
 if(HOPTUNES_BUILD_APP)
-    find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Quick QuickControls2)
+    # OpenGL: QQuickFramebufferObject (MpvVideoItem's base, spec §5b) needs Qt6::OpenGL
+    # since Qt 6 split QOpenGLFramebufferObject etc. out of Gui.
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Quick QuickControls2 OpenGL)
 
     add_executable(hop-tunes
         src/main.cpp
         src/App.h                    src/App.cpp
+        src/ui/MpvVideoItem.h        src/ui/MpvVideoItem.cpp
         src/ui/qml.qrc
         assets/assets.qrc
     )
     target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
-    target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2)
+    target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
     target_compile_options(hop-tunes PRIVATE -Wall -Wextra)
 
     include(GNUInstallDirs)
@@ -100,10 +135,17 @@ if(HOPTUNES_BUILD_TESTS)
     add_test(NAME mpris COMMAND test_mpris)
     set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
 
+    # Video (spec §5b): probing, thumbnailing and the headless (vo=null/ao=null) mpv core —
+    # no Qt Quick needed, same shape as test_player/test_mpris.
+    add_executable(test_video tests/test_video.cpp)
+    target_link_libraries(test_video PRIVATE hoptunes_playback Qt6::Test)
+    add_test(NAME video COMMAND test_video)
+    set_tests_properties(video PROPERTIES TIMEOUT 120)
+
     # Profile flows driven through the real QML UI, offscreen.
     if(HOPTUNES_BUILD_APP)
-        add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/qml.qrc assets/assets.qrc)
-        target_link_libraries(test_ui PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Test)
+        add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/MpvVideoItem.cpp src/ui/qml.qrc assets/assets.qrc)
+        target_link_libraries(test_ui PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL Qt6::Test)
         target_compile_definitions(test_ui PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
 
         # Damaged files, odd names, broken databases and playlists must never crash or block startup.
