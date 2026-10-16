@@ -2,6 +2,18 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- **M6 quality of life: per-profile album overrides, and live drag-reorder everywhere.**
+  An album's cover and title can now be edited right in the Collection grid — an "image"
+  button under the art opens a picture picker, and the title is a clickable, editable
+  field — and its tracks dragged into a custom order live, even mid-playback. The *songs*
+  tab (the whole library) now drags and reorders the same way, not just albums and manual
+  playlists. All of it is per-profile and private (`SPEC.md` §3.3): none of it is ever
+  visible to another profile sharing the same install, and guest mode keeps the live
+  reorder for the session but saves nothing.
+
 ## [1.2.0] - 2026-10-16
 
 ### Fixed

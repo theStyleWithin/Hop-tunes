@@ -61,6 +61,7 @@ A **profile** is a local, offline container for one person's listening world. It
 | Play counts, last played, skips, ratings, "hearts" | Per profile | |
 | Quickplay pins, history | Per profile | |
 | Settings (theme, accent, EQ, crossfade, ReplayGain, layout) | Per profile | |
+| Album cover/title overrides, manual song order | Per profile | A profile's own edits — never seen by another profile sharing the same install |
 
 A profile only *sees* tracks that live under its own watched folders, even though the index is shared.
 
@@ -110,6 +111,9 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 - Song view is a dense list with columns # · title · artist · album · length · rating, sortable and configurable.
 - An instant filter box searches as you type across artist, album and title.
 - Multi-select, then right-click: play, play next, add to queue, add to playlist, edit tags, show in folder.
+- An album's cover and title can be overridden manually (a picture picker under the art, a
+  clickable title field) and its tracks dragged into a custom order live, even mid-playback.
+  The *songs* list drags and reorders the same way. Both are per-profile (§3.3).
 
 ### 4.3 Now Playing
 - Full-window view with a **mosaic of the artist's or library's album art** slowly drifting in the background, plus big type for title / artist / album.
