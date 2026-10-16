@@ -38,7 +38,13 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 - **M5 (now playing & polish): done.** Crossfade (0–12 s; albums stay gapless), even volume with ReplayGain (per song or per album), shuffle and repeat (also from desktop media widgets), a volume control, dark and light themes (or match the system), smooth transitions with a "reduce motion" option, drag-to-reorder for the queue and playlists, and Now Playing controls that fade away while you listen.
 - **M6 (ship 1.0): done.** Released as [v1.0.0](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0). Flatpak (KDE 6.11 runtime, music folder read-only, other folders through the file chooser), AUR packages `hop-tunes` and `hop-tunes-git`, a user guide, changelog, man page, third-party notices, an About section with keyboard shortcuts, `--help`/`--version`/`--forget-pin`, opening files from a file manager (a second launch reuses the open window), and tagged GitHub releases with the AppImage and Flatpak attached. Version 1.0.0.
 - **AppImage:** [download it from the v1.0.0 release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0). Portable build for glibc 2.35+ distros, tested on 18 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
-- **M7 (video): coming soon.** A Videos section with smooth 4K/HD playback, hardware decoding, subtitles and resume, and a clear message instead of a crash for video files it can't play.
+- **M7 (video): built.** A `collection › videos` grid (scanning, thumbnails, codec/resolution/HDR badges) and a video player on `libmpv`, with hardware decode (`hwdec=auto-safe`), subtitle auto-loading and resume position. Builds, passes its tests and runs — **not yet verified on real GPU hardware or a real display** (built in a sandboxed environment with neither); see [`SPEC.md` §5b](SPEC.md#5b-video-modern-resolutions-including-4k) for exactly what's checked and what isn't. Not in the Flatpak build yet (libmpv isn't packaged there); AppImage, AUR and a plain build all have it.
+
+**New in M7: video**
+
+| videos grid |
+|---|
+| ![videos](design/app/m7-videos.png) |
 
 **New in M5: polish, themes and playback options**
 
@@ -77,7 +83,7 @@ Hop-tunes is C++20 + Qt 6 (QML) + GStreamer + TagLib + SQLite.
 **CachyOS / Arch**
 ```sh
 sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative taglib sqlite \
-    gstreamer gst-plugins-base gst-plugins-good gst-libav
+    gstreamer gst-plugins-base gst-plugins-good gst-libav mpv
 ```
 
 **Ubuntu 24.04 / Debian**
@@ -85,8 +91,11 @@ sudo pacman -S --needed base-devel cmake ninja qt6-base qt6-declarative taglib s
 sudo apt install cmake ninja-build g++ pkg-config qt6-base-dev qt6-declarative-dev \
     qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-dialogs \
     qml6-module-qtquick-templates qml6-module-qtqml-workerscript \
-    libtag1-dev libsqlite3-dev libgstreamer1.0-dev gstreamer1.0-plugins-good gstreamer1.0-libav
+    libtag1-dev libsqlite3-dev libmpv-dev libgstreamer1.0-dev gstreamer1.0-plugins-good gstreamer1.0-libav
 ```
+
+`libmpv`/`mpv` is video playback (spec §5b); everything else still builds and runs without
+it (`collection › videos` just can't open anything) if it's ever missing.
 
 **Build, test, run**
 ```sh

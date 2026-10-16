@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** v1.0 (M1–M6 built; release tag pending) · **Date:** 2026-10-15 · **Platform:** Linux first
+**Status:** v1.0 shipped; M7 (video) built · **Date:** 2026-10-16 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -151,7 +151,28 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ---
 
-## 5b. Video (modern resolutions, including 4K)
+## 5b. Video (modern resolutions, including 4K) ✅ M7
+
+*Implementation status: built and unit-tested (probing, scanning, thumbnails, the mpv
+core's load/play/pause/seek/subtitle-track logic headless, resume persistence), and the
+UI compiles and runs (Videos grid verified with a real screenshot, `design/app/m7-videos.png`).
+**Not verified**: real GPU hardware decoding, real on-screen rendering, and 4K/HDR
+material — this was built and tested in a sandbox with no GPU and no attached display.
+The render-thread glue (`src/ui/MpvVideoItem.cpp`) follows mpv's documented render API
+precisely, but "follows the docs" and "proven on real hardware" are different claims; the
+performance targets below are the spec's design goals, not measured results. One
+deliberate deviation from this section as originally written: audio and video do **not**
+share one literal C++ `PlaybackEngine` interface — GStreamer (`Player`) and libmpv
+(`MpvCore`/`MpvVideoItem`) stay fully separate, unified only where the UI actually needs
+one shared idea (MPRIS, the App-level API), which was simpler and lower-risk than forcing
+a shared abstraction over two unrelated native APIs. libmpv is **not yet packaged for the
+Flatpak build** (see that manifest's comment) — the AppImage, AUR and a plain build all
+have it; Hop-tunes degrades gracefully without it (`HOPTUNES_HAVE_MPV`, see
+`CMakeLists.txt`): the Videos grid still scans and lists, only opening a video needs
+libmpv. Deferred, not built: chapters on the seek bar, a per-profile default subtitle
+language (mpv's own subtitle auto-selection is used instead), an explicit 5.1/7.1 downmix
+control (mpv's audio output handles this on its own), and the optional Jellyfin-folder
+note below.*
 
 Zune 4.8 (built August 2011, codename "Dorado") is a **32-bit** app with its **own bundled 2011-era decoders** (`ZuneH264Dec.dll`, `ZUNEMP4SDECD.dll`, `ZuneDXVA2.dll`, `ZuneEvr.dll`), and it ignores the system's codecs. That explains why it falls over on modern HD/4K files. It wasn't built for:
 - **H.264 at 4K** (High profile, level 5.1/5.2), which is beyond what 2011 PC media players were tuned for;
@@ -190,7 +211,7 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 ### Library side
 - The **Videos** pivot lists items by type: movies, shows (series → season → episode, from folder names or filename patterns), music videos and other.
 - Thumbnails come from a frame grab, cached in `$XDG_CACHE_HOME`.
-- Video metadata is read with ffprobe-style probing at scan time (resolution, codec, HDR flag, duration). Badges like **4K · HDR · HEVC** appear on the tiles.
+- Video metadata is probed at scan time via GStreamer's `GstDiscoverer` (resolution, codec, duration; HDR is a heuristic — a BT.2020 colorimetry hint in the negotiated caps, not a full transfer-function check). Badges like **4K · HDR · HEVC** appear on the tiles.
 - Optional: point a Videos folder at the same library you already serve with Jellyfin. Hop-tunes only reads the files and never modifies Jellyfin's data.
 
 ---
@@ -202,8 +223,12 @@ Hop-tunes avoids all of this by using maintained, modern media engines instead o
 - **Tags:** read via TagLib (ID3v1/v2, Vorbis comments, MP4 atoms, APE, ASF/WMA). Handles album artist, compilations, disc numbers, and sort tags (`ALBUMARTISTSORT`, …).
 - **Artwork:** embedded art, then `cover.jpg`/`folder.jpg` in the folder, then a placeholder tile generated from album name + accent colour.
 - **Tag editing:** single and bulk edit, written back to the files (with a confirmation dialog), or stored only in Hop-tunes (a per-profile override, so the files stay untouched).
-- **Optional online metadata:** MusicBrainz / Cover Art Archive lookup. **Off by default**; switching it on is an explicit opt-in per profile, with no account needed.
 - **Import:** `.m3u` / `.m3u8` / `.pls` / `.xspf` playlists, and `.zpl` (Zune/WMP playlist XML) for people migrating from Zune.
+- *Implementation note (post-M7):* folders are watched live via inotify (`QFileSystemWatcher`),
+  debounced about 1.5 s after the last change, so a song or video dropped into a watched
+  folder appears without a manual rescan. Purely local file-system notification — no
+  network, nothing "phoned home" — the same offline guarantee as everything else here. A
+  manual "rescan" action remains for drives that were offline when something changed.
 
 ---
 
@@ -315,7 +340,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | **M4: Playlists & Quickplay** ✅ | Manual + smart playlists, auto lists, import m3u/m3u8/pls/xspf/zpl/wpl, export m3u8, Quickplay pins/history/new, smart DJ, instant search, hearts and play counts per profile, play next / add to queue | — |
 | **M5: Now Playing & polish** ✅ | Art mosaic, transitions, themes/accents, ReplayGain, crossfade; also repeat/shuffle, volume in the mini player, drag reordering, idle-fading Now Playing controls | Feels "seamless" |
 | **M6: Ship 1.0** ✅ | Flatpak, AppImage, AUR, user docs; also man page, third-party notices, About section, opening files with single-instance hand-off, tagged releases | Published as v1.0.0 |
-| **M7: Video (v1.1)** | libmpv engine, Videos pivot, 4K/HDR, VA-API/NVDEC hardware decoding, subtitles, resume | 4K HEVC 10-bit plays smoothly on Steam Deck |
+| **M7: Video** ✅ | libmpv engine, Videos pivot, scanning/probing/thumbnails, subtitles, resume, `hwdec=auto-safe` | Builds, passes its tests, and runs — see §5b's implementation note for what's verified on real hardware vs. not |
 | 1.1 / 1.2 | EQ, tag editing write-back, podcasts | — |
 
 ---

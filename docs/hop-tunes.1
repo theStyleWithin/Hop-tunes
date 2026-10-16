@@ -5,9 +5,10 @@ hop-tunes \- a local-first music player
 .B hop-tunes
 [\fB\-h\fR|\fB\-\-help\fR] [\fB\-v\fR|\fB\-\-version\fR] [\fB\-\-forget\-pin\fR \fIPROFILE\fR] [\fIFILE\fR|\fIFOLDER\fR...]
 .SH DESCRIPTION
-Hop-tunes plays the music files you already own. It works fully offline: there are no
-accounts, no sign-in and no tracking. Several people can share one computer through local
-profiles, each with its own music folders, playlists, history and settings.
+Hop-tunes plays the music files you already own, and the video files alongside them. It
+works fully offline: there are no accounts, no sign-in and no tracking. Several people can
+share one computer through local profiles, each with its own music folders, playlists,
+history and settings.
 .PP
 Files and folders named on the command line start playing straight away, even if they are
 not in your music folders. If Hop-tunes is already running, they are sent to that window
@@ -27,11 +28,14 @@ Remove a forgotten PIN from the named profile, then exit. Nothing else in the pr
 .I ~/.local/share/hop-tunes/shared/index.sqlite
 Track index shared by all profiles (tags and audio properties; safe to delete, it is rebuilt).
 .TP
+.I ~/.local/share/hop-tunes/shared/videos.sqlite
+Video index, same idea (safe to delete, it is rebuilt).
+.TP
 .I ~/.local/share/hop-tunes/profiles/
-One folder per profile: settings, playlists, play counts, history.
+One folder per profile: settings, playlists, play counts, history, video resume positions.
 .TP
 .I ~/.cache/hop-tunes/
-Cover art cache (safe to delete).
+Cover art and video thumbnail cache (safe to delete).
 .PP
 In the Flatpak these live under \fI~/.var/app/io.github.thestylewithin.Hop-tunes/\fR.
 .SH ENVIRONMENT

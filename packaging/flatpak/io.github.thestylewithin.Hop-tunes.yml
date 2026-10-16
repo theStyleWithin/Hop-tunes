@@ -3,6 +3,15 @@
 # The KDE runtime provides Qt 6 and (from the freedesktop base) GStreamer with the base and
 # good plugins plus gst-libav; AAC, WMA and other codecs come from the runtime's
 # codecs-extra extension, which Flatpak installs with the runtime.
+#
+# Video (spec §5b) is built against libmpv (CMakeLists.txt's `mpv` pkg-config dependency),
+# which is NOT in the KDE runtime and has no module here yet — building it needs its own
+# ffmpeg/libass module chain, which wasn't written here because it couldn't be verified
+# with a real flatpak-builder run in the sandbox this was developed in, and a wrong guess
+# would break every Flatpak build rather than just leave a feature out. Until that module
+# lands, the Flatpak build has no video playback: `collection › videos` scans and lists
+# files normally, but opening one fails (no libmpv.so to load). Audio playback and every
+# other feature are unaffected.
 id: io.github.thestylewithin.Hop-tunes
 runtime: org.kde.Platform
 runtime-version: '6.11'

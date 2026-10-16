@@ -38,7 +38,7 @@ jobs:
           sudo apt-get remove -y libunwind-14-dev || true
           .github/scripts/logged.sh apt sudo apt-get install -y --no-install-recommends \
             ninja-build g++ pkg-config file curl desktop-file-utils appstream \
-            libtag1-dev libsqlite3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libtag1-dev libsqlite3-dev libmpv-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
             gstreamer1.0-pulseaudio gstreamer1.0-alsa \
             libgl1-mesa-dev libegl1 libopengl0 libglvnd0 libcom-err2 libgpg-error0 libfribidi0 libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 \

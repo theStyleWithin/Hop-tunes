@@ -8,7 +8,7 @@ sudo apt-get install -y --no-install-recommends \
   qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-window qml6-module-qtquick-dialogs qml6-module-qtquick-templates \
   qml6-module-qtqml-workerscript qml6-module-qtcore \
-  libtag1-dev libsqlite3-dev \
+  libtag1-dev libsqlite3-dev libmpv-dev \
   libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
   gstreamer1.0-pulseaudio

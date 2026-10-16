@@ -17,11 +17,12 @@ pkgbase = hop-tunes
 	depends = gstreamer
 	depends = gst-plugins-base
 	depends = gst-plugins-good
+	depends = mpv
 	depends = hicolor-icon-theme
 	optdepends = gst-libav: AAC, ALAC and WMA playback
 	optdepends = gst-plugins-ugly: more MP3 and WMA files
 	optdepends = pipewire-pulse: sound through PipeWire (most desktops already have it)
-	source = hop-tunes-1.0.0.tar.gz::https://github.com/theStyleWithin/Hop-tunes/archive/refs/tags/v1.0.0.tar.gz
+	source = https://github.com/theStyleWithin/Hop-tunes/releases/download/v1.0.0/hop-tunes-1.0.0.tar.gz
 	sha256sums = SKIP
 
 pkgname = hop-tunes
