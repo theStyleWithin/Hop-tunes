@@ -328,6 +328,17 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 - Encrypted profiles (SQLCipher + key from PIN).
 - Local network sharing (DLNA server) for TVs and consoles.
 - Last.fm / ListenBrainz scrobbling as an *optional* plugin (that would be the only login, user-initiated and off by default).
+- **Short-term stretch goal: Android port.** Same local-only, always-offline vision, with the
+  UI revised for touch and mobile screens rather than ported as-is. Qt/QML, GStreamer and
+  libmpv all have working Android ports already, and sideloading/F-Droid distribution fits
+  the "no store gatekeeping" ethos. iOS is not planned alongside this: GStreamer/libmpv are
+  LGPL/GPL, which is in tension with App Store distribution terms, and Android's storage
+  model (scoped storage vs. "point at any folder") already means this is closer to a second
+  product sharing core library/profile logic than a straight UI port.
+- **Stretch goal: a free Steam listing**, mainly for Steam Deck users to launch from Gaming
+  Mode without dropping into Desktop Mode — not for storefront discovery, which doesn't
+  suit a free utility. One-time $100 Steam Direct fee (non-refundable for a free app, since
+  that fee is normally recouped from revenue); Valve's 30% cut doesn't apply with no sales.
 
 ---
 
