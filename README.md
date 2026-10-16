@@ -5,7 +5,7 @@
 **Hop-tunes** · Linux · GPL-3.0 · no accounts, no tracking
 
 > [!WARNING]
-> **Feature complete. Download at your own risk.** Hop-tunes 1.1 includes every planned feature — now including M7 video playback — and passes its automated test suite on 16 Linux distributions, but it has not yet been tested by the developer on real hardware. If you choose to try it, you do so at your own risk. Running it in a virtual machine is recommended.
+> **Feature complete. Download at your own risk.** Hop-tunes 1.2 includes every planned feature — M7 video playback included — and passes its automated test suite on 16 Linux distributions. The developer has now tested it on real hardware (a Steam Deck running CachyOS Handheld Edition, AppImage only) — that testing is what found and fixed a video-playback bug for this release. Other install methods and hardware are still untested by the developer, so if you choose to try it, you do so at your own risk.
 
 ## Install
 
@@ -40,7 +40,7 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 - **M5 (now playing & polish): done.** Crossfade (0–12 s; albums stay gapless), even volume with ReplayGain (per song or per album), shuffle and repeat (also from desktop media widgets), a volume control, dark and light themes (or match the system), smooth transitions with a "reduce motion" option, drag-to-reorder for the queue and playlists, and Now Playing controls that fade away while you listen.
 - **M6 (ship 1.0): done.** Released as [v1.0.0](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0). Flatpak (KDE 6.11 runtime, music folder read-only, other folders through the file chooser), AUR packages `hop-tunes` and `hop-tunes-git`, a user guide, changelog, man page, third-party notices, an About section with keyboard shortcuts, `--help`/`--version`/`--forget-pin`, opening files from a file manager (a second launch reuses the open window), and tagged GitHub releases with the AppImage and Flatpak attached. Version 1.0.0.
 - **M7 (video): done.** A `collection › videos` grid (scanning, thumbnails, codec/resolution/HDR badges) and a video player with two engines: **libmpv** (richer subtitle styling, hardware decode via `hwdec=auto-safe`) where it's available, falling back to **GStreamer** (`qml6glsink`) where it isn't — currently the Flatpak build, since libmpv isn't packaged there yet. Both engines auto-load subtitles and remember a resume position. The GStreamer path was verified with real on-screen rendering (a real video, visibly playing); the libmpv path's render code follows mpv's documented API but couldn't be checked against a real GPU or display in the sandbox this was built in — see [`SPEC.md` §5b](SPEC.md#5b-video-modern-resolutions-including-4k) for exactly what's checked and what isn't. AppImage, AUR and a plain build all ship libmpv.
-- **AppImage:** [download it from the v1.1.0 release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.1.0). Portable build for glibc 2.35+ distros, tested on 18 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
+- **AppImage:** [download it from the v1.2.0 release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.2.0) — fixes a video-playback bug found testing v1.1.0 on real hardware. Portable build for glibc 2.35+ distros, tested on 18 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
 **New in M7: video**
 
