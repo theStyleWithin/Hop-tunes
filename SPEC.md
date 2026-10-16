@@ -126,6 +126,12 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 - **New:** recently added to the library.
 - **Smart DJ:** pick an artist, and Hop-tunes builds an endless mix from the *local* library using tag similarity (genre, year), hearts and play history. No network. *(Built in M4: weighted sampling around the artist's genres and era, same artist spread apart, often-skipped songs played less, topped up automatically near the end of the queue. Co-occurrence in playlists is a later refinement.)*
 
+> **Backlog (QoL, not yet designed):** Quickplay's *Pinned*/*History*/*New* currently read as
+> one flat area and could use a layout pass — likely a dedicated *History* tab instead of a
+> section on this page, and splitting *Pinned* into separate music/video groups so a pinned
+> video doesn't sit mixed in with pinned albums. Flagged by the user from a live screenshot;
+> not scoped or started.
+
 ### 4.5 Visual language (original)
 - Typography-first: large, light-weight sans-serif with generous whitespace. Use an open font (Inter, Selawik-style alternatives, Noto Sans), **not** Segoe/Zune Pro.
 - Dark and light themes, plus a user-chosen accent colour per profile. *(M5: dark, light and "match system" (Qt 6.5+); in the light theme the accent is darkened so it stays readable as text.)*
