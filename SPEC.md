@@ -342,11 +342,20 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 ---
 
 ## 10. Possible future (out of scope for v1)
-- Pictures pivot.
 - Optional "sync to a folder / generic MTP player / phone" through a plugin (plain MTP via libmtp, **no** MTPZ).
 - Encrypted profiles (SQLCipher + key from PIN).
 - Local network sharing (DLNA server) for TVs and consoles.
 - Last.fm / ListenBrainz scrobbling as an *optional* plugin (that would be the only login, user-initiated and off by default).
+- **Short-term stretch goal: audiobooks, pictures, ebooks and podcasts as new Collection
+  sections.** Audiobooks are the closest fit (long local audio files with chapters/resume,
+  mostly reusing the existing scanner/player and video's resume-position pattern). Podcasts
+  return here too, but local-only this time — episode files a profile already has, no RSS/
+  network subscriptions (that network requirement is why podcasts were dropped after M7, per
+  `CHANGELOG.md`'s 1.1.0 entry, and that reasoning still holds). Pictures and ebooks are a
+  bigger lift each — neither shares any infrastructure with the audio/video pipeline (a
+  photo viewer needs its own grid/zoom/EXIF handling, an ebook reader needs EPUB/PDF parsing
+  and pagination) — closer to bolting on separate small apps than extending this one. Not
+  scoped or started; likely built as separate pieces rather than one push.
 - **Short-term stretch goal: Android port.** Same local-only, always-offline vision, with the
   UI revised for touch and mobile screens rather than ported as-is. Qt/QML, GStreamer and
   libmpv all have working Android ports already, and sideloading/F-Droid distribution fits
