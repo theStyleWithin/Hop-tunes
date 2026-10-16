@@ -69,24 +69,43 @@ for d in wayland-shell-integration wayland-decoration-client wayland-graphics-in
 done
 
 # Host-first fallback libraries (see apprun-hooks/hop-tunes-fallback-libs.sh).
-# libjack.so.0: Ubuntu's libmpv links JACK support in directly (confirmed via ldd on
-# libmpv.so.2), but linuxdeploy's own exclude-list skips it like the others here, so it
-# never ends up in the AppImage's regular lib directory even though it's installed on the
-# build machine (libjack0, above) — it needs the same explicit fallback-dir treatment.
-FALLBACK_LIBS="libOpenGL.so.0 libGLdispatch.so.0 libcom_err.so.2 libgpg-error.so.0 libfribidi.so.0 libjack.so.0"
-for lib in $FALLBACK_LIBS; do
+# libOpenGL.so.0/libGLdispatch.so.0 are deliberate: bundling a GL dispatch library built
+# against this machine's driver stack could break on a target with a different GPU, so
+# they're always host-first. Everything else here is whatever linuxdeploy's own
+# exclude-list happened to skip while bundling libmpv's huge transitive dependency tree
+# (Kerberos, GnuTLS, JACK, Berkeley DB, fribidi... — found one smoke-test failure at a
+# time before this). Rather than keep hand-listing them as CI discovers more, scan for
+# every NEEDED soname linuxdeploy left unresolved and fall back on the build host's copy
+# of each automatically.
+missing_sonames() {
+  { find "$APPDIR/usr" -type f \( -name '*.so*' -o -path '*/bin/*' \); } 2>/dev/null \
+    | xargs -r objdump -p 2>/dev/null | sed -n 's/^ *NEEDED *//p' | sort -u \
+    | while read -r so; do [ -n "$(find "$APPDIR" -name "$so" -print -quit)" ] || echo "$so"; done
+}
+bundle_fallback() {
+  local lib="$1" src
+  [ -e "$APPDIR/usr/lib/fallback/$lib/$lib" ] && return 0   # already bundled
   src=$(ls "$ARCH_LIB/$lib" /lib/x86_64-linux-gnu/$lib 2>/dev/null | head -1 || true)
   if [ -n "$src" ]; then mkdir -p "$APPDIR/usr/lib/fallback/$lib"; cp -L "$src" "$APPDIR/usr/lib/fallback/$lib/"
   else echo "warning: fallback library $lib not found on build host"; fi
+}
+bundle_fallback libOpenGL.so.0
+bundle_fallback libGLdispatch.so.0
+# Bundling a fallback lib can itself introduce a new NEEDED soname (its own dependency,
+# e.g. libselinux.so.1 pulling in libpcre2-8.so.0) that wasn't missing before it existed as
+# a file under AppDir — so repeat until a pass adds nothing new, not just once.
+for _pass in 1 2 3 4 5 6 7 8 9 10; do
+  new=$(missing_sonames || true)
+  [ -z "$new" ] && break
+  for lib in $new; do bundle_fallback "$lib"; done
 done
 mkdir -p "$APPDIR/apprun-hooks"
 cp "$ROOT/packaging/appimage/apprun-hooks/"*.sh "$APPDIR/apprun-hooks/"
 
-# Report what the AppImage still expects from the host (for the compatibility notes).
+# Report what the AppImage still expects from the host (for the compatibility notes) —
+# only what's left after the fallback-bundling pass above.
 echo "== libraries expected from the host system:"
-{ find "$APPDIR/usr" -type f -name '*.so*' -o -type f -path '*/bin/*'; } 2>/dev/null \
-  | xargs -r objdump -p 2>/dev/null | sed -n 's/^ *NEEDED *//p' | sort -u \
-  | while read -r so; do [ -n "$(find "$APPDIR" -name "$so" -print -quit)" ] || echo "   $so"; done || true
+missing_sonames | sed 's/^/   /' || true
 
 # ---- pack ---------------------------------------------------------------------------------
 export LINUXDEPLOY_OUTPUT_VERSION="$VERSION"
