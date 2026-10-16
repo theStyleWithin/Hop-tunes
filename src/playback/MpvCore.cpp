@@ -21,8 +21,9 @@ namespace {
 // this). Qt/GLib/GStreamer startup code commonly calls setlocale(LC_ALL, "") — pulling in
 // whatever locale the desktop is configured with — well before any MpvCore exists, so this
 // must be reasserted right before every mpv_create() call here, not just once at startup.
-// Reproduced on a real desktop locale (Steam Deck/SteamOS); CI's headless runners default
-// to the C locale already, which is why this never showed up there.
+// Reproduced on a real desktop locale (Steam Deck running CachyOS Handheld Edition); CI's
+// headless runners default to the C locale already, which is why this never showed up
+// there.
 void ensureMpvLocale() { std::setlocale(LC_NUMERIC, "C"); }
 
 QString nodeString(const mpv_node &n)

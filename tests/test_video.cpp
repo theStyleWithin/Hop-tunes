@@ -140,9 +140,10 @@ private slots:
         QCOMPARE(idx.count(), 0);
     }
 
-    // Regression test for a real-hardware bug (Steam Deck/SteamOS, v1.1.0): libmpv's own
-    // sanity check in mpv_create() rejects a process whose LC_NUMERIC isn't "C" (it parses
-    // its own option values assuming '.' as the decimal separator), and Qt/GLib/GStreamer
+    // Regression test for a real-hardware bug (Steam Deck running CachyOS Handheld
+    // Edition, v1.1.0): libmpv's own sanity check in mpv_create() rejects a process whose
+    // LC_NUMERIC isn't "C" (it parses its own option values assuming '.' as the decimal
+    // separator), and Qt/GLib/GStreamer
     // startup code commonly sets the process locale from the environment before any
     // MpvCore exists — reproduced locally with LANG=de_DE.UTF-8: mpv printed "Non-C locale
     // detected. This is not supported." and mpv_create() returned null. CI's own runners

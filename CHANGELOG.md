@@ -6,14 +6,14 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 - **Video playback failing with "mpv_create failed" on real hardware** (found testing
-  v1.1.0 on Steam Deck/SteamOS). libmpv's own sanity check in `mpv_create()` rejects a
-  process whose `LC_NUMERIC` locale category isn't `"C"` — it parses its own option values
-  assuming `.` as the decimal separator — and Qt/GLib/GStreamer startup code commonly sets
-  the process locale from the desktop environment before any video playback code runs.
-  CI's runners default to the `C` locale already, which is why this was never caught
-  before a real desktop exercised it. `MpvCore` now reasserts `LC_NUMERIC=C` right before
-  every `mpv_create()` call, with a regression test that reproduces the exact failure
-  under a non-`C` locale.
+  v1.1.0 on a Steam Deck running CachyOS Handheld Edition). libmpv's own sanity check in
+  `mpv_create()` rejects a process whose `LC_NUMERIC` locale category isn't `"C"` — it
+  parses its own option values assuming `.` as the decimal separator — and Qt/GLib/
+  GStreamer startup code commonly sets the process locale from the desktop environment
+  before any video playback code runs. CI's runners default to the `C` locale already,
+  which is why this was never caught before a real desktop exercised it. `MpvCore` now
+  reasserts `LC_NUMERIC=C` right before every `mpv_create()` call, with a regression test
+  that reproduces the exact failure under a non-`C` locale.
 
 ### Changed
 - Settings' folder list, and its description text, are now called "media folders" instead
