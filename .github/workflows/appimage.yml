@@ -36,11 +36,15 @@ jobs:
           sudo apt-get update
           # GitHub's 22.04 image ships libunwind-14-dev, which blocks libgstreamer1.0-dev.
           sudo apt-get remove -y libunwind-14-dev || true
+          # gstreamer1.0-qt6 (the GStreamer fallback video engine's Qt sink) doesn't exist on
+          # 22.04/jammy's apt repos, and isn't needed here: the AppImage always ships libmpv
+          # as its video engine instead, and build-appimage.sh's GST_PLUGINS allowlist never
+          # bundles qml6glsink/glsinkbin anyway (see that script's comment).
           .github/scripts/logged.sh apt sudo apt-get install -y --no-install-recommends \
             ninja-build g++ pkg-config file curl desktop-file-utils appstream \
             libtag1-dev libsqlite3-dev libmpv-dev libjack0 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-libav \
-            gstreamer1.0-pulseaudio gstreamer1.0-alsa gstreamer1.0-gl gstreamer1.0-qt6 \
+            gstreamer1.0-pulseaudio gstreamer1.0-alsa \
             libgl1-mesa-dev libegl1 libopengl0 libglvnd0 libcom-err2 libgpg-error0 libfribidi0 libfontconfig1 libxkbcommon0 libxkbcommon-x11-0 \
             libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
             libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcb-xfixes0 \
