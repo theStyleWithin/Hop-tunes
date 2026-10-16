@@ -126,11 +126,11 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 - **New:** recently added to the library.
 - **Smart DJ:** pick an artist, and Hop-tunes builds an endless mix from the *local* library using tag similarity (genre, year), hearts and play history. No network. *(Built in M4: weighted sampling around the artist's genres and era, same artist spread apart, often-skipped songs played less, topped up automatically near the end of the queue. Co-occurrence in playlists is a later refinement.)*
 
-> **Backlog (QoL, not yet designed):** Quickplay's *Pinned*/*History*/*New* currently read as
-> one flat area and could use a layout pass — likely a dedicated *History* tab instead of a
-> section on this page, and splitting *Pinned* into separate music/video groups so a pinned
-> video doesn't sit mixed in with pinned albums. Flagged by the user from a live screenshot;
-> not scoped or started.
+> **Backlog (QoL, partly done):** *Pinned* now groups by kind (artists/albums/playlists — see
+> PR #18) instead of one flat row. Still open: a dedicated *History* tab instead of a section
+> on this page. A pinned-*videos* group is deferred until pinning a video exists at all (no
+> `"video"` pin kind yet) — folded into the §5b video-playback fix below rather than tracked
+> separately, since both land together once that's picked back up.
 
 ### 4.5 Visual language (original)
 - Typography-first: large, light-weight sans-serif with generous whitespace. Use an open font (Inter, Selawik-style alternatives, Noto Sans), **not** Segoe/Zune Pro.
@@ -166,7 +166,9 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 > `LC_NUMERIC`), but nothing actually plays: the player screen comes up black/frozen at
 > 0:00 with no picture or audio. Music playback is unaffected. Not yet investigated —
 > likely candidates are the GL/render-surface setup or the `hwdec=auto-safe` path on that
-> hardware. Picking this up is deferred until there's budget for it.
+> hardware. Picking this up is deferred until there's budget for it. When it is: fold in
+> a `"video"` Quickplay pin kind and a pinned-videos group (§4.4) too, rather than treating
+> that as a separate task.
 
 *Implementation status: built and tested — probing, scanning, thumbnails, resume
 persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with
