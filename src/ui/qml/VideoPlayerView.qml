@@ -50,7 +50,7 @@ Rectangle {
                     function setSubtitleTrack(id) {}
                     function setResumePosition(ms) {}
                 }
-                readonly property var surface: surfaceLoader.item || nullSurface
+                readonly property var surface: mpvLoader.item || gstLoader.item || nullSurface
 
                 Timer { id: idleTimer; interval: 3500; running: !page.surface.paused; onTriggered: page.idle = true }
                 Timer {
@@ -64,36 +64,54 @@ Rectangle {
                 // built with it, GstVideoSurfaceView (GStreamer's qml6glsink) otherwise —
                 // see CMakeLists.txt's HOPTUNES_HAVE_MPV. Both expose the same property/
                 // method surface, so everything below just talks to "surface" either way.
-                Loader {
-                    id: surfaceLoader
-                    anchors.fill: parent
-                    sourceComponent: hop.videoEngine === "mpv" ? mpvSurface
-                                     : (hop.videoEngine === "gstreamer" ? gstSurface : null)
-                    onLoaded: {
-                        item.setResumePosition(hop.videoPlayerResumeMs)
-                        // The GStreamer engine wraps Qt's own GL context on open, which
-                        // needs that context to actually exist — true once the window has
-                        // rendered at least one frame, which it normally has long before a
-                        // video is opened, but not guaranteed (confirmed by testing: an
-                        // automated/scripted launch that opens a video within the first
-                        // frame or two hits "could not initialize window system"). One
-                        // real rendered frame, not a guessed delay, removes the race.
-                        function openIt() { item.source = hop.videoPlayerPath; item.play() }
-                        const win = root.Window.window
-                        if (win) {
-                            function onFrame() { win.afterRendering.disconnect(onFrame); openIt() }
-                            win.afterRendering.connect(onFrame)
-                            win.requestUpdate()
-                        } else {
-                            openIt()
-                        }
+                //
+                // gstLoader loads GstVideoSurfaceView.qml by *source* (a URL), not as an
+                // inline Component: that file's "import org.freedesktop.gstreamer.Qt6GLVideoItem"
+                // only resolves when a plugin providing that QML module is actually present
+                // (qml6glsink, from gstreamer1.0-qt6 — not something every build/package has,
+                // e.g. the AppImage, which relies on libmpv instead). An inline Component
+                // referencing that type gets resolved eagerly when this whole document loads,
+                // which would take the entire app down if the module is missing even though
+                // hop.videoEngine never selects "gstreamer" there. Loader.source defers
+                // resolution until the Loader actually activates, and reports Loader.Error
+                // instead of crashing when the type can't be found.
+                function onSurfaceLoaded(item) {
+                    item.setResumePosition(hop.videoPlayerResumeMs)
+                    // The GStreamer engine wraps Qt's own GL context on open, which needs
+                    // that context to actually exist — true once the window has rendered at
+                    // least one frame, which it normally has long before a video is opened,
+                    // but not guaranteed (confirmed by testing: an automated/scripted launch
+                    // that opens a video within the first frame or two hits "could not
+                    // initialize window system"). One real rendered frame, not a guessed
+                    // delay, removes the race.
+                    function openIt() { item.source = hop.videoPlayerPath; item.play() }
+                    const win = root.Window.window
+                    if (win) {
+                        function onFrame() { win.afterRendering.disconnect(onFrame); openIt() }
+                        win.afterRendering.connect(onFrame)
+                        win.requestUpdate()
+                    } else {
+                        openIt()
                     }
                 }
+                Loader {
+                    id: mpvLoader
+                    anchors.fill: parent
+                    active: hop.videoEngine === "mpv"
+                    sourceComponent: mpvSurface
+                    onLoaded: page.onSurfaceLoaded(item)
+                }
+                Loader {
+                    id: gstLoader
+                    anchors.fill: parent
+                    active: hop.videoEngine === "gstreamer"
+                    source: active ? "GstVideoSurfaceView.qml" : ""
+                    onLoaded: page.onSurfaceLoaded(item)
+                }
                 Component { id: mpvSurface; VideoSurface { objectName: "videoSurface" } }
-                Component { id: gstSurface; GstVideoSurfaceView { objectName: "videoSurface" } }
 
                 Label {
-                    visible: hop.videoEngine === "none"
+                    visible: hop.videoEngine === "none" || gstLoader.status === Loader.Error
                     anchors.centerIn: parent
                     text: "no video engine is available in this build"
                     color: "white"; font { family: Theme.font; pixelSize: 18 }
