@@ -9,6 +9,7 @@ All are used unmodified, as shared libraries or bundled assets.
 | Qt 6 (Core, Gui, Qml, Quick, Quick Controls 2, DBus, Wayland and XCB platform plugins) | LGPL-3.0 | user interface | https://code.qt.io |
 | GStreamer 1.x and gst-plugins-base / good / ugly, gst-libav | LGPL-2.1-or-later | audio decoding and playback | https://gstreamer.freedesktop.org |
 | FFmpeg (through gst-libav) | LGPL-2.1-or-later | AAC, WMA and other decoders | https://ffmpeg.org |
+| libmpv (mpv) | LGPL-2.1-or-later or GPL-2.0-or-later, depending on how it was built | primary video playback engine | https://mpv.io |
 | TagLib | LGPL-2.1 / MPL-1.1 | reading tags and cover art | https://taglib.org |
 | SQLite | Public domain | track index and profile data | https://sqlite.org |
 | GLib / GIO | LGPL-2.1-or-later | MPRIS over D-Bus | https://gitlab.gnome.org/GNOME/glib |

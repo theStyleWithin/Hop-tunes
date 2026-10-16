@@ -1,6 +1,6 @@
 # Hop-tunes: Product & Technical Spec
 
-**Status:** v1.0 shipped; M7 (video) built · **Date:** 2026-10-16 · **Platform:** Linux first
+**Status:** v1.1.0 shipped (M7: video + live library updates) · **Date:** 2026-10-16 · **Platform:** Linux first
 
 Hop-tunes is a simple, fast, local-first music player for Linux. Its organisation and feel are inspired by how the Zune desktop software *worked*: calm, typography-led, seamless. It has **no online accounts, no store and no device sync**. Several people can share one install, each with their own private local profile and library.
 
@@ -342,8 +342,8 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 | **M4: Playlists & Quickplay** ✅ | Manual + smart playlists, auto lists, import m3u/m3u8/pls/xspf/zpl/wpl, export m3u8, Quickplay pins/history/new, smart DJ, instant search, hearts and play counts per profile, play next / add to queue | — |
 | **M5: Now Playing & polish** ✅ | Art mosaic, transitions, themes/accents, ReplayGain, crossfade; also repeat/shuffle, volume in the mini player, drag reordering, idle-fading Now Playing controls | Feels "seamless" |
 | **M6: Ship 1.0** ✅ | Flatpak, AppImage, AUR, user docs; also man page, third-party notices, About section, opening files with single-instance hand-off, tagged releases | Published as v1.0.0 |
-| **M7: Video** ✅ | libmpv engine, Videos pivot, scanning/probing/thumbnails, subtitles, resume, `hwdec=auto-safe` | Builds, passes its tests, and runs — see §5b's implementation note for what's verified on real hardware vs. not |
-| 1.1 | EQ, tag editing write-back | — |
+| **M7: Video** ✅ | libmpv engine, Videos pivot, scanning/probing/thumbnails, subtitles, resume, `hwdec=auto-safe` | Builds, passes its tests, and runs — see §5b's implementation note for what's verified on real hardware vs. not. Shipped as v1.1.0 |
+| Future (unscheduled) | EQ, tag editing write-back | — |
 
 ---
 
