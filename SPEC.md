@@ -335,7 +335,7 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
   LGPL/GPL, which is in tension with App Store distribution terms, and Android's storage
   model (scoped storage vs. "point at any folder") already means this is closer to a second
   product sharing core library/profile logic than a straight UI port.
-- **Stretch goal: a free Steam listing**, mainly for Steam Deck users to launch from Gaming
+- **Long-term stretch goal: a free Steam listing**, mainly for Steam Deck users to launch from Gaming
   Mode without dropping into Desktop Mode — not for storefront discovery, which doesn't
   suit a free utility. One-time $100 Steam Direct fee (non-refundable for a free app, since
   that fee is normally recouped from revenue); Valve's 30% cut doesn't apply with no sales.
