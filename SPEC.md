@@ -155,6 +155,13 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ## 5b. Video (modern resolutions, including 4K) ✅ M7
 
+> **Known issue (open, backlog):** on the user's Steam Deck (CachyOS Handheld Edition),
+> opening a video no longer shows the `mpv_create failed` error (fixed in v1.2.0 —
+> `LC_NUMERIC`), but nothing actually plays: the player screen comes up black/frozen at
+> 0:00 with no picture or audio. Music playback is unaffected. Not yet investigated —
+> likely candidates are the GL/render-surface setup or the `hwdec=auto-safe` path on that
+> hardware. Picking this up is deferred until there's budget for it.
+
 *Implementation status: built and tested — probing, scanning, thumbnails, resume
 persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with
 unit tests. Two engines exist, chosen at build time and reported at runtime as
