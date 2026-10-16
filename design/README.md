@@ -62,3 +62,9 @@ M4 adds playlists, smart playlists, search, hearts and play counts, and the Quic
 | ![light](app/m5-albums-light.png) | ![now playing](app/m5-now-playing-light.png) | ![playback](app/m5-settings-playback.png) | ![appearance](app/m5-settings-light.png) |
 
 M5 adds crossfade, ReplayGain, shuffle and repeat, a volume control, light/dark/system themes, pivot transitions, drag-to-reorder and idle-fading Now Playing controls.
+
+| settings › about |
+|---|
+| ![about](app/m6-about.png) |
+
+M6 adds the About section (version, keyboard shortcuts, credits and the trademark note), plus packaging that has no screens of its own: Flatpak, AUR, the man page and the user guide.

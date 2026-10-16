@@ -1,0 +1,59 @@
+name: flatpak
+
+# Builds the Flatpak bundle on the KDE runtime; attaches it to tagged releases.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flatpak-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-48   # the action installs the KDE SDK itself
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v5
+      - uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: Hop-tunes-x86_64.flatpak
+          manifest-path: packaging/flatpak/io.github.thestylewithin.Hop-tunes.yml
+          cache-key: flatpak-builder-${{ hashFiles('packaging/flatpak/*.yml') }}
+          upload-artifact: true
+          mirror-screenshots-url: https://dl.flathub.org/media/
+
+      - name: Smoke-test the build
+        shell: bash
+        run: |
+          set -e
+          # Install the bundle like a user would, then run it in the sandbox (--version needs no display).
+          [ -s /etc/machine-id ] || (dbus-uuidgen > /etc/machine-id 2>/dev/null || cat /proc/sys/kernel/random/uuid | tr -d - > /etc/machine-id)
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive Hop-tunes-x86_64.flatpak
+          sh .github/scripts/logged.sh flatpak-run flatpak run --command=hop-tunes io.github.thestylewithin.Hop-tunes --version | tee version.txt
+          grep -q "hop-tunes" version.txt
+          test -f Hop-tunes-x86_64.flatpak
+
+      - name: Attach to the tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          # The AppImage workflow creates the release; wait for it, then add the bundle.
+          # (Untagged builds keep the bundle as a workflow artifact: the "continuous"
+          # release is recreated on every push and would drop it.)
+          tag="${GITHUB_REF#refs/tags/}"
+          command -v gh >/dev/null || { echo "gh CLI not in this image; bundle stays a workflow artifact"; exit 0; }
+          for i in $(seq 1 40); do gh release view "$tag" >/dev/null 2>&1 && break; sleep 30; done
+          gh release upload "$tag" Hop-tunes-x86_64.flatpak --clobber

@@ -1,0 +1,49 @@
+# Maintainer: Hop-tunes contributors <https://github.com/theStyleWithin/Hop-tunes>
+pkgname=hop-tunes-git
+_pkgname=hop-tunes
+pkgver=1.0.0.r0.g0000000
+pkgrel=1
+pkgdesc="Local-first music player with private local profiles (latest code from git)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/theStyleWithin/Hop-tunes"
+license=('GPL-3.0-or-later')
+depends=('qt6-base' 'qt6-declarative' 'taglib' 'sqlite' 'glib2'
+         'gstreamer' 'gst-plugins-base' 'gst-plugins-good'
+         'hicolor-icon-theme')
+optdepends=('gst-libav: AAC, ALAC and WMA playback'
+            'gst-plugins-ugly: more MP3 and WMA files'
+            'pipewire-pulse: sound through PipeWire (most desktops already have it)')
+makedepends=('cmake' 'ninja' 'git')
+checkdepends=('qt6-declarative')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+source=("$_pkgname::git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  # v1.0.0-12-gabc1234 -> 1.0.0.r12.gabc1234 (before the first release tag: 0.r<commits>.g<hash>)
+  local d
+  if d=$(git describe --long --tags --match 'v[0-9]*' --abbrev=7 2>/dev/null); then
+    printf '%s' "$d" | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    printf '0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+  fi
+}
+
+build() {
+  cmake -B build -S "$_pkgname" -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DHOPTUNES_BUILD_TESTS=ON
+  cmake --build build
+}
+
+check() {
+  QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -R 'library|profiles|playlists-search-dj'
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$_pkgname/LICENSE" "$pkgdir/usr/share/licenses/$_pkgname/LICENSE"
+}

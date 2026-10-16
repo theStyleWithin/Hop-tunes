@@ -35,3 +35,4 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         # logged.sh repeats the failing output as an annotation, readable through the API.
         run: .github/scripts/logged.sh ctest ctest --test-dir build --output-on-failure
+

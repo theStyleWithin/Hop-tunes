@@ -12,6 +12,7 @@
 #include <QObject>
 #include <QStringList>
 #include <QHash>
+#include <QTimer>
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -160,6 +161,11 @@ public:
     Q_INVOKABLE bool showAlbum(const QString &ref);                   // select it in collection › artists
     Q_INVOKABLE void startDj(const QString &artist);
 
+    // Files or folders from the command line, a file manager or MPRIS OpenUri: they play
+    // right away (they need not be in the library). Held until a profile is open.
+    Q_INVOKABLE void openFiles(const QStringList &pathsOrUris);
+    void openUri(const QString &uri);   // batches several OpenUri calls into one queue
+
     // Each returns "" on success or a short message for the UI.
     Q_INVOKABLE QString createProfile(const QString &name, const QString &accent, const QString &pin, const QUrl &folder);
     Q_INVOKABLE QString openProfile(const QString &id, const QString &pin = {});
@@ -206,6 +212,7 @@ private:
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
     void activate(const QString &id, bool guest);
+    static void setAside(const QString &file);
     void applySearch();
     void refreshPlaylist();
     void refreshQuickplay();
@@ -233,6 +240,9 @@ private:
     QString m_theme = QStringLiteral("dark");
     bool m_reduceMotion = false;
     bool m_loadingSettings = false;
+    QStringList m_pendingOpen;
+    QStringList m_openBatch;
+    QTimer m_openTimer;
     quint32 m_djRound = 0;
     struct Listen { QString path; qint64 maxPos = 0; qint64 duration = 0; bool counted = false; } m_listen;
     QString m_profileId;          // empty when no profile is open

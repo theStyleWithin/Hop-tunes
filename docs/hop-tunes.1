@@ -1,0 +1,47 @@
+.TH HOP-TUNES 1 "October 2026" "hop-tunes 1.0.0" "User Commands"
+.SH NAME
+hop-tunes \- a local-first music player
+.SH SYNOPSIS
+.B hop-tunes
+[\fB\-h\fR|\fB\-\-help\fR] [\fB\-v\fR|\fB\-\-version\fR] [\fB\-\-forget\-pin\fR \fIPROFILE\fR] [\fIFILE\fR|\fIFOLDER\fR...]
+.SH DESCRIPTION
+Hop-tunes plays the music files you already own. It works fully offline: there are no
+accounts, no sign-in and no tracking. Several people can share one computer through local
+profiles, each with its own music folders, playlists, history and settings.
+.PP
+Files and folders named on the command line start playing straight away, even if they are
+not in your music folders. If Hop-tunes is already running, they are sent to that window
+instead of opening a second one.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Show a short help text and exit.
+.TP
+.BR \-v ", " \-\-version
+Show the version and exit.
+.TP
+.BI \-\-forget\-pin " PROFILE"
+Remove a forgotten PIN from the named profile, then exit. Nothing else in the profile changes.
+.SH FILES
+.TP
+.I ~/.local/share/hop-tunes/shared/index.sqlite
+Track index shared by all profiles (tags and audio properties; safe to delete, it is rebuilt).
+.TP
+.I ~/.local/share/hop-tunes/profiles/
+One folder per profile: settings, playlists, play counts, history.
+.TP
+.I ~/.cache/hop-tunes/
+Cover art cache (safe to delete).
+.PP
+In the Flatpak these live under \fI~/.var/app/io.github.thestylewithin.Hop-tunes/\fR.
+.SH ENVIRONMENT
+.TP
+.B HOPTUNES_PLAYBIN
+Set to \fBplaybin\fR to use GStreamer's classic playback engine instead of playbin3.
+.SH NOTES
+Hop-tunes never changes, moves or uploads your music files. A profile PIN is a privacy
+curtain, not security: anyone who can use your computer account can read Hop-tunes' files.
+.SH SEE ALSO
+Project page: https://github.com/theStyleWithin/Hop-tunes
+.SH LICENSE
+GPL-3.0-or-later. Hop-tunes is not affiliated with or endorsed by Microsoft.

@@ -1,0 +1,62 @@
+# Flatpak build of Hop-tunes.
+# Local build:  flatpak-builder --user --install --force-clean build-dir packaging/flatpak/io.github.thestylewithin.Hop-tunes.yml
+# The KDE runtime provides Qt 6 and (from the freedesktop base) GStreamer with the base and
+# good plugins plus gst-libav; AAC, WMA and other codecs come from the runtime's
+# codecs-extra extension, which Flatpak installs with the runtime.
+id: io.github.thestylewithin.Hop-tunes
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: hop-tunes
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --socket=pulseaudio          # PulseAudio or PipeWire (pipewire-pulse)
+  # Your Music folder, read-only. Other folders are picked with the file chooser
+  # (the document portal), so Hop-tunes never needs access to your whole home folder.
+  - --filesystem=xdg-music:ro
+  # Media keys and desktop media widgets (MPRIS).
+  - --own-name=org.mpris.MediaPlayer2.hoptunes
+
+cleanup:
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - '*.a'
+
+modules:
+  - name: taglib
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_SHARED_LIBS=ON
+      - -DBUILD_TESTING=OFF
+      - -DBUILD_EXAMPLES=OFF
+      - -DBUILD_BINDINGS=OFF
+      - -DWITH_ZLIB=ON
+    sources:
+      # Git (not the release tarball) so the bundled utfcpp submodule comes along.
+      - type: git
+        url: https://github.com/taglib/taglib.git
+        tag: v2.0.2
+        commit: e3de03501ff66221d1f1f971022b248d5b38ba06
+
+  - name: hop-tunes
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DHOPTUNES_BUILD_TESTS=OFF
+    sources:
+      # CI builds the checked-out tree. For Flathub, replace with:
+      #   - type: git
+      #     url: https://github.com/theStyleWithin/Hop-tunes.git
+      #     tag: v1.0.0
+      #     commit: <commit of the tag>
+      - type: dir
+        path: ../..
+        skip:
+          - build
+          - .git

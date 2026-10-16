@@ -57,8 +57,8 @@ jobs:
 
       - name: Validate desktop entry and AppStream metadata
         run: |
-          desktop-file-validate packaging/io.github.thestylewithin.hoptunes.desktop
-          appstreamcli validate --no-net --explain packaging/io.github.thestylewithin.hoptunes.metainfo.xml || true
+          desktop-file-validate packaging/io.github.thestylewithin.Hop-tunes.desktop
+          appstreamcli validate --no-net --explain packaging/io.github.thestylewithin.Hop-tunes.metainfo.xml || true
 
       - name: Build AppImage
         run: .github/scripts/logged.sh build-appimage packaging/appimage/build-appimage.sh "${{ steps.ver.outputs.version }}"
@@ -88,6 +88,14 @@ jobs:
           - { label: fedora-41,    image: 'fedora:41',           pm: dnf }
           - { label: arch,         image: 'archlinux:latest',    pm: pacman }
           - { label: opensuse-tw,  image: 'opensuse/tumbleweed', pm: zypper }
+          - { label: opensuse-leap-15.6, image: 'opensuse/leap:15.6', pm: zypper }
+          - { label: fedora-42,    image: 'fedora:42',           pm: dnf }
+          - { label: almalinux-10, image: 'almalinux:10',        pm: dnf }
+          - { label: debian-testing, image: 'debian:testing',    pm: apt }
+          - { label: ubuntu-rolling, image: 'ubuntu:rolling',    pm: apt }
+          - { label: manjaro,      image: 'manjarolinux/base:latest', pm: pacman }
+          - { label: cachyos,      image: 'cachyos/cachyos:latest',   pm: pacman }
+          - { label: void-glibc,   image: 'ghcr.io/void-linux/void-glibc:latest', pm: xbps }
           - { label: x11-ubuntu-24.04,     image: 'ubuntu:24.04', pm: apt, display: xcb }
           - { label: wayland-ubuntu-24.04, image: 'ubuntu:24.04', pm: apt, display: wayland }
     steps:
@@ -110,6 +118,9 @@ jobs:
                       libxkbcommon glib2 dbus-libs alsa-lib libwayland-client libwayland-cursor libwayland-egl findutils ;;
             pacman) retry pacman -Syu --noconfirm --needed mesa fontconfig ttf-dejavu libx11 libxcb libxkbcommon glib2 \
                       dbus alsa-lib wayland ;;
+            xbps)   retry sh -c 'xbps-install -Syu xbps && xbps-install -Syu' && \
+                    retry xbps-install -y mesa fontconfig dejavu-fonts-ttf libX11 libxcb libxkbcommon glib \
+                      dbus-libs alsa-lib wayland coreutils bash tar gzip ;;
             zypper) retry zypper -n in Mesa-libEGL1 Mesa-libGL1 fontconfig dejavu-fonts libX11-6 libX11-xcb1 libxcb1 \
                       libxkbcommon0 libglib-2_0-0 libdbus-1-3 libasound2 libwayland-client0 libwayland-cursor0 \
                       libwayland-egl1 gzip tar ;;
@@ -168,7 +179,23 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { name: appimage, path: dist }
+      - name: Publish a tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ver="${GITHUB_REF#refs/tags/v}"
+          cd dist && sha256sum Hop-tunes-* > SHA256SUMS
+          # Release notes: this version's section of CHANGELOG.md.
+          gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$GITHUB_REF" --jq .content | base64 -d > CHANGELOG.md
+          awk -v v="$ver" '$0 ~ "^## \\[?"v"\\]?" {on=1; next} on && /^## / {exit} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Hop-tunes $ver" > notes.md
+          gh release create "v$ver" --verify-tag --title "Hop-tunes $ver" --notes-file notes.md \
+            Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS
+
       - name: Publish to the continuous pre-release
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

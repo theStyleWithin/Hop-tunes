@@ -3,6 +3,7 @@
 
 #include "core/Paths.h"
 #include "library/Smart.h"
+#include "library/TagReader.h"
 
 #include <QCoreApplication>
 #include <QColor>
@@ -10,6 +11,7 @@
 #include <QStyleHints>
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QImage>
 #include <QJsonArray>
 #include <QFileInfo>
@@ -38,6 +40,9 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         if (m_rescanPending) { m_rescanPending = false; rescan(); }
     });
     for (TrackListModel *m : {&m_songs, &m_albumSongs, &m_playlistSongs}) m->setStats(&m_stats);
+    m_openTimer.setSingleShot(true);
+    m_openTimer.setInterval(250);
+    connect(&m_openTimer, &QTimer::timeout, this, [this] { const QStringList b = m_openBatch; m_openBatch.clear(); openFiles(b); });
     connect(&m_player, &Player::positionChanged, this, &App::onPosition);
     connect(&m_player, &Player::trackStarted, this, &App::onTrackChanged);
     // Playback preferences are per profile.
@@ -52,6 +57,14 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_player, &Player::currentChanged, this, [this] { emit statsChanged(); djTopUp(); });
 }
 
+// Moves a damaged SQLite file (and its -wal/-shm companions) to "<file>.damaged-<time>".
+void App::setAside(const QString &file)
+{
+    const QString stamp = QString::number(QDateTime::currentSecsSinceEpoch());
+    for (const QString &suffix : {QString(), QStringLiteral("-wal"), QStringLiteral("-shm")})
+        if (QFile::exists(file + suffix)) QFile::rename(file + suffix, file + QStringLiteral(".damaged-") + stamp + suffix);
+}
+
 App::~App()
 {
     saveProfileSettings();
@@ -62,8 +75,14 @@ bool App::init()
 {
     Paths::ensureDirs();
     if (!m_index.open(Paths::indexDbPath())) {
-        qWarning("hop-tunes: cannot open %s: %s", qPrintable(Paths::indexDbPath()), qPrintable(m_index.lastError()));
-        return false;
+        // The index is only a cache of tags; if it is damaged, keep a copy aside and rebuild.
+        qWarning("hop-tunes: track index unreadable (%s); rebuilding it", qPrintable(m_index.lastError()));
+        m_index.close();
+        setAside(Paths::indexDbPath());
+        if (!m_index.open(Paths::indexDbPath())) {
+            qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::indexDbPath()), qPrintable(m_index.lastError()));
+            return false;
+        }
     }
     if (!m_store.load()) {
         // Never overwrite an unreadable profile list: set it aside and start fresh.
@@ -257,8 +276,14 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_loadingSettings = false;
     emit appearanceChanged();
-    if (!m_db.open(guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite")))
-        qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
+    const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
+    if (!m_db.open(dbPath) && !guest) {
+        // Damaged: keep it aside for recovery and start this profile's lists afresh,
+        // rather than running without playlists and play counts at all.
+        qWarning("hop-tunes: profile database unreadable (%s); set aside, starting a new one", qPrintable(m_db.lastError()));
+        setAside(dbPath);
+        if (!m_db.open(dbPath)) qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
+    }
     m_stats = m_db.allStats();
     m_search.clear();
     m_djSeed.clear();
@@ -271,6 +296,7 @@ void App::activate(const QString &id, bool guest)
     emit foldersChanged();
     reload();
     rescan();
+    if (!m_pendingOpen.isEmpty()) { const QStringList p = m_pendingOpen; m_pendingOpen.clear(); openFiles(p); }
 }
 
 void App::leaveProfile()
@@ -959,6 +985,47 @@ bool App::showAlbum(const QString &ref)
     if (!m_search.isEmpty()) setSearchText({});
     applySelection(ref.section(kRefSep, 0, 0), ref.section(kRefSep, 1));
     return selectedAlbumRef() == ref;
+}
+
+// ---- opening files -------------------------------------------------------------------
+
+void App::openUri(const QString &uri)
+{
+    m_openBatch << uri;
+    m_openTimer.start();
+}
+
+void App::openFiles(const QStringList &pathsOrUris)
+{
+    if (pathsOrUris.isEmpty()) return;
+    if (!profileReady()) { m_pendingOpen += pathsOrUris; return; }
+    QList<Track> q;
+    auto add = [this, &q](const QFileInfo &fi) {
+        if (!fi.isFile() || !TagReader::isAudioFile(fi)) return;
+        const QString path = fi.canonicalFilePath();
+        const int i = m_libraryIndex.value(path, -1);
+        if (i >= 0) { q.append(m_library[i]); return; }
+        Track t = TagReader::read(QFileInfo(path));
+        t.path = path;
+        q.append(t);
+    };
+    for (const QString &item : pathsOrUris) {
+        const QString path = item.startsWith(QLatin1String("file:"), Qt::CaseInsensitive) ? QUrl(item).toLocalFile() : item;
+        const QFileInfo fi(path);
+        if (fi.isDir()) {
+            QStringList files;
+            QDirIterator it(fi.absoluteFilePath(), QDir::Files | QDir::Readable, QDirIterator::Subdirectories);
+            while (it.hasNext()) files << it.next();
+            files.sort(Qt::CaseInsensitive);
+            for (const QString &f : files) add(QFileInfo(f));
+        } else {
+            add(fi);
+        }
+    }
+    if (q.isEmpty()) return;
+    m_djSeed.clear();
+    emit djChanged();
+    m_player.setQueue(q, 0);
 }
 
 // ---- smart DJ --------------------------------------------------------------------------

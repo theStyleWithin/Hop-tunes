@@ -1,0 +1,51 @@
+# Which Linux distros Hop-tunes runs on
+
+Hop-tunes is tested automatically on every change. The table below lists every system it
+has passed on. A pass means the app started, created a profile, scanned and played a
+song, and drew its window.
+
+> [!NOTE]
+> **Older distros may not work.** Hop-tunes is built for current Linux. On a distro
+> released before 2022 (for example Ubuntu 20.04, Debian 11, RHEL/AlmaLinux/Rocky 9 or
+> CentOS 7), the **AppImage** opens but cannot play music, because its audio codecs need
+> glibc 2.35 or newer. On those systems, use the **Flatpak**, which brings its own
+> libraries. Older systems are not tested, so other problems are possible too.
+
+## ⭐ CachyOS
+
+**Hop-tunes is made on CachyOS:** it's the developer's own desktop, and the AppImage is
+tested on CachyOS on every change. To install there:
+
+```sh
+paru -S hop-tunes      # or: yay -S hop-tunes
+```
+
+The Flatpak and the AppImage work on CachyOS too.
+
+## Tested distros
+
+| Distro | AppImage | Notes |
+|---|---|---|
+| ⭐ **CachyOS** (latest) | ✅ | the developer's own system; the AUR package is the recommended install |
+| Arch Linux (latest) | ✅ | the AUR package is built, checked and installed here on every change |
+| Manjaro (latest) | ✅ | |
+| Ubuntu 22.04 LTS | ✅ | oldest supported Ubuntu |
+| Ubuntu 24.04 LTS | ✅ | also tested on real **X11** and **Wayland** desktop sessions |
+| Ubuntu (latest release) | ✅ | |
+| Linux Mint 22 | ✅ | |
+| Debian 12 | ✅ | oldest supported Debian |
+| Debian 13 | ✅ | |
+| Debian testing | ✅ | |
+| Fedora 41 | ✅ | |
+| Fedora 42 | ✅ | |
+| openSUSE Tumbleweed | ✅ | |
+| openSUSE Leap 15.6 | ✅ | |
+| AlmaLinux 10 | ✅ | also covers RHEL 10 and Rocky 10 |
+| Void Linux (glibc) | ✅ | the musl edition of Void is not supported by the AppImage; use the Flatpak |
+
+**Not supported by the AppImage:** AlmaLinux / RHEL / Rocky 9 and anything older (tested:
+the app opens but plays no sound). Use the Flatpak.
+
+## Something not working?
+
+Please open an issue on GitHub: https://github.com/theStyleWithin/Hop-tunes/issues

@@ -549,6 +549,54 @@ private slots:
         m_app->setTheme(QStringLiteral("dark"));
         QVERIFY(!m_app->lightTheme());
     }
+
+    // ---- M6: opening files and folders (file manager, command line, MPRIS OpenUri) ----
+    void m6OpenFiles()
+    {
+        const QString loose = m_home.filePath(QStringLiteral("Loose"));
+        QDir().mkpath(loose + QStringLiteral("/sub"));
+        QVERIFY(writeWav(loose + QStringLiteral("/b second.wav"), 2000));
+        QVERIFY(writeWav(loose + QStringLiteral("/a first.wav"), 2000));
+        QVERIFY(writeWav(loose + QStringLiteral("/sub/c third.wav"), 2000));
+        QFile(loose + QStringLiteral("/notes.txt")).open(QIODevice::WriteOnly);   // not audio: ignored
+
+        // A single file outside every music folder plays straight away.
+        m_app->openFiles({loose + QStringLiteral("/b second.wav")});
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QCOMPARE(m_app->player()->queueLength(), 1);
+        QCOMPARE(m_app->player()->title(), QStringLiteral("b second"));
+
+        // A folder plays its audio files in name order, including subfolders.
+        m_app->openFiles({QUrl::fromLocalFile(loose).toString()});
+        QCOMPARE(m_app->player()->queueLength(), 3);
+        QCOMPARE(m_app->player()->queue().at(0).displayTitle(), QStringLiteral("a first"));
+        QCOMPARE(m_app->player()->queue().at(2).displayTitle(), QStringLiteral("c third"));
+
+        // Several OpenUri calls arriving together become one queue.
+        m_app->openUri(QUrl::fromLocalFile(loose + QStringLiteral("/a first.wav")).toString());
+        m_app->openUri(QUrl::fromLocalFile(loose + QStringLiteral("/sub/c third.wav")).toString());
+        QTRY_COMPARE(m_app->player()->queueLength(), 2);
+
+        // Before a profile is open, files wait and then play.
+        const QString id = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        QVERIFY(!m_app->player()->hasTrack());
+        m_app->openFiles({loose + QStringLiteral("/b second.wav")});
+        QVERIFY(!m_app->player()->hasTrack());
+        QCOMPARE(m_app->openProfile(id), QString());
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QCOMPARE(m_app->player()->title(), QStringLiteral("b second"));
+
+        // About section shows the version.
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTest::qWait(200);
+        QQuickItem *about = item("aboutVersion");
+        QVERIFY(about);
+        ensureVisible(about);
+        QVERIFY(about->property("text").toString().contains(QStringLiteral(HOPTUNES_VERSION)));
+        QVERIFY(about->property("text").toString().contains(QStringLiteral("GPL-3.0")));
+        shot("m6-about");
+    }
 };
 
 int main(int argc, char **argv)
@@ -559,6 +607,7 @@ int main(int argc, char **argv)
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setOrganizationName(QStringLiteral("hop-tunes"));
+    QGuiApplication::setApplicationVersion(QStringLiteral(HOPTUNES_VERSION));
     for (const char *f : {":/fonts/Jost-300-Light.ttf", ":/fonts/Jost-400-Book.ttf", ":/fonts/Jost-500-Medium.ttf"})
         QFontDatabase::addApplicationFont(QString::fromLatin1(f));
     QFont::insertSubstitutions(QStringLiteral("Jost"), {QStringLiteral("Jost*"), QStringLiteral("DejaVu Sans")});

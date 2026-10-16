@@ -236,6 +236,11 @@ namespace {
 QString normEntry(QString e)
 {
     e = e.trimmed();
+    // Junk from binary or damaged files: no real path holds control characters or runs
+    // past PATH_MAX.
+    if (e.size() > 4096) return {};
+    for (const QChar c : e)
+        if (c.unicode() < 0x20 || c == QChar::ReplacementCharacter) return {};
     if (e.startsWith(QLatin1String("file:"), Qt::CaseInsensitive)) e = QUrl(e).toLocalFile();
     e.replace(QLatin1Char('\\'), QLatin1Char('/'));
     return e;
@@ -269,10 +274,11 @@ Parsed read(const QString &file)
             if (x.isStartElement()) {
                 const auto n = x.name();
                 if (n == QLatin1String("title") && p.entries.isEmpty()) inTitle = true;
-                else if (n == QLatin1String("location")) p.entries << normEntry(x.readElementText());
-                else if (n == QLatin1String("media") || n == QLatin1String("ref")) {
+                else if (n == QLatin1String("location")) {
+                    if (const QString e = normEntry(x.readElementText()); !e.isEmpty()) p.entries << e;
+                } else if (n == QLatin1String("media") || n == QLatin1String("ref")) {
                     const QString src = x.attributes().value(QLatin1String("src")).toString();
-                    if (!src.isEmpty()) p.entries << normEntry(src);
+                    if (const QString e = normEntry(src); !e.isEmpty()) p.entries << e;
                 }
             } else if (x.isCharacters() && inTitle) {
                 const QString t = x.text().toString().trimmed();
@@ -291,7 +297,7 @@ Parsed read(const QString &file)
     if (ext == QLatin1String("pls")) {
         static const QRegularExpression fileN(QStringLiteral("^File\\d+=(.*)$"), QRegularExpression::CaseInsensitiveOption);
         for (const QString &l : lines) {
-            if (const auto m = fileN.match(l); m.hasMatch()) p.entries << normEntry(m.captured(1));
+            if (const auto m = fileN.match(l); m.hasMatch()) { if (const QString e = normEntry(m.captured(1)); !e.isEmpty()) p.entries << e; }
         }
         return p;
     }
@@ -300,7 +306,7 @@ Parsed read(const QString &file)
         if (t.startsWith(QLatin1String("#PLAYLIST:"))) { p.name = t.mid(10).trimmed(); continue; }
         if (t.isEmpty() || t.startsWith(QLatin1Char('#'))) continue;
         if (t.contains(QLatin1String("://")) && !t.startsWith(QLatin1String("file:"), Qt::CaseInsensitive)) continue;   // streams
-        p.entries << normEntry(t);
+        if (const QString e = normEntry(t); !e.isEmpty()) p.entries << e;
     }
     return p;
 }

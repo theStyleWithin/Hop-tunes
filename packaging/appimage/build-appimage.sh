@@ -13,7 +13,7 @@ VERSION=${1:-$(sed -n 's/^project(hop-tunes VERSION \([0-9.]*\).*/\1/p' "$ROOT/C
 BUILD=$ROOT/build-appimage
 APPDIR=$ROOT/AppDir
 TOOLS=$ROOT/.appimage-tools
-APP_ID=io.github.thestylewithin.hoptunes
+APP_ID=io.github.thestylewithin.Hop-tunes
 ARCH_LIB=/usr/lib/x86_64-linux-gnu
 
 echo "== Hop-tunes $VERSION"

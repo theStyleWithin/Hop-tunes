@@ -1,0 +1,27 @@
+pkgbase = hop-tunes
+	pkgdesc = Local-first music player with private local profiles (offline, no accounts)
+	pkgver = 1.0.0
+	pkgrel = 1
+	url = https://github.com/theStyleWithin/Hop-tunes
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-or-later
+	checkdepends = qt6-declarative
+	makedepends = cmake
+	makedepends = ninja
+	depends = qt6-base
+	depends = qt6-declarative
+	depends = taglib
+	depends = sqlite
+	depends = glib2
+	depends = gstreamer
+	depends = gst-plugins-base
+	depends = gst-plugins-good
+	depends = hicolor-icon-theme
+	optdepends = gst-libav: AAC, ALAC and WMA playback
+	optdepends = gst-plugins-ugly: more MP3 and WMA files
+	optdepends = pipewire-pulse: sound through PipeWire (most desktops already have it)
+	source = hop-tunes-1.0.0.tar.gz::https://github.com/theStyleWithin/Hop-tunes/archive/refs/tags/v1.0.0.tar.gz
+	sha256sums = SKIP
+
+pkgname = hop-tunes

@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#include "core/Paths.h"
+#include "core/ProfileStore.h"
 #include "platform/Mpris.h"
 
+#include <QCommandLineParser>
+#include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
 #include <QGuiApplication>
@@ -18,6 +22,39 @@
 
 int main(int argc, char *argv[])
 {
+    // --help / --version answer without a display (packaging checks, servers).
+    for (int i = 1; i < argc; ++i) {
+        const QByteArray a(argv[i]);
+        if (a == "--version" || a == "-v") { printf("hop-tunes %s\n", HOPTUNES_VERSION); return 0; }
+        if (a == "--help" || a == "-h") {
+            printf("Usage: hop-tunes [options] [files or folders...]\n"
+                   "Hop-tunes: a local-first music player. Offline, no accounts.\n\n"
+                   "Options:\n"
+                   "  -h, --help                Show this help.\n"
+                   "  -v, --version             Show the version.\n"
+                   "  --forget-pin <profile>    Remove a forgotten PIN from a profile.\n\n"
+                   "Files and folders given here start playing. If Hop-tunes is already running,\n"
+                   "they are sent to that window instead.\n");
+            return 0;
+        }
+        if (a == "--forget-pin") {
+            // A PIN is a privacy curtain (spec §3.2), so whoever can run Hop-tunes as this
+            // user may lift it. Nothing else in the profile changes.
+            if (i + 1 >= argc) { fprintf(stderr, "usage: hop-tunes --forget-pin <profile name>\n"); return 2; }
+            const QString name = QString::fromLocal8Bit(argv[i + 1]);
+            hop::ProfileStore store(hop::Paths::profilesDir());
+            if (!store.load()) { fprintf(stderr, "cannot read profiles: %s\n", qPrintable(store.lastError())); return 1; }
+            for (const hop::Profile &p : store.profiles()) {
+                if (p.name.compare(name, Qt::CaseInsensitive) != 0) continue;
+                if (!p.hasPin) { printf("profile \"%s\" has no PIN\n", qPrintable(p.name)); return 0; }
+                if (!store.setPin(p.id, {})) { fprintf(stderr, "could not save: %s\n", qPrintable(store.lastError())); return 1; }
+                printf("removed the PIN from \"%s\"\n", qPrintable(p.name));
+                return 0;
+            }
+            fprintf(stderr, "no profile called \"%s\"\n", qPrintable(name));
+            return 1;
+        }
+    }
     gst_init(&argc, &argv);
 
     QGuiApplication app(argc, argv);
@@ -25,8 +62,25 @@ int main(int argc, char *argv[])
     QGuiApplication::setOrganizationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hop-tunes"));
     QGuiApplication::setApplicationVersion(QStringLiteral(HOPTUNES_VERSION));
-    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.thestylewithin.hoptunes"));
+    QGuiApplication::setDesktopFileName(QStringLiteral("io.github.thestylewithin.Hop-tunes"));
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+
+    // Command line: hop-tunes [--help] [--version] [files or folders...]
+    // Unknown options are ignored (desktop launchers sometimes add their own).
+    QCommandLineParser parser;
+    parser.addPositionalArgument(QStringLiteral("files"), QStringLiteral("Music files or folders to play."), QStringLiteral("[files...]"));
+    parser.parse(QCoreApplication::arguments());
+    QStringList files;
+    for (const QString &f : parser.positionalArguments())
+        files << (f.startsWith(QLatin1String("file:")) ? f : QFileInfo(f).absoluteFilePath());
+
+    // One window per session: a second launch hands its files to the running one.
+    const bool devRun = qEnvironmentVariableIsSet("HOPTUNES_SCREENSHOT") || qEnvironmentVariableIsSet("HOPTUNES_NO_MPRIS");
+    if (!devRun) {
+        QStringList uris;
+        for (const QString &f : files) uris << (f.startsWith(QLatin1String("file:")) ? f : QUrl::fromLocalFile(f).toString());
+        if (hop::Mpris::forwardToRunningInstance(uris)) return 0;
+    }
 
     // The design uses Jost (SIL OFL), bundled so the app looks the same on every distro.
     // Its internal family name is "Jost*"; the QML asks for "Jost".
@@ -56,10 +110,12 @@ int main(int argc, char *argv[])
     // Media keys / desktop media widgets.
     hop::Mpris mpris(hopApp.player());
     QObject::connect(&mpris, &hop::Mpris::quitRequested, &app, &QCoreApplication::quit);
+    QObject::connect(&mpris, &hop::Mpris::openUriRequested, &hopApp, &hop::App::openUri);
     QObject::connect(&mpris, &hop::Mpris::raiseRequested, &app, [&engine] {
         if (auto *w = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) { w->show(); w->raise(); w->requestActivate(); }
     });
     mpris.start();
+    hopApp.openFiles(files);   // played now, or once a profile is open
 
     // Developer hook: HOPTUNES_AUTOPLAY=<row> starts playing that song once the library has loaded.
     bool autoplayOk = false;

@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright 2026 Hop-tunes contributors -->
+<component type="desktop-application">
+  <id>io.github.thestylewithin.Hop-tunes</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Hop-tunes</name>
+  <summary>Local-first music player with private profiles</summary>
+  <description>
+    <p>
+      Hop-tunes is a calm, fast music player for the music files you already own. It works
+      fully offline: no accounts, no sign-in, no store and no tracking.
+    </p>
+    <ul>
+      <li>Gapless playback, optional crossfade and even volume (ReplayGain)</li>
+      <li>Browse by artist, album and song, with instant search and your own cover art</li>
+      <li>Playlists, smart playlists and import of m3u, pls, xspf and Zune zpl playlists</li>
+      <li>Quickplay: pinned favourites, recently played, new albums and an offline smart DJ</li>
+      <li>Local profiles so several people can share one computer, with an optional PIN</li>
+      <li>Dark and light themes, media keys and desktop media widgets</li>
+    </ul>
+    <p>
+      Hop-tunes is inspired by how the Zune desktop software organised music. It is an
+      independent project, not affiliated with or endorsed by Microsoft.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.thestylewithin.Hop-tunes.desktop</launchable>
+  <provides>
+    <binary>hop-tunes</binary>
+  </provides>
+  <url type="homepage">https://github.com/theStyleWithin/Hop-tunes</url>
+  <url type="bugtracker">https://github.com/theStyleWithin/Hop-tunes/issues</url>
+  <url type="vcs-browser">https://github.com/theStyleWithin/Hop-tunes</url>
+  <developer id="io.github.thestylewithin">
+    <name>Hop-tunes contributors</name>
+  </developer>
+  <branding>
+    <color type="primary" scheme_preference="light">#d6f3f0</color>
+    <color type="primary" scheme_preference="dark">#1c4744</color>
+  </branding>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Browse your collection by artist, album and song</caption>
+      <image>https://raw.githubusercontent.com/theStyleWithin/Hop-tunes/main/design/app/m2-collection-artists.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Now playing, with a queue you can reorder</caption>
+      <image>https://raw.githubusercontent.com/theStyleWithin/Hop-tunes/main/design/app/m2-now-playing.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Quickplay and the offline smart DJ</caption>
+      <image>https://raw.githubusercontent.com/theStyleWithin/Hop-tunes/main/design/app/m4-quickplay.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Local profiles: no accounts, no sign-in</caption>
+      <image>https://raw.githubusercontent.com/theStyleWithin/Hop-tunes/main/design/app/m3-profile-picker.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Light theme</caption>
+      <image>https://raw.githubusercontent.com/theStyleWithin/Hop-tunes/main/design/app/m5-albums-light.png</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>player</keyword>
+    <keyword>audio</keyword>
+    <keyword>playlist</keyword>
+    <keyword>gapless</keyword>
+    <keyword>zune</keyword>
+  </keywords>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.0" date="2026-10-15">
+      <description>
+        <p>First stable release.</p>
+        <ul>
+          <li>Local profiles with an optional PIN and guest mode</li>
+          <li>Playlists, smart playlists, playlist import and export, instant search</li>
+          <li>Quickplay with pins, history, new albums and an offline smart DJ</li>
+          <li>Crossfade, ReplayGain, shuffle and repeat, dark and light themes</li>
+          <li>Open music files from your file manager; a second launch reuses the open window</li>
+        </ul>
+      </description>
+    </release>
+    <release version="0.1.0" date="2026-10-14">
+      <description><p>First preview: library scan, gapless playback, collection and now playing.</p></description>
+    </release>
+  </releases>
+</component>

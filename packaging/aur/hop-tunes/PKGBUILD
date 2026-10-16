@@ -1,0 +1,39 @@
+# Maintainer: Hop-tunes contributors <https://github.com/theStyleWithin/Hop-tunes>
+pkgname=hop-tunes
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="Local-first music player with private local profiles (offline, no accounts)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/theStyleWithin/Hop-tunes"
+license=('GPL-3.0-or-later')
+depends=('qt6-base' 'qt6-declarative' 'taglib' 'sqlite' 'glib2'
+         'gstreamer' 'gst-plugins-base' 'gst-plugins-good'
+         'hicolor-icon-theme')
+optdepends=('gst-libav: AAC, ALAC and WMA playback'
+            'gst-plugins-ugly: more MP3 and WMA files'
+            'pipewire-pulse: sound through PipeWire (most desktops already have it)')
+makedepends=('cmake' 'ninja')
+checkdepends=('qt6-declarative')
+# The release's own source tarball (attached to the GitHub release), so the checksum never
+# changes the way GitHub's generated archives can.
+source=("$url/releases/download/v$pkgver/$pkgname-$pkgver.tar.gz")
+# The release kit fills this in; see packaging/release-kit/.
+sha256sums=('SKIP')
+
+build() {
+  cmake -B build -S "$pkgname-$pkgver" -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DHOPTUNES_BUILD_TESTS=ON
+  cmake --build build
+}
+
+check() {
+  # Library, profile, playlist/search and smart DJ tests (no audio device or display needed).
+  QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure -R 'library|profiles|playlists-search-dj'
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 "$pkgname-$pkgver/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
