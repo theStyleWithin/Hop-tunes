@@ -2,7 +2,7 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-16
 
 ### Fixed
 - **Video playback failing with "mpv_create failed" on real hardware** (found testing
@@ -88,6 +88,7 @@ First release, feature complete.
 First preview: library scanning, gapless playback, artists/albums/songs, cover art, Now
 Playing, media keys (MPRIS) and the portable AppImage.
 
+[1.2.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.2.0
 [1.1.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.1.0
 [1.0.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.0.0
 [0.1.0]: https://github.com/theStyleWithin/Hop-tunes/commits/main
