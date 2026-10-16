@@ -3,6 +3,7 @@
 #include "core/Paths.h"
 #include "core/ProfileStore.h"
 #include "platform/Mpris.h"
+#include "ui/MpvVideoItem.h"
 
 #include <QCommandLineParser>
 #include <QFileInfo>
@@ -14,6 +15,7 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSGRendererInterface>
 #include <QTimer>
 
 #include <cstdio>
@@ -22,6 +24,9 @@
 
 int main(int argc, char *argv[])
 {
+    // QQuickFramebufferObject (MpvVideoItem, spec §5b) needs the OpenGL scenegraph backend;
+    // must be set before QGuiApplication exists.
+    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
     // --help / --version answer without a display (packaging checks, servers).
     for (int i = 1; i < argc; ++i) {
         const QByteArray a(argv[i]);
@@ -97,6 +102,7 @@ int main(int argc, char *argv[])
     hop::App hopApp;
     if (!hopApp.init()) return 1;
 
+    hop::registerVideoQmlTypes();
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("hop"), &hopApp);
     // Developer hook: HOPTUNES_VIEW=collection|artists|albums|songs|nowplaying|quickplay|settings picks the first view.

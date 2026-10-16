@@ -21,5 +21,8 @@
     <file>qml/TrackMenu.qml</file>
     <file>qml/PlaylistsPane.qml</file>
     <file>qml/SmartRulesEditor.qml</file>
+    <file>qml/VideoThumb.qml</file>
+    <file>qml/VideosView.qml</file>
+    <file>qml/VideoPlayerView.qml</file>
   </qresource>
 </RCC>

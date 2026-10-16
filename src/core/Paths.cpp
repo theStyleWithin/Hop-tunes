@@ -19,11 +19,13 @@ QString indexDbPath() { return sharedDir() + QStringLiteral("/index.sqlite"); }
 QString profilesDir() { return dataDir() + QStringLiteral("/profiles"); }
 QString cacheDir()    { return xdg(QStandardPaths::GenericCacheLocation); }
 QString artCacheDir() { return cacheDir() + QStringLiteral("/art"); }
+QString videoIndexDbPath()   { return sharedDir() + QStringLiteral("/videos.sqlite"); }
+QString videoThumbCacheDir() { return cacheDir() + QStringLiteral("/video-thumbs"); }
 
 bool ensureDirs()
 {
     bool ok = true;
-    for (const QString &d : {dataDir(), sharedDir(), profilesDir(), cacheDir(), artCacheDir()}) {
+    for (const QString &d : {dataDir(), sharedDir(), profilesDir(), cacheDir(), artCacheDir(), videoThumbCacheDir()}) {
         if (!QDir().mkpath(d)) { ok = false; continue; }
         QFile::setPermissions(d, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     }

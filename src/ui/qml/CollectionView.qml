@@ -8,7 +8,8 @@ Item {
     id: root
     signal addFolderRequested()
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
-    function showArtists() { mode = "artists" }
+    property string collectionTab: "music"   // music | videos (spec §4.1; podcasts: v1.2)
+    function showArtists() { mode = "artists"; collectionTab = "music" }
 
     TrackMenu {
         id: menu
@@ -40,17 +41,33 @@ Item {
         RowLayout {
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 14
             spacing: 28
-            Label { text: "music"; color: hop.accent; font { family: Theme.font; pixelSize: 22 } }
-            Label { text: "videos"; color: Theme.dim; font { family: Theme.font; pixelSize: 22 } }
-            Label { text: "podcasts"; color: Theme.dim; font { family: Theme.font; pixelSize: 22 } }
+            AbstractButton {
+                id: musicTab
+                objectName: "subTab_music"
+                hoverEnabled: true
+                onClicked: root.collectionTab = "music"
+                contentItem: Label { text: "music"; color: root.collectionTab === "music" ? hop.accent : (musicTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: 22 } }
+                background: Item {}
+            }
+            AbstractButton {
+                id: videosTab
+                objectName: "subTab_videos"
+                hoverEnabled: true
+                onClicked: root.collectionTab = "videos"
+                contentItem: Label { text: "videos"; color: root.collectionTab === "videos" ? hop.accent : (videosTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: 22 } }
+                background: Item {}
+            }
+            Label { text: "podcasts"; color: Theme.faint; font { family: Theme.font; pixelSize: 22 } }
             Item { Layout.fillWidth: true }
             Label {
-                visible: hop.scanning
+                visible: hop.scanning && root.collectionTab === "music"
                 text: hop.scanTotal > 0 ? "scanning " + hop.scanDone + " / " + hop.scanTotal : "scanning…"
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
             Label {
-                visible: !hop.scanning && hop.librarySize > 0
+                visible: !hop.scanning && hop.librarySize > 0 && root.collectionTab === "music"
                 text: hop.searchText !== "" ? hop.songs.count + " of " + hop.librarySize : hop.songs.count + (hop.songs.count === 1 ? " song" : " songs")
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
@@ -58,7 +75,7 @@ Item {
             TextField {
                 id: search
                 objectName: "searchField"
-                visible: hop.librarySize > 0
+                visible: hop.librarySize > 0 && root.collectionTab === "music"
                 implicitWidth: 260
                 placeholderText: "search"
                 placeholderTextColor: Theme.dim
@@ -93,6 +110,7 @@ Item {
 
         // ARTISTS · ALBUMS · SONGS · PLAYLISTS (genres: later)
         RowLayout {
+            visible: root.collectionTab === "music"
             Layout.leftMargin: 48; Layout.topMargin: 10
             spacing: 24
             Repeater {
@@ -121,7 +139,7 @@ Item {
 
         // empty state
         ColumnLayout {
-            visible: hop.librarySize === 0 && !hop.scanning
+            visible: root.collectionTab === "music" && hop.librarySize === 0 && !hop.scanning
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.topMargin: 40
             spacing: 18
@@ -147,7 +165,7 @@ Item {
 
         // no search hits
         ColumnLayout {
-            visible: hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
+            visible: root.collectionTab === "music" && hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.topMargin: 40
             spacing: 12
@@ -156,8 +174,14 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
+        VideosView {
+            visible: root.collectionTab === "videos"
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+        }
+
         StackLayout {
-            visible: hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
+            visible: root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
             currentIndex: ["artists", "albums", "songs", "playlists"].indexOf(root.mode)

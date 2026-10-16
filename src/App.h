@@ -3,10 +3,14 @@
 
 #include "core/ProfileStore.h"
 #include "library/CollectionModels.h"
+#include "library/LibraryWatcher.h"
 #include "library/ProfileDb.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
 #include "library/TrackListModel.h"
+#include "library/VideoIndex.h"
+#include "library/VideoListModel.h"
+#include "library/VideoScanner.h"
 #include "playback/Player.h"
 
 #include <QObject>
@@ -72,6 +76,15 @@ class App : public QObject {
     Q_PROPERTY(bool lightTheme READ lightTheme NOTIFY appearanceChanged)
     Q_PROPERTY(bool reduceMotion READ reduceMotion WRITE setReduceMotion NOTIFY appearanceChanged)
     Q_PROPERTY(bool systemThemeAvailable READ systemThemeAvailable CONSTANT)
+    // videos (spec §5b)
+    Q_PROPERTY(hop::VideoListModel *videos READ videos CONSTANT)
+    Q_PROPERTY(bool videoScanning READ videoScanning NOTIFY videoScanProgressChanged)
+    Q_PROPERTY(int videoScanDone READ videoScanDone NOTIFY videoScanProgressChanged)
+    Q_PROPERTY(int videoScanTotal READ videoScanTotal NOTIFY videoScanProgressChanged)
+    Q_PROPERTY(bool videoPlayerOpen READ videoPlayerOpen NOTIFY videoPlayerChanged)
+    Q_PROPERTY(QString videoPlayerPath READ videoPlayerPath NOTIFY videoPlayerChanged)
+    Q_PROPERTY(QString videoPlayerTitle READ videoPlayerTitle NOTIFY videoPlayerChanged)
+    Q_PROPERTY(qint64 videoPlayerResumeMs READ videoPlayerResumeMs NOTIFY videoPlayerChanged)
 
 public:
     explicit App(QObject *parent = nullptr);
@@ -127,6 +140,15 @@ public:
     bool reduceMotion() const { return m_reduceMotion; }
     void setReduceMotion(bool on);
     bool systemThemeAvailable() const;
+
+    VideoListModel *videos() { return &m_videos; }
+    bool videoScanning() const { return m_videoScanner.isRunning(); }
+    int videoScanDone() const { return m_videoScanDone; }
+    int videoScanTotal() const { return m_videoScanTotal; }
+    bool videoPlayerOpen() const { return m_videoPlayerOpen; }
+    QString videoPlayerPath() const { return m_videoPlayerPath; }
+    QString videoPlayerTitle() const;
+    qint64 videoPlayerResumeMs() const { return m_videoPlayerResumeMs; }
 
     // playlists: keys are "pl:<id>" for the profile's own and "auto:<name>" for built-ins.
     Q_INVOKABLE void selectPlaylist(const QString &key);
@@ -190,6 +212,11 @@ public:
     Q_INVOKABLE void shuffleAll();
     Q_INVOKABLE QString formatTime(qint64 ms) const { return TrackListModel::formatDuration(ms); }
 
+    // videos (spec §5b)
+    Q_INVOKABLE void playVideo(int row);                                  // opens the player, resumes if we have a position
+    Q_INVOKABLE void closeVideoPlayer(qint64 positionMs, qint64 durationMs);  // saves resume position, closes
+    Q_INVOKABLE void saveVideoProgress(qint64 positionMs, qint64 durationMs); // periodic save while playing
+
 signals:
     void foldersChanged();
     void scanningChanged();
@@ -205,9 +232,13 @@ signals:
     void djChanged();
     void statsChanged();
     void appearanceChanged();
+    void videoScanProgressChanged();
+    void videoPlayerChanged();
 
 private:
     void reload();
+    void reloadVideos();
+    void openVideoFile(const QString &path);
     void saveFolders();
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
@@ -268,6 +299,17 @@ private:
     int m_selArtist = -1;
     int m_selAlbum = -1;
     QStringList m_mosaicArt;
+
+    VideoIndex m_videoIndex;
+    VideoScanner m_videoScanner{&m_videoIndex};
+    VideoListModel m_videos;
+    LibraryWatcher m_watcher;
+    int m_videoScanDone = 0;
+    int m_videoScanTotal = 0;
+    bool m_videoScanRescanPending = false;
+    bool m_videoPlayerOpen = false;
+    QString m_videoPlayerPath;
+    qint64 m_videoPlayerResumeMs = 0;
 };
 
 } // namespace hop

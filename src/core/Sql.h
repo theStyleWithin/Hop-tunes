@@ -23,12 +23,14 @@ public:
     }
     void bind(int i, qint64 v) { sqlite3_bind_int64(m_s, i, v); }
     void bind(int i, int v) { sqlite3_bind_int(m_s, i, v); }
+    void bind(int i, double v) { sqlite3_bind_double(m_s, i, v); }
     int step() { return sqlite3_step(m_s); }
     bool run() { return sqlite3_step(m_s) == SQLITE_DONE; }
     void reset() { sqlite3_reset(m_s); sqlite3_clear_bindings(m_s); }
 
     qint64 i64(int c) const { return sqlite3_column_int64(m_s, c); }
     int i32(int c) const { return sqlite3_column_int(m_s, c); }
+    double f64(int c) const { return sqlite3_column_double(m_s, c); }
     QString str(int c) const
     {
         const auto *t = reinterpret_cast<const char *>(sqlite3_column_text(m_s, c));

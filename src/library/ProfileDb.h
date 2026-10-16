@@ -2,6 +2,7 @@
 #pragma once
 
 #include "library/Track.h"
+#include "library/Video.h"
 
 #include <QHash>
 #include <QList>
@@ -71,6 +72,10 @@ public:
     bool pin(const Pin &p);
     bool unpin(const QString &kind, const QString &ref);
     bool isPinned(const QString &kind, const QString &ref) const;
+
+    // video resume position (spec §5b), keyed by path like everything else here
+    VideoProgress videoProgress(const QString &path) const;
+    bool setVideoProgress(const QString &path, qint64 positionMs, qint64 durationMs);
 
 private:
     bool exec(const char *sql);

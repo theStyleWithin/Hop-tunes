@@ -2,6 +2,7 @@
 // End-to-end profile flows through the real QML UI (offscreen): first run, PIN curtain,
 // switching, guest mode, removal, restart behaviour.
 #include "App.h"
+#include "ui/MpvVideoItem.h"
 
 #include <QDir>
 #include <QFile>
@@ -41,6 +42,33 @@ bool writeWav(const QString &path, int ms)
     f.write(h);
     f.write(QByteArray(int(bytes), '\0'));
     return true;
+}
+
+// A tiny VP8+Opus/Matroska clip (see test_video.cpp for the same recipe) — enough for
+// VideoScanner to probe and for the Videos grid to show a real tile.
+bool writeTestVideo(const QString &path, int ms = 1000)
+{
+    GError *err = nullptr;
+    const QByteArray desc =
+        QStringLiteral("videotestsrc num-buffers=%1 ! video/x-raw,width=320,height=240,framerate=25/1 "
+                        "! vp8enc ! matroskamux name=mux ! filesink location=\"%2\" "
+                        "audiotestsrc num-buffers=%1 ! audioconvert ! opusenc ! mux.")
+            .arg(ms * 25 / 1000).arg(path).toUtf8();
+    GstElement *bin = gst_parse_launch(desc.constData(), &err);
+    if (err) { g_error_free(err); err = nullptr; }
+    if (!bin) return false;
+    gst_element_set_state(bin, GST_STATE_PLAYING);
+    GstBus *bus = gst_element_get_bus(bin);
+    bool ok = false;
+    if (GstMessage *msg = gst_bus_timed_pop_filtered(bus, 10 * GST_SECOND,
+            GstMessageType(GST_MESSAGE_EOS | GST_MESSAGE_ERROR))) {
+        ok = GST_MESSAGE_TYPE(msg) == GST_MESSAGE_EOS;
+        gst_message_unref(msg);
+    }
+    gst_object_unref(bus);
+    gst_element_set_state(bin, GST_STATE_NULL);
+    gst_object_unref(bin);
+    return ok && QFile::exists(path);
 }
 
 } // namespace
@@ -597,14 +625,53 @@ private slots:
         QVERIFY(about->property("text").toString().contains(QStringLiteral("GPL-3.0")));
         shot("m6-about");
     }
+
+    // Scanning and the Videos grid only (spec §5b) — not opening the player itself:
+    // MpvVideoItem is a QQuickFramebufferObject, which needs a real GL scenegraph, and
+    // this whole test suite runs the software backend (no GPU in CI). Opening the player
+    // would instantiate it, so that path is intentionally left untested here; see
+    // MpvVideoItem's header comment.
+    void m7VideoScanningAndGrid()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        const QString lib = m_home.filePath(QStringLiteral("Library"));
+        QVERIFY(writeTestVideo(lib + QStringLiteral("/Alpha/clip.mkv")));
+        m_app->rescan();
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->videos()->count() >= 1, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
+
+        QVERIFY(click("subTab_videos"));
+        QTRY_VERIFY(item("videoTile_0") != nullptr);
+        QVERIFY(item("videoTile_0")->isVisible());
+        shot("m7-videos");
+
+        // Opening a video file (file manager "open with", or the command line) opens the
+        // player directly — it need not be in the library. MpvVideoItem itself is never
+        // instantiated here (hop.videoPlayerOpen alone, no click), so this stays safe
+        // under the software backend (see MpvVideoItem's header comment).
+        QVERIFY(!m_app->videoPlayerOpen());
+        const QString loose = m_home.filePath(QStringLiteral("Loose/loose-clip.mkv"));
+        QDir().mkpath(QFileInfo(loose).absolutePath());
+        QVERIFY(writeTestVideo(loose));
+        m_app->openFiles({loose});
+        QVERIFY(m_app->videoPlayerOpen());
+        QCOMPARE(QFileInfo(m_app->videoPlayerPath()).canonicalFilePath(), QFileInfo(loose).canonicalFilePath());
+        m_app->closeVideoPlayer(0, 0);
+        QVERIFY(!m_app->videoPlayerOpen());
+    }
 };
 
 int main(int argc, char **argv)
 {
     qputenv("QT_QPA_PLATFORM", "offscreen");
+    // This test suite runs the software Qt Quick backend (no GPU/OpenGL in CI), so
+    // MpvVideoItem — a QQuickFramebufferObject, which needs a real GL scenegraph — is
+    // never actually instantiated by any test flow below (it's behind a Loader in
+    // VideoPlayerView.qml, gated on hop.videoPlayerOpen, which no UI test flips to true).
     qputenv("QT_QUICK_BACKEND", "software");
     gst_init(&argc, &argv);
     QGuiApplication app(argc, argv);
+    hop::registerVideoQmlTypes();
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setOrganizationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setApplicationVersion(QStringLiteral(HOPTUNES_VERSION));

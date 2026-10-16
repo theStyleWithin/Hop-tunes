@@ -50,7 +50,7 @@ bool ProfileDb::open(const QString &path)
 bool ProfileDb::migrate()
 {
     Stmt v(m_db, "PRAGMA user_version");
-    const int version = (v.ok() && v.step() == SQLITE_ROW) ? v.i32(0) : 0;
+    int version = (v.ok() && v.step() == SQLITE_ROW) ? v.i32(0) : 0;
     if (version < 1) {
         const bool ok = exec("BEGIN")
             && exec("CREATE TABLE stats (path TEXT PRIMARY KEY, play_count INTEGER NOT NULL DEFAULT 0,"
@@ -65,6 +65,16 @@ bool ProfileDb::migrate()
             && exec("CREATE TABLE pin (kind TEXT NOT NULL, ref TEXT NOT NULL, label TEXT NOT NULL DEFAULT '',"
                     " pos INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (kind, ref))")
             && exec("PRAGMA user_version=1")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
+        version = 1;
+    }
+    if (version < 2) {
+        // v2: video resume position (spec §5b).
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE video_progress (path TEXT PRIMARY KEY, position_ms INTEGER NOT NULL DEFAULT 0,"
+                    " duration_ms INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0)")
+            && exec("PRAGMA user_version=2")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
     }
@@ -261,6 +271,34 @@ bool ProfileDb::isPinned(const QString &kind, const QString &ref) const
     Stmt s(m_db, "SELECT 1 FROM pin WHERE kind = ?1 AND ref = ?2");
     s.bind(1, kind); s.bind(2, ref);
     return s.step() == SQLITE_ROW;
+}
+
+// ---- video resume position (spec §5b) -----------------------------------------------
+
+VideoProgress ProfileDb::videoProgress(const QString &path) const
+{
+    VideoProgress p;
+    if (!m_db) return p;
+    Stmt s(m_db, "SELECT position_ms, duration_ms, updated_at FROM video_progress WHERE path = ?1");
+    s.bind(1, path);
+    if (s.step() == SQLITE_ROW) { p.positionMs = s.i64(0); p.durationMs = s.i64(1); p.updatedAt = s.i64(2); }
+    return p;
+}
+
+bool ProfileDb::setVideoProgress(const QString &path, qint64 positionMs, qint64 durationMs)
+{
+    if (!m_db) return false;
+    // Finished (or near enough): forget it, so it plays from the start next time rather
+    // than appearing to resume one second from the end.
+    if (durationMs > 0 && positionMs >= durationMs - 5000) {
+        Stmt d(m_db, "DELETE FROM video_progress WHERE path = ?1");
+        d.bind(1, path);
+        return d.run();
+    }
+    Stmt s(m_db, "INSERT INTO video_progress(path, position_ms, duration_ms, updated_at) VALUES(?1, ?2, ?3, ?4) "
+                 "ON CONFLICT(path) DO UPDATE SET position_ms = ?2, duration_ms = ?3, updated_at = ?4");
+    s.bind(1, path); s.bind(2, positionMs); s.bind(3, durationMs); s.bind(4, QDateTime::currentSecsSinceEpoch());
+    return s.run();
 }
 
 } // namespace hop
