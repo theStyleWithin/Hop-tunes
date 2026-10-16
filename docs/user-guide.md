@@ -48,7 +48,7 @@ Or choose **just listen as guest**: guest mode plays your Music folder and saves
 Hop-tunes reads these formats: MP3, FLAC, AAC/M4A, ALAC, Ogg Vorbis, Opus, WAV, AIFF, WavPack,
 APE, Musepack and WMA. It scans in the background and only re-reads files that changed.
 
-- **Add or remove folders** in *settings → music folders*. Removing a folder only stops
+- **Add or remove folders** in *settings → media folders*. Removing a folder only stops
   Hop-tunes looking there; your files stay where they are.
 - **Cover art** comes from the art embedded in your files, or an image called `cover`,
   `folder`, `front` or `album` (`.jpg` or `.png`) next to them.
@@ -61,7 +61,7 @@ APE, Musepack and WMA. It scans in the background and only re-reads files that c
 ## Your videos
 
 Hop-tunes also plays video — `collection → videos` lists anything it finds under your
-music folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, `.ts`,
+media folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, `.ts`,
 `.m2ts`). Click a tile to play it full-window.
 
 - **Badges** on each tile show resolution (SD/720p/1080p/1440p/4K), codec and HDR, from a
@@ -95,7 +95,7 @@ music folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, 
 - **Hearts** (♡) mark favourites. They collect in the *hearted* list and guide the smart DJ.
 - **Opening files**: open music or video files, or folders, with Hop-tunes from your file
   manager, or run `hop-tunes song.flac movie.mkv some-folder/`. They start playing even if
-  they're not in your music folders (a video opens the player directly). If Hop-tunes is
+  they're not in your media folders (a video opens the player directly). If Hop-tunes is
   already open, they go to that window.
 
 ## Playlists
@@ -191,7 +191,7 @@ volume slider in the mini player isn't at zero.
 - **Flatpak:** the codecs come from the runtime's `codecs-extra` extension, which Flatpak
   installs with the runtime. If AAC or WMA files still won't play, run `flatpak update`.
 
-**Songs are missing.** Check *settings → music folders* and press *rescan now*. Hop-tunes
+**Songs are missing.** Check *settings → media folders* and press *rescan now*. Hop-tunes
 skips files it can't recognise as audio. In the Flatpak, folders outside your Music folder
 must be added with *+ add folder*, which grants access to them.
 

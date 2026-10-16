@@ -18,6 +18,8 @@
 #include <QTextStream>
 #include <QtTest>
 
+#include <clocale>
+
 #include <gst/gst.h>
 
 using namespace hop;
@@ -136,6 +138,41 @@ private slots:
         r = VideoScanner::scanFolders(&idx, {root});
         QCOMPARE(r.removed, 1);
         QCOMPARE(idx.count(), 0);
+    }
+
+    // Regression test for a real-hardware bug (Steam Deck running CachyOS Handheld
+    // Edition, v1.1.0): libmpv's own sanity check in mpv_create() rejects a process whose
+    // LC_NUMERIC isn't "C" (it parses its own option values assuming '.' as the decimal
+    // separator), and Qt/GLib/GStreamer
+    // startup code commonly sets the process locale from the environment before any
+    // MpvCore exists — reproduced locally with LANG=de_DE.UTF-8: mpv printed "Non-C locale
+    // detected. This is not supported." and mpv_create() returned null. CI's own runners
+    // default to the C locale already, which is exactly why this never showed up there.
+    void mpvCoreInitializesUnderNonCLocale()
+    {
+#ifndef HOPTUNES_HAVE_MPV
+        QSKIP("built without libmpv (see CMakeLists.txt / the Flatpak manifest's comment)");
+#endif
+        // RAII: QVERIFY/QVERIFY2 return out of this function early on failure, so a plain
+        // restore call at the bottom would never run on the very failure this test exists
+        // to catch — leaving the process locale poisoned for every test that runs after it.
+        struct LocaleGuard {
+            QByteArray saved = QByteArray(setlocale(LC_ALL, nullptr));
+            ~LocaleGuard() { setlocale(LC_ALL, saved.constData()); }
+        } guard;
+
+        bool nonCLocaleAvailable = false;
+        for (const char *name : {"de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8"}) {
+            if (setlocale(LC_ALL, name)) { nonCLocaleAvailable = true; break; }
+        }
+        if (!nonCLocaleAvailable)
+            QSKIP("no non-C locale installed on this system to reproduce the bug with");
+        QVERIFY(QByteArray(setlocale(LC_NUMERIC, nullptr)) != "C");
+
+        MpvCore core;
+        core.setOption(QStringLiteral("vo"), QStringLiteral("null"));
+        core.setOption(QStringLiteral("ao"), QStringLiteral("null"));
+        QVERIFY2(core.init(), qPrintable(core.error()));
     }
 
     void mpvCoreLoadsPlaysSeeksAndReportsDuration()
