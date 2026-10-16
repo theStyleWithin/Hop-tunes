@@ -173,6 +173,15 @@ public:
     Q_INVOKABLE QStringList albumPaths(int allAlbumsRow) const;       // for "add album to playlist"
     Q_INVOKABLE QStringList selectedAlbumPaths() const;
 
+    // Per-profile manual edits to an album's shown title/cover (never seen by another
+    // profile) and a manual track order for the currently displayed album song list.
+    Q_INVOKABLE QString setAlbumArt(const QString &ref, const QUrl &image);     // "" ok, else a message
+    Q_INVOKABLE QString setAlbumTitle(const QString &ref, const QString &title); // "" ok, else a message
+    Q_INVOKABLE bool moveAlbumSong(int from, int to);   // reorders the visible albumSongs list
+
+    // A manual order for the whole-library "songs" tab, same per-profile privacy as above.
+    Q_INVOKABLE bool moveSong(int from, int to);        // reorders the visible songs list
+
     // queue + hearts
     Q_INVOKABLE void playNextPaths(const QStringList &paths);
     Q_INVOKABLE void enqueuePaths(const QStringList &paths);
@@ -248,6 +257,7 @@ private:
     void saveFolders();
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
+    void applyAlbumOverrides(QList<Album> &albums) const;
     void activate(const QString &id, bool guest);
     static void setAside(const QString &file);
     void applySearch();
@@ -269,6 +279,8 @@ private:
     QList<Track> m_library;                 // everything under the profile's folders
     QHash<QString, int> m_libraryIndex;     // path -> row in m_library
     Collection m_fullCollection;            // unfiltered, for quickplay
+    QHash<QString, AlbumOverride> m_albumOverrides;   // this profile's title/cover edits, by ref
+    QStringList m_songOrder;                // this profile's manual order for the songs tab
     QString m_search;
     QString m_selPlaylist;
     TrackListModel m_playlistSongs;

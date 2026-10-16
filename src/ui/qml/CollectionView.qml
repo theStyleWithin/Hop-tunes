@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 // collection › music: artists (three panes, design/screens/4), albums grid, songs list.
@@ -21,6 +22,14 @@ Item {
         id: prompt
         property var pendingPaths: []
         onAccepted: function (name) { var k = hop.createPlaylist(name, pendingPaths); pendingPaths = []; if (k) hop.selectPlaylist(k) }
+    }
+    // Per-profile album cover override (feature: "image" button under an album's art).
+    // hop.selectAlbum() is called right before open() so selectedAlbumRef() names the right album.
+    FileDialog {
+        id: albumArtDialog
+        title: "choose album cover"
+        nameFilters: ["pictures (*.png *.jpg *.jpeg)"]
+        onAccepted: hop.setAlbumArt(hop.selectedAlbumRef(), selectedFile)
     }
     function songMenu(paths, path, hearted, playFn, src, x, y) {
         menu.paths = paths; menu.heartPath = path; menu.hearted = hearted
@@ -252,8 +261,43 @@ Item {
                             contentItem: ColumnLayout {
                                 spacing: 4
                                 AlbumArt { key: alb.title; source: alb.art; Layout.fillWidth: true; Layout.preferredHeight: width }
-                                Label { text: alb.title; Layout.fillWidth: true; elide: Text.ElideRight
-                                        color: alb.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 15 } }
+                                AbstractButton {
+                                    id: imageBtn
+                                    objectName: "albumImageBtn_" + alb.index
+                                    visible: !hop.guest
+                                    hoverEnabled: true
+                                    Layout.fillWidth: true; Layout.preferredHeight: 18
+                                    Accessible.name: "change album cover"
+                                    onClicked: { hop.selectAlbum(alb.index); albumArtDialog.open() }
+                                    contentItem: Label {
+                                        text: "image"; horizontalAlignment: Text.AlignHCenter
+                                        color: imageBtn.hovered ? hop.accent : Theme.muted
+                                        font { family: Theme.font; pixelSize: 12; underline: imageBtn.hovered }
+                                    }
+                                    background: Item {}
+                                }
+                                TextField {
+                                    id: titleEdit
+                                    objectName: "albumTitleEdit_" + alb.index
+                                    text: alb.title
+                                    Layout.fillWidth: true
+                                    readOnly: hop.guest
+                                    selectByMouse: true
+                                    color: alb.sel ? hop.accent : Theme.text
+                                    font { family: Theme.font; pixelSize: 15 }
+                                    leftPadding: 0; rightPadding: 0; topPadding: 2; bottomPadding: 2
+                                    background: Rectangle {
+                                        implicitHeight: 22; color: "transparent"
+                                        border { width: titleEdit.activeFocus ? 1 : 0; color: hop.accent }
+                                    }
+                                    Accessible.name: "album title"
+                                    onAccepted: {
+                                        const t = text.trim()
+                                        if (t !== "" && t !== alb.title) { hop.selectAlbum(alb.index); hop.setAlbumTitle(hop.selectedAlbumRef(), t) }
+                                        else text = alb.title
+                                        focus = false
+                                    }
+                                }
                                 Label { text: alb.year > 0 ? alb.year : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
                             }
                         }
@@ -279,6 +323,7 @@ Item {
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
                     ListView {
                         id: albumSongList
+                        objectName: "albumSongList"
                         Layout.fillWidth: true; Layout.fillHeight: true
                         clip: true
                         model: hop.albumSongs
@@ -289,11 +334,13 @@ Item {
                             required property var model
                             width: albumSongList.width
                             wide: false
+                            draggable: true
                             trackId: model.trackId; title: model.title; artist: model.artist; album: model.album
                             trackNo: model.trackNo; duration: model.duration
                             path: model.path; hearted: model.hearted
                             onPlay: hop.playAlbum(index)
                             onMenu: function (src, x, y) { root.songMenu([model.path], model.path, model.hearted, function () { hop.playAlbum(index) }, src, x, y) }
+                            onMoveRequested: function (steps) { hop.moveAlbumSong(index, Math.max(0, Math.min(hop.albumSongs.count - 1, index + steps))) }
                         }
                     }
                 }
@@ -335,6 +382,7 @@ Item {
             // ---- all songs ----
             ListView {
                 id: list
+                objectName: "songList"
                 clip: true
                 model: hop.songs
                 boundsBehavior: Flickable.StopAtBounds
@@ -361,11 +409,13 @@ Item {
                     required property int index
                     required property var model
                     width: list.width
+                    draggable: true
                     trackId: model.trackId; title: model.title; artist: model.artist; album: model.album
                     trackNo: model.trackNo; duration: model.duration
                     path: model.path; hearted: model.hearted
                     onPlay: hop.playSongs(index)
                     onMenu: function (src, x, y) { root.songMenu([model.path], model.path, model.hearted, function () { hop.playSongs(index) }, src, x, y) }
+                    onMoveRequested: function (steps) { hop.moveSong(index, Math.max(0, Math.min(hop.songs.count - 1, index + steps))) }
                 }
             }
 

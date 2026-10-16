@@ -77,6 +77,27 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=2")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 2;
+    }
+    if (version < 3) {
+        // v3: per-profile album overrides (custom title/cover) and a manual track order.
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE album_override (ref TEXT PRIMARY KEY,"
+                    " title TEXT NOT NULL DEFAULT '', art TEXT NOT NULL DEFAULT '')")
+            && exec("CREATE TABLE album_track_order (ref TEXT NOT NULL, pos INTEGER NOT NULL,"
+                    " path TEXT NOT NULL, PRIMARY KEY (ref, pos))")
+            && exec("PRAGMA user_version=3")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
+        version = 3;
+    }
+    if (version < 4) {
+        // v4: a manual order for the whole-library "songs" list, per profile.
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE song_order (pos INTEGER PRIMARY KEY, path TEXT NOT NULL)")
+            && exec("PRAGMA user_version=4")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -299,6 +320,88 @@ bool ProfileDb::setVideoProgress(const QString &path, qint64 positionMs, qint64 
                  "ON CONFLICT(path) DO UPDATE SET position_ms = ?2, duration_ms = ?3, updated_at = ?4");
     s.bind(1, path); s.bind(2, positionMs); s.bind(3, durationMs); s.bind(4, QDateTime::currentSecsSinceEpoch());
     return s.run();
+}
+
+// ---- album overrides ----------------------------------------------------------------
+
+QHash<QString, AlbumOverride> ProfileDb::albumOverrides() const
+{
+    QHash<QString, AlbumOverride> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT ref, title, art FROM album_override");
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0), AlbumOverride{s.str(1), s.str(2)});
+    return out;
+}
+
+bool ProfileDb::setAlbumOverrideTitle(const QString &ref, const QString &title)
+{
+    if (!m_db || ref.isEmpty()) return false;
+    Stmt s(m_db, "INSERT INTO album_override(ref, title) VALUES(?1, ?2) "
+                 "ON CONFLICT(ref) DO UPDATE SET title = ?2");
+    s.bind(1, ref); s.bind(2, title.trimmed());
+    return s.run();
+}
+
+bool ProfileDb::setAlbumOverrideArt(const QString &ref, const QString &artPath)
+{
+    if (!m_db || ref.isEmpty()) return false;
+    Stmt s(m_db, "INSERT INTO album_override(ref, art) VALUES(?1, ?2) "
+                 "ON CONFLICT(ref) DO UPDATE SET art = ?2");
+    s.bind(1, ref); s.bind(2, artPath);
+    return s.run();
+}
+
+QStringList ProfileDb::albumTrackOrder(const QString &ref) const
+{
+    QStringList out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path FROM album_track_order WHERE ref = ?1 ORDER BY pos");
+    s.bind(1, ref);
+    while (s.step() == SQLITE_ROW) out << s.str(0);
+    return out;
+}
+
+bool ProfileDb::setAlbumTrackOrder(const QString &ref, const QStringList &paths)
+{
+    if (!m_db || ref.isEmpty()) return false;
+    if (!exec("BEGIN")) return false;
+    Stmt d(m_db, "DELETE FROM album_track_order WHERE ref = ?1");
+    d.bind(1, ref);
+    bool ok = d.run();
+    Stmt ins(m_db, "INSERT INTO album_track_order(ref, pos, path) VALUES(?1, ?2, ?3)");
+    for (int i = 0; ok && i < paths.size(); ++i) {
+        ins.bind(1, ref); ins.bind(2, i); ins.bind(3, paths[i]);
+        ok = ins.run();
+        ins.reset();
+    }
+    if (!ok) { exec("ROLLBACK"); return false; }
+    return exec("COMMIT");
+}
+
+// ---- whole-library song order ---------------------------------------------------------
+
+QStringList ProfileDb::songOrder() const
+{
+    QStringList out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path FROM song_order ORDER BY pos");
+    while (s.step() == SQLITE_ROW) out << s.str(0);
+    return out;
+}
+
+bool ProfileDb::setSongOrder(const QStringList &paths)
+{
+    if (!m_db) return false;
+    if (!exec("BEGIN")) return false;
+    bool ok = exec("DELETE FROM song_order");
+    Stmt ins(m_db, "INSERT INTO song_order(pos, path) VALUES(?1, ?2)");
+    for (int i = 0; ok && i < paths.size(); ++i) {
+        ins.bind(1, i); ins.bind(2, paths[i]);
+        ok = ins.run();
+        ins.reset();
+    }
+    if (!ok) { exec("ROLLBACK"); return false; }
+    return exec("COMMIT");
 }
 
 } // namespace hop

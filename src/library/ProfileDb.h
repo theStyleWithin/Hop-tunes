@@ -32,6 +32,14 @@ struct HistoryEntry {
     qint64 playedAt = 0;
 };
 
+// A profile's manual edits to an album's shown title/cover (spec: per-profile, never
+// shared). Keyed the same way as an album Pin's ref: "<artist>\x1f<title>". Empty fields
+// mean "no override" for that one field.
+struct AlbumOverride {
+    QString title;
+    QString art;   // absolute path to the profile's own copy of the chosen image
+};
+
 // One profile's own data (spec §3.3, §9.3): play stats, hearts, history, playlists and
 // Quickplay pins. Rows are keyed by file path, not index id, so they survive a rebuilt
 // index. Guest mode opens ":memory:", so it keeps nothing. UI thread only.
@@ -76,6 +84,18 @@ public:
     // video resume position (spec §5b), keyed by path like everything else here
     VideoProgress videoProgress(const QString &path) const;
     bool setVideoProgress(const QString &path, qint64 positionMs, qint64 durationMs);
+
+    // album overrides: manual title/cover edits and a manual track order, all per-profile
+    // and keyed by the same "<artist>\x1f<title>" ref used for pins (App::albumRef()).
+    QHash<QString, AlbumOverride> albumOverrides() const;   // all of them, loaded once per profile
+    bool setAlbumOverrideTitle(const QString &ref, const QString &title);   // "" clears it
+    bool setAlbumOverrideArt(const QString &ref, const QString &artPath);   // "" clears it
+    QStringList albumTrackOrder(const QString &ref) const;          // paths, in order; empty: natural order
+    bool setAlbumTrackOrder(const QString &ref, const QStringList &paths);
+
+    // a manual order for the whole-library "songs" list, per profile; empty: natural order
+    QStringList songOrder() const;
+    bool setSongOrder(const QStringList &paths);
 
 private:
     bool exec(const char *sql);

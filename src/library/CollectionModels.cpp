@@ -22,7 +22,7 @@ void Collection::build(const QList<Track> &tracks)
         auto it = albumIndex.constFind(key);
         if (it == albumIndex.constEnd()) {
             it = albumIndex.insert(key, m_albums.size());
-            m_albums.append(Album{title, artist, 0, {}, {}});
+            m_albums.append(Album{title, artist, 0, {}, {}, {}, {}});
         }
         Album &a = m_albums[*it];
         a.trackRows.append(row);
@@ -102,10 +102,10 @@ QVariant AlbumListModel::data(const QModelIndex &index, int role) const
     const Album &a = m_items[index.row()];
     switch (role) {
     case Qt::DisplayRole:
-    case TitleRole:     return a.title;
+    case TitleRole:     return a.displayTitle.isEmpty() ? a.title : a.displayTitle;
     case ArtistRole:    return a.artist;
     case YearRole:      return a.year;
-    case ArtRole:       return artUrl(a.art);
+    case ArtRole:       return artUrl(a.displayArt.isEmpty() ? a.art : a.displayArt);
     case SongCountRole: return int(a.trackRows.size());
     }
     return {};
