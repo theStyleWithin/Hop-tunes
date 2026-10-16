@@ -9,11 +9,13 @@
 
 #include <QCoreApplication>
 #include <QColor>
+#include <QCryptographicHash>
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QImage>
 #include <QJsonArray>
 #include <QFileInfo>
@@ -26,6 +28,11 @@
 #include <algorithm>
 
 namespace hop {
+
+// Ref format shared with Pins (spec §4.4): "<artist>\x1f<title>", built from the album's
+// raw tag-derived fields — never from a profile's display override — so a renamed album
+// keeps the same ref its pins/overrides/track order were saved under.
+static const QChar kRefSep(0x1f);
 
 App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 {
@@ -315,6 +322,8 @@ void App::activate(const QString &id, bool guest)
         if (!m_db.open(dbPath)) qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
     }
     m_stats = m_db.allStats();
+    m_albumOverrides = m_db.albumOverrides();
+    m_songOrder = m_db.songOrder();
     m_search.clear();
     m_djSeed.clear();
     m_selPlaylist = QStringLiteral("auto:hearted");
@@ -341,6 +350,8 @@ void App::leaveProfile()
     m_videoPlayerOpen = false;
     m_db.close();
     m_stats.clear();
+    m_albumOverrides.clear();
+    m_songOrder.clear();
     m_search.clear();
     m_selPlaylist.clear();
     m_djSeed.clear();
@@ -503,6 +514,21 @@ void App::shuffleAll()
 void App::reload()
 {
     m_library = m_index.tracksUnder(m_folders);
+    if (!m_songOrder.isEmpty()) {
+        QHash<QString, Track> byPath;
+        for (const Track &t : m_library) byPath.insert(t.path, t);
+        QList<Track> reordered;
+        QSet<QString> placed;
+        for (const QString &p : m_songOrder) {
+            const auto it = byPath.constFind(p);
+            if (it == byPath.constEnd()) continue;
+            reordered.append(it.value());
+            placed.insert(p);
+        }
+        for (const Track &t : m_library)
+            if (!placed.contains(t.path)) reordered.append(t);
+        m_library = reordered;
+    }
     m_libraryIndex.clear();
     for (int i = 0; i < m_library.size(); ++i) m_libraryIndex.insert(m_library[i].path, i);
     m_fullCollection.build(m_library);
@@ -564,7 +590,10 @@ void App::saveVideoProgress(qint64 positionMs, qint64 durationMs)
 
 void App::applySearch()
 {
-    const QString keepArtist = selectedArtistName(), keepAlbum = selectedAlbumTitle();
+    // The raw (never-overridden) title, so re-selection below matches correctly even when
+    // this album has a profile display-title override (see applyAlbumOverrides).
+    const Album *keptAlbum = m_artistAlbums.at(m_selAlbum);
+    const QString keepArtist = selectedArtistName(), keepAlbum = keptAlbum ? keptAlbum->title : QString();
     const QStringList tokens = searchTokens(m_search);
     if (tokens.isEmpty()) {
         m_songs.setTracks(m_library);
@@ -579,6 +608,7 @@ void App::applySearch()
     QList<Album> all;
     for (const Artist &ar : m_collection.artists())
         for (int i : ar.albumIndices) all.append(m_collection.albums()[i]);
+    applyAlbumOverrides(all);
     m_allAlbums.setAlbums(all);
     emit libraryChanged();
     applySelection(keepArtist, keepAlbum);
@@ -596,7 +626,34 @@ QList<Track> App::albumTracks(const Album &a) const
 {
     QList<Track> out;
     for (int row : a.trackRows) out.append(m_songs.tracks()[row]);
-    return out;
+    const QStringList order = m_db.albumTrackOrder(a.artist + kRefSep + a.title);
+    if (order.isEmpty()) return out;
+    // Profile's manual order first (paths that still exist), then anything new or missing
+    // from that saved order, in its natural (tag-derived) position — never dropped.
+    QHash<QString, Track> byPath;
+    for (const Track &t : out) byPath.insert(t.path, t);
+    QList<Track> reordered;
+    QSet<QString> placed;
+    for (const QString &p : order) {
+        const auto it = byPath.constFind(p);
+        if (it == byPath.constEnd()) continue;
+        reordered.append(it.value());
+        placed.insert(p);
+    }
+    for (const Track &t : out)
+        if (!placed.contains(t.path)) reordered.append(t);
+    return reordered;
+}
+
+void App::applyAlbumOverrides(QList<Album> &albums) const
+{
+    if (m_albumOverrides.isEmpty()) return;
+    for (Album &a : albums) {
+        const auto it = m_albumOverrides.constFind(a.artist + kRefSep + a.title);
+        if (it == m_albumOverrides.constEnd()) continue;
+        a.displayTitle = it->title;
+        a.displayArt = it->art;
+    }
 }
 
 void App::applySelection(const QString &artistName, const QString &albumTitle)
@@ -610,6 +667,7 @@ void App::applySelection(const QString &artistName, const QString &albumTitle)
     QList<Album> albums;
     if (ar >= 0)
         for (int i : artists[ar].albumIndices) albums.append(m_collection.albums()[i]);
+    applyAlbumOverrides(albums);
     m_artistAlbums.setAlbums(albums);
 
     m_selAlbum = albums.isEmpty() ? -1 : 0;
@@ -655,13 +713,16 @@ QString App::selectedArtistName() const
 QString App::selectedAlbumTitle() const
 {
     const Album *a = m_artistAlbums.at(m_selAlbum);
-    return a ? a->title : QString();
+    if (!a) return {};
+    return a->displayTitle.isEmpty() ? a->title : a->displayTitle;
 }
 
 QString App::selectedAlbumArt() const
 {
     const Album *a = m_artistAlbums.at(m_selAlbum);
-    return (a && !a->art.isEmpty()) ? QUrl::fromLocalFile(a->art).toString() : QString();
+    if (!a) return {};
+    const QString art = a->displayArt.isEmpty() ? a->art : a->displayArt;
+    return art.isEmpty() ? QString() : QUrl::fromLocalFile(art).toString();
 }
 
 int App::selectedAlbumYear() const
@@ -953,8 +1014,6 @@ QStringList App::selectedAlbumPaths() const
 
 // ---- quickplay -------------------------------------------------------------------------
 
-static const QChar kRefSep(0x1f);
-
 QString App::albumRef(int allAlbumsRow) const
 {
     const Album *a = m_allAlbums.at(allAlbumsRow);
@@ -979,6 +1038,85 @@ QList<Track> App::tracksForAlbumRef(const QString &ref) const
     return {};
 }
 
+// ---- per-profile album overrides (never seen by another profile) --------------------
+
+QString App::setAlbumArt(const QString &ref, const QUrl &image)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    if (ref.isEmpty()) return QStringLiteral("no album selected");
+    QImage img(image.isLocalFile() ? image.toLocalFile() : image.toString());
+    if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    // Bound the file size; AlbumArt.qml crops/scales for display regardless of aspect ratio.
+    if (img.width() > 1200 || img.height() > 1200)
+        img = img.scaled(1200, 1200, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const QString dir = m_store.dirFor(m_profileId) + QStringLiteral("/album-art");
+    QDir().mkpath(dir);
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(ref.toUtf8(), QCryptographicHash::Sha1).toHex());
+    const QString path = dir + QLatin1Char('/') + hash + QStringLiteral(".jpg");
+    if (!img.save(path, "JPG", 85)) return QStringLiteral("could not save the picture");
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!m_db.setAlbumOverrideArt(ref, path)) return QStringLiteral("could not save the change");
+    m_albumOverrides[ref].art = path;
+    applySearch();
+    return {};
+}
+
+QString App::setAlbumTitle(const QString &ref, const QString &title)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    if (ref.isEmpty()) return QStringLiteral("no album selected");
+    // Clears the override (back to the tagged title) when left blank.
+    if (!m_db.setAlbumOverrideTitle(ref, title.trimmed())) return QStringLiteral("could not save the change");
+    m_albumOverrides[ref].title = title.trimmed();
+    applySearch();
+    return {};
+}
+
+bool App::moveAlbumSong(int from, int to)
+{
+    const Album *a = m_artistAlbums.at(m_selAlbum);
+    if (!a) return false;
+    QList<Track> tracks = m_albumSongs.tracks();
+    if (from < 0 || to < 0 || from >= tracks.size() || to >= tracks.size()) return false;
+    tracks.move(from, to);
+    // Reflect the new order right away regardless of whether it can be saved (guest mode
+    // saves nothing, same as everywhere else — the reorder still works for this session).
+    m_albumSongs.setTracks(tracks);
+    if (profileReady() && !m_guest) {
+        QStringList order;
+        for (const Track &t : tracks) order << t.path;
+        m_db.setAlbumTrackOrder(a->artist + kRefSep + a->title, order);
+    }
+    return true;
+}
+
+bool App::moveSong(int from, int to)
+{
+    QList<Track> visible = m_songs.tracks();
+    if (from < 0 || to < 0 || from >= visible.size() || to >= visible.size()) return false;
+    visible.move(from, to);
+    // The songs tab can be search-filtered: reinsert the (possibly filtered) visible list in
+    // its new order and leave every hidden track's relative position alone, the same trick
+    // App::movePlaylistItem() uses for items missing from its current view.
+    QSet<QString> seen;
+    for (const Track &t : visible) seen.insert(t.path);
+    QList<Track> reordered = visible;
+    for (const Track &t : m_library)
+        if (!seen.contains(t.path)) reordered.append(t);
+    m_library = reordered;
+    if (profileReady() && !m_guest) {
+        QStringList order;
+        for (const Track &t : m_library) order << t.path;
+        m_db.setSongOrder(order);
+        m_songOrder = order;
+    }
+    // Unlike moveAlbumSong(), this reorders the whole library, so artists/albums grouped
+    // from it (and their trackRows into m_songs) need rebuilding too — applySearch() does
+    // that and keeps the current selection, without touching the player's own queue.
+    applySearch();
+    return true;
+}
+
 QVariantMap App::tile(const QString &kind, const QString &ref, const QString &label) const
 {
     QVariantMap m{{QStringLiteral("kind"), kind}, {QStringLiteral("ref"), ref}, {QStringLiteral("title"), label},
@@ -986,11 +1124,15 @@ QVariantMap App::tile(const QString &kind, const QString &ref, const QString &la
                   {QStringLiteral("pinned"), isPinned(kind, ref)}};
     if (kind == QLatin1String("album")) {
         const QString artist = ref.section(kRefSep, 0, 0), title = ref.section(kRefSep, 1);
-        m[QStringLiteral("title")] = title.isEmpty() ? QStringLiteral("unknown album") : title;
+        const auto ov = m_albumOverrides.constFind(ref);
+        const bool hasOv = ov != m_albumOverrides.constEnd();
+        m[QStringLiteral("title")] = (hasOv && !ov->title.isEmpty()) ? ov->title
+                                    : (title.isEmpty() ? QStringLiteral("unknown album") : title);
         m[QStringLiteral("subtitle")] = artist;
         for (const Album &a : m_fullCollection.albums())
             if (a.artist == artist && a.title == title) {
-                if (!a.art.isEmpty()) m[QStringLiteral("art")] = QUrl::fromLocalFile(a.art).toString();
+                const QString art = (hasOv && !ov->art.isEmpty()) ? ov->art : a.art;
+                if (!art.isEmpty()) m[QStringLiteral("art")] = QUrl::fromLocalFile(art).toString();
                 m[QStringLiteral("available")] = true;
             }
     } else if (kind == QLatin1String("artist")) {

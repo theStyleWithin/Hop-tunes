@@ -10,11 +10,13 @@ namespace hop {
 
 // One album as shown in the collection: grouped by (album artist, album title).
 struct Album {
-    QString title;
-    QString artist;          // album artist, or track artist when no album artist is tagged
+    QString title;            // tag-derived; stable identity used for refs — never overridden
+    QString artist;           // album artist, or track artist when no album artist is tagged
     int year = 0;
-    QString art;             // first track's cover, if any
-    QList<int> trackRows;    // indices into the library track list, in play order
+    QString art;              // first track's cover, if any
+    QList<int> trackRows;     // indices into the library track list, in play order
+    QString displayTitle;     // profile's custom title override, when set (empty: show title)
+    QString displayArt;       // profile's custom cover override, when set (empty: show art)
 };
 
 struct Artist {

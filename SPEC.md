@@ -61,6 +61,7 @@ A **profile** is a local, offline container for one person's listening world. It
 | Play counts, last played, skips, ratings, "hearts" | Per profile | |
 | Quickplay pins, history | Per profile | |
 | Settings (theme, accent, EQ, crossfade, ReplayGain, layout) | Per profile | |
+| Album cover/title overrides, manual song order | Per profile | A profile's own edits — never seen by another profile sharing the same install |
 
 A profile only *sees* tracks that live under its own watched folders, even though the index is shared.
 
@@ -110,6 +111,9 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 - Song view is a dense list with columns # · title · artist · album · length · rating, sortable and configurable.
 - An instant filter box searches as you type across artist, album and title.
 - Multi-select, then right-click: play, play next, add to queue, add to playlist, edit tags, show in folder.
+- An album's cover and title can be overridden manually (a picture picker under the art, a
+  clickable title field) and its tracks dragged into a custom order live, even mid-playback.
+  The *songs* list drags and reorders the same way. Both are per-profile (§3.3).
 
 ### 4.3 Now Playing
 - Full-window view with a **mosaic of the artist's or library's album art** slowly drifting in the background, plus big type for title / artist / album.
@@ -121,6 +125,12 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 - **History:** recently played.
 - **New:** recently added to the library.
 - **Smart DJ:** pick an artist, and Hop-tunes builds an endless mix from the *local* library using tag similarity (genre, year), hearts and play history. No network. *(Built in M4: weighted sampling around the artist's genres and era, same artist spread apart, often-skipped songs played less, topped up automatically near the end of the queue. Co-occurrence in playlists is a later refinement.)*
+
+> **Backlog (QoL, not yet designed):** Quickplay's *Pinned*/*History*/*New* currently read as
+> one flat area and could use a layout pass — likely a dedicated *History* tab instead of a
+> section on this page, and splitting *Pinned* into separate music/video groups so a pinned
+> video doesn't sit mixed in with pinned albums. Flagged by the user from a live screenshot;
+> not scoped or started.
 
 ### 4.5 Visual language (original)
 - Typography-first: large, light-weight sans-serif with generous whitespace. Use an open font (Inter, Selawik-style alternatives, Noto Sans), **not** Segoe/Zune Pro.
@@ -150,6 +160,13 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 ---
 
 ## 5b. Video (modern resolutions, including 4K) ✅ M7
+
+> **Known issue (open, backlog):** on the user's Steam Deck (CachyOS Handheld Edition),
+> opening a video no longer shows the `mpv_create failed` error (fixed in v1.2.0 —
+> `LC_NUMERIC`), but nothing actually plays: the player screen comes up black/frozen at
+> 0:00 with no picture or audio. Music playback is unaffected. Not yet investigated —
+> likely candidates are the GL/render-surface setup or the `hwdec=auto-safe` path on that
+> hardware. Picking this up is deferred until there's budget for it.
 
 *Implementation status: built and tested — probing, scanning, thumbnails, resume
 persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with

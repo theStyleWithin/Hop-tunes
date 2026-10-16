@@ -531,7 +531,7 @@ private slots:
         m_app->selectPlaylist(key);
         QTest::qWait(200);
         // The first row's handle, dragged two rows down.
-        QQuickItem *list = item("playlistList");
+        QQuickItem *list = item("playlistSongList");
         QVERIFY(list);
         QQuickItem *firstRow = nullptr;
         std::function<void(QQuickItem *)> findRow = [&](QQuickItem *it) {
@@ -539,7 +539,7 @@ private slots:
             if (it->property("draggable").toBool() && it->property("path").toString() == paths[0]) { firstRow = it; return; }
             for (QQuickItem *c : it->childItems()) findRow(c);
         };
-        findRow(window()->contentItem());
+        findRow(list);
         QVERIFY(firstRow);
         QTest::mouseMove(window(), firstRow->mapToScene(QPointF(20, 20)).toPoint());
         dragRow(firstRow, 20, int(firstRow->height() * 2));
@@ -652,6 +652,152 @@ private slots:
         // testing, to crash during window teardown under this suite's software Qt Quick
         // backend — see test_robust.cpp's openingAVideoFileOpensThePlayer() instead, which
         // covers the same App-level behaviour with no QML engine involved at all.
+    }
+
+    // ---- per-profile album overrides: custom cover, editable title, live reorder ----
+
+    void albumArtTitleAndReorder()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("subTab_music"));
+        QVERIFY(click("tab_artists"));
+        m_app->selectArtist(0);
+        m_app->selectAlbum(0);
+        const QString ref = m_app->selectedAlbumRef();
+        QVERIFY(!ref.isEmpty());
+
+        // The album title is a clickable, editable field right in the grid.
+        QTRY_VERIFY(item("albumTitleEdit_0") != nullptr);
+        type("albumTitleEdit_0", QStringLiteral("My Custom Title"));
+        QTest::keyClick(window(), Qt::Key_Return);
+        QTRY_COMPARE(m_app->selectedAlbumTitle(), QStringLiteral("My Custom Title"));
+        QCOMPARE(m_app->selectedAlbumRef(), ref);   // the ref is built from the raw tags, not the display title
+
+        // The "image" button lives at the bottom of the art and is hidden for guests.
+        QVERIFY(item("albumImageBtn_0") != nullptr);
+        QVERIFY(item("albumImageBtn_0")->isVisible());
+
+        // Picking a new cover (the native FileDialog itself isn't driven here, the same
+        // tradeoff secondProfileHasItsOwnFolders() makes for setProfileAvatar()).
+        QImage pic(600, 400, QImage::Format_RGB32);
+        pic.fill(QColor("#334455"));
+        const QString picFile = m_home.filePath(QStringLiteral("cover.jpg"));
+        QVERIFY(pic.save(picFile));
+        QCOMPARE(m_app->setAlbumArt(ref, QUrl::fromLocalFile(picFile)), QString());
+        QVERIFY(!m_app->setAlbumArt(ref, QUrl::fromLocalFile(m_home.filePath(QStringLiteral("Library/Alpha/One/01 Morning Tide.wav")))).isEmpty());
+        const QString art = m_app->selectedAlbumArt();
+        QVERIFY(art.startsWith(QStringLiteral("file://")));
+        const QImage saved(QUrl(art).toLocalFile());
+        QVERIFY(!saved.isNull());
+        QVERIFY(saved.width() <= 1200 && saved.height() <= 1200);
+        shot("m8-album-overrides");
+
+        // Dragging a song in the album's track list reorders it live, even mid-playback.
+        m_app->playAlbum(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        const QString firstPath = m_app->albumSongs()->tracks().at(0).path;
+        const QString secondPath = m_app->albumSongs()->tracks().at(1).path;
+        QQuickItem *list = item("albumSongList");
+        QVERIFY(list);
+        QQuickItem *row = nullptr;
+        std::function<void(QQuickItem *)> findRow = [&](QQuickItem *it) {
+            if (row) return;
+            if (it->property("draggable").toBool() && it->property("path").toString() == firstPath) { row = it; return; }
+            for (QQuickItem *c : it->childItems()) findRow(c);
+        };
+        findRow(list);
+        QVERIFY(row);
+        dragRow(row, 20, int(row->height()));
+        QTRY_COMPARE(m_app->albumSongs()->tracks().at(1).path, firstPath);
+        QCOMPARE(m_app->albumSongs()->tracks().at(0).path, secondPath);
+        QVERIFY(m_app->player()->isPlaying());   // never interrupted by the reorder
+
+        // Everything survives a full relaunch of this profile.
+        const QString profileId = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(profileId), QString());
+        m_app->selectArtist(0);
+        m_app->selectAlbum(0);
+        QCOMPARE(m_app->selectedAlbumTitle(), QStringLiteral("My Custom Title"));
+        QCOMPARE(m_app->selectedAlbumArt(), art);
+        QCOMPARE(m_app->albumSongs()->tracks().at(1).path, firstPath);
+    }
+
+    void albumOverridesArePerProfile()
+    {
+        const QString lib = m_app->profile().value("id").toString();
+        const QString ref = m_app->selectedAlbumRef();
+        QVERIFY(!ref.isEmpty());
+
+        // A fresh guest never sees another profile's rename, cover, or track order.
+        m_app->leaveProfile();
+        m_app->openGuest();
+        QTRY_VERIFY(m_app->profileReady());
+        m_app->selectArtist(0);
+        m_app->selectAlbum(0);
+        QCOMPARE(m_app->selectedAlbumTitle(), QStringLiteral("unknown album"));
+        QCOMPARE(m_app->setAlbumArt(ref, QUrl::fromLocalFile(m_home.filePath(QStringLiteral("cover.jpg")))), QStringLiteral("no profile open"));
+        QCOMPARE(m_app->setAlbumTitle(ref, QStringLiteral("Guest Edit")), QStringLiteral("no profile open"));
+
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(lib), QString());
+        m_app->selectArtist(0);
+        m_app->selectAlbum(0);
+        QCOMPARE(m_app->selectedAlbumTitle(), QStringLiteral("My Custom Title"));   // untouched by the guest session
+    }
+
+    // The SONGS tab (the whole library, not just one album) drags and reorders live too —
+    // during playback, with nothing selected, and everywhere else dragging already worked.
+    void songsTabDragReorder()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("subTab_music"));
+        QVERIFY(click("tab_songs"));
+        QTRY_VERIFY(item("songList") != nullptr);
+
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        const QString firstPath = m_app->songs()->tracks().at(0).path;
+        const QString secondPath = m_app->songs()->tracks().at(1).path;
+
+        QQuickItem *list = item("songList");
+        QVERIFY(list);
+        QQuickItem *row = nullptr;
+        std::function<void(QQuickItem *)> findRow = [&](QQuickItem *it) {
+            if (row) return;
+            if (it->property("draggable").toBool() && it->property("path").toString() == firstPath) { row = it; return; }
+            for (QQuickItem *c : it->childItems()) findRow(c);
+        };
+        findRow(list);
+        QVERIFY(row);
+        dragRow(row, 20, int(row->height()));
+        QTRY_COMPARE(m_app->songs()->tracks().at(1).path, firstPath);
+        QCOMPARE(m_app->songs()->tracks().at(0).path, secondPath);
+        QVERIFY(m_app->player()->isPlaying());   // dragging the songs list never interrupts playback
+
+        // An album grouped from the reordered library still shows the right tracks (the
+        // grouping is rebuilt from the new order, not left pointing at stale positions).
+        m_app->selectArtist(0);
+        m_app->selectAlbum(0);
+        QSet<QString> albumPaths;
+        for (const Track &t : m_app->albumSongs()->tracks()) albumPaths.insert(t.path);
+        QVERIFY(albumPaths.contains(firstPath));
+        QVERIFY(albumPaths.contains(secondPath));
+
+        // The new order survives a relaunch of this profile, and belongs to it alone: an
+        // intervening guest session (a different, unrelated library) never disturbs it.
+        const QString profileId = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(profileId), QString());
+        QCOMPARE(m_app->songs()->tracks().at(1).path, firstPath);
+
+        m_app->leaveProfile();
+        m_app->openGuest();
+        QTRY_VERIFY(m_app->profileReady());
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(profileId), QString());
+        QCOMPARE(m_app->songs()->tracks().at(1).path, firstPath);
+        shot("m8-songs-drag");
     }
 };
 

@@ -66,6 +66,60 @@ private slots:
         QVERIFY(!db.allStats().value(QStringLiteral("/m/b.flac")).hearted);
     }
 
+    void albumOverridesAndTrackOrder()
+    {
+        QTemporaryDir tmp;
+        const QString file = tmp.filePath(QStringLiteral("profile.sqlite"));
+        const QString ref = QStringLiteral("Artist\x1fAlbum");
+        {
+            ProfileDb db;
+            QVERIFY(db.open(file));
+            QVERIFY(db.albumOverrides().isEmpty());
+            QVERIFY(db.setAlbumOverrideTitle(ref, QStringLiteral("My Title")));
+            QVERIFY(db.setAlbumOverrideArt(ref, QStringLiteral("/profiles/x/album-art/abc.jpg")));
+            QVERIFY(db.setAlbumTrackOrder(ref, {QStringLiteral("/m/b.flac"), QStringLiteral("/m/a.flac")}));
+        }
+        ProfileDb db;
+        QVERIFY(db.open(file));   // reopen: data persisted
+        const auto overrides = db.albumOverrides();
+        QCOMPARE(overrides.size(), 1);
+        QCOMPARE(overrides.value(ref).title, QStringLiteral("My Title"));
+        QCOMPARE(overrides.value(ref).art, QStringLiteral("/profiles/x/album-art/abc.jpg"));
+        QCOMPARE(db.albumTrackOrder(ref), (QStringList{"/m/b.flac", "/m/a.flac"}));
+
+        // Setting one field leaves the other untouched (partial upsert).
+        QVERIFY(db.setAlbumOverrideTitle(ref, QStringLiteral("Renamed Again")));
+        QCOMPARE(db.albumOverrides().value(ref).art, QStringLiteral("/profiles/x/album-art/abc.jpg"));
+
+        // Clearing (empty string) removes just that field's override.
+        QVERIFY(db.setAlbumOverrideArt(ref, QString()));
+        QVERIFY(db.albumOverrides().value(ref).art.isEmpty());
+        QCOMPARE(db.albumOverrides().value(ref).title, QStringLiteral("Renamed Again"));
+
+        // A different album never sees this one's order or overrides.
+        QVERIFY(db.albumTrackOrder(QStringLiteral("Other\x1fAlbum")).isEmpty());
+        QVERIFY(!db.albumOverrides().contains(QStringLiteral("Other\x1fAlbum")));
+    }
+
+    void songOrder()
+    {
+        QTemporaryDir tmp;
+        const QString file = tmp.filePath(QStringLiteral("profile.sqlite"));
+        {
+            ProfileDb db;
+            QVERIFY(db.open(file));
+            QVERIFY(db.songOrder().isEmpty());
+            QVERIFY(db.setSongOrder({QStringLiteral("/m/c.flac"), QStringLiteral("/m/a.flac"), QStringLiteral("/m/b.flac")}));
+        }
+        ProfileDb db;
+        QVERIFY(db.open(file));   // reopen: order persisted
+        QCOMPARE(db.songOrder(), (QStringList{"/m/c.flac", "/m/a.flac", "/m/b.flac"}));
+
+        // Saving again fully replaces the previous order, not merges with it.
+        QVERIFY(db.setSongOrder({QStringLiteral("/m/b.flac"), QStringLiteral("/m/a.flac")}));
+        QCOMPARE(db.songOrder(), (QStringList{"/m/b.flac", "/m/a.flac"}));
+    }
+
     void playlistsAndPins()
     {
         ProfileDb db;

@@ -164,6 +164,7 @@ Item {
             Item { Layout.fillHeight: true; visible: hop.playlistSongs.count === 0 }
             ListView {
                 id: songs
+                objectName: "playlistSongList"
                 Layout.fillWidth: true; Layout.fillHeight: true
                 visible: hop.playlistSongs.count > 0
                 clip: true
