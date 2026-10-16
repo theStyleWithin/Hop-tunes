@@ -42,6 +42,11 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 - **M7 (video): done.** A `collection › videos` grid (scanning, thumbnails, codec/resolution/HDR badges) and a video player with two engines: **libmpv** (richer subtitle styling, hardware decode via `hwdec=auto-safe`) where it's available, falling back to **GStreamer** (`qml6glsink`) where it isn't — currently the Flatpak build, since libmpv isn't packaged there yet. Both engines auto-load subtitles and remember a resume position. The GStreamer path was verified with real on-screen rendering (a real video, visibly playing); the libmpv path's render code follows mpv's documented API but couldn't be checked against a real GPU or display in the sandbox this was built in — see [`SPEC.md` §5b](SPEC.md#5b-video-modern-resolutions-including-4k) for exactly what's checked and what isn't. AppImage, AUR and a plain build all ship libmpv.
 - **AppImage:** [download it from the v1.2.0 release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.2.0) — fixes a video-playback bug found testing v1.1.0 on real hardware. Portable build for glibc 2.35+ distros, tested on 18 distro/display setups; see [`packaging/appimage/`](packaging/appimage/).
 
+**On the horizon** (stretch goals, not started — see [`SPEC.md` §10](SPEC.md#10-possible-future-out-of-scope-for-v1)):
+- An **Android port**, same local-only/always-offline vision with the UI revised for touch.
+- New Collection sections for **audiobooks**, **pictures**, **ebooks** and local-file **podcasts**.
+- A free **Steam listing**, mainly so Steam Deck users can launch it from Gaming Mode.
+
 **New in M7: video**
 
 | videos grid | playing (GStreamer fallback engine) |

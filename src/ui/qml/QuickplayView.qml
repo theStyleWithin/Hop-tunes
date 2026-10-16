@@ -8,67 +8,91 @@ Item {
     id: root
     signal openAlbum()
 
+    // A single horizontal row of tiles, reused for every group below a Strip's title.
+    component TileRow: ListView {
+        id: row
+        property string rowLabel: ""   // set on a Strip with more than one group (e.g. "pinned"'s kinds)
+        Layout.fillWidth: true
+        Layout.preferredHeight: 196
+        orientation: ListView.Horizontal
+        spacing: 18
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+        delegate: Component {
+            AbstractButton {
+                id: t
+                required property var modelData
+                objectName: "tile_" + row.rowLabel + "_" + modelData.title
+                width: 150; height: 196
+                hoverEnabled: true
+                onClicked: hop.playTile(modelData.kind, modelData.ref)
+                Accessible.name: "play " + modelData.title
+                ToolTip.visible: hovered; ToolTip.delay: 800; ToolTip.text: "click to play · right-click for more"
+                MouseArea {
+                    anchors.fill: parent; acceptedButtons: Qt.RightButton
+                    onClicked: function (mouse) { tileMenu.tile = t.modelData; tileMenu.popup(t, mouse.x, mouse.y) }
+                }
+                contentItem: ColumnLayout {
+                    spacing: 4
+                    Item {
+                        Layout.preferredWidth: 150; Layout.preferredHeight: 150
+                        AlbumArt { anchors.fill: parent; key: t.modelData.title; source: t.modelData.art || ""; opacity: t.hovered ? 0.8 : 1 }
+                        Rectangle {   // artists read as round, like the Zune artist tiles
+                            visible: t.modelData.kind === "artist"
+                            anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
+                            color: Theme.fade(0.8); width: kindLabel.implicitWidth + 12; height: 22
+                            Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                        }
+                        Rectangle {
+                            visible: t.modelData.kind === "playlist"
+                            anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
+                            color: Theme.fade(0.8); width: plLabel.implicitWidth + 12; height: 22
+                            Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                        }
+                        Label {
+                            visible: t.hovered
+                            anchors.centerIn: parent
+                            text: "▶"; color: "white"; font.pixelSize: 34
+                        }
+                    }
+                    Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } elide: Text.ElideRight; Layout.fillWidth: true }
+                }
+                background: Item { }
+            }
+        }
+    }
+
+    // A titled section. "groups" (optional) splits its tiles into labelled sub-rows, e.g.
+    // pinned's "artists" / "albums" / "playlists" — kept apart so they read as organised
+    // rather than one jumbled strip; a group with no tiles doesn't render at all.
     component Strip: ColumnLayout {
         id: strip
         property string title
         property var tiles: []
+        property var groups: null   // [{label, tiles}], overrides "tiles" when set
         property string empty: ""
+        readonly property var effectiveGroups: strip.groups || [{label: strip.title, tiles: strip.tiles}]
+        readonly property bool hasAny: strip.effectiveGroups.some(g => g.tiles.length > 0)
         spacing: 12
         Layout.fillWidth: true
         Label { text: strip.title; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
-        Label { visible: strip.tiles.length === 0; text: strip.empty; color: Theme.dim; font { family: Theme.font; pixelSize: 15 } }
-        ListView {
-            visible: strip.tiles.length > 0
-            Layout.fillWidth: true
-            Layout.preferredHeight: 196
-            orientation: ListView.Horizontal
-            spacing: 18
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            model: strip.tiles
-            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
-            delegate: Component {
-                AbstractButton {
-                    id: t
-                    required property var modelData
-                    objectName: "tile_" + strip.title + "_" + modelData.title
-                    width: 150; height: 196
-                    hoverEnabled: true
-                    onClicked: hop.playTile(modelData.kind, modelData.ref)
-                    Accessible.name: "play " + modelData.title
-                    ToolTip.visible: hovered; ToolTip.delay: 800; ToolTip.text: "click to play · right-click for more"
-                    MouseArea {
-                        anchors.fill: parent; acceptedButtons: Qt.RightButton
-                        onClicked: function (mouse) { tileMenu.tile = t.modelData; tileMenu.popup(t, mouse.x, mouse.y) }
-                    }
-                    contentItem: ColumnLayout {
-                        spacing: 4
-                        Item {
-                            Layout.preferredWidth: 150; Layout.preferredHeight: 150
-                            AlbumArt { anchors.fill: parent; key: t.modelData.title; source: t.modelData.art || ""; opacity: t.hovered ? 0.8 : 1 }
-                            Rectangle {   // artists read as round, like the Zune artist tiles
-                                visible: t.modelData.kind === "artist"
-                                anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                                color: Theme.fade(0.8); width: kindLabel.implicitWidth + 12; height: 22
-                                Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
-                            }
-                            Rectangle {
-                                visible: t.modelData.kind === "playlist"
-                                anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
-                                color: Theme.fade(0.8); width: plLabel.implicitWidth + 12; height: 22
-                                Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
-                            }
-                            Label {
-                                visible: t.hovered
-                                anchors.centerIn: parent
-                                text: "▶"; color: "white"; font.pixelSize: 34
-                            }
-                        }
-                        Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }
-                        Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } elide: Text.ElideRight; Layout.fillWidth: true }
-                    }
-                    background: Item { }
+        Label { visible: !strip.hasAny; text: strip.empty; color: Theme.dim; font { family: Theme.font; pixelSize: 15 } }
+        Repeater {
+            model: strip.effectiveGroups
+            delegate: ColumnLayout {
+                id: groupCol
+                required property var modelData
+                visible: modelData.tiles.length > 0
+                Layout.fillWidth: true
+                spacing: 6
+                Label {
+                    visible: strip.groups !== null
+                    text: groupCol.modelData.label
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 13; letterSpacing: 1 }
                 }
+                TileRow { rowLabel: strip.title + "_" + groupCol.modelData.label; model: groupCol.modelData.tiles }
             }
         }
     }
@@ -162,7 +186,15 @@ Item {
                 }
             }
 
-            Strip { title: "pinned"; tiles: hop.quickplayPinned; empty: "right-click an album, artist or playlist and choose “pin to quickplay”." }
+            Strip {
+                title: "pinned"
+                empty: "right-click an album, artist or playlist and choose “pin to quickplay”."
+                groups: [
+                    { label: "artists", tiles: hop.quickplayPinned.filter(function (t) { return t.kind === "artist" }) },
+                    { label: "albums", tiles: hop.quickplayPinned.filter(function (t) { return t.kind === "album" }) },
+                    { label: "playlists", tiles: hop.quickplayPinned.filter(function (t) { return t.kind === "playlist" }) }
+                ]
+            }
             Strip { title: "history"; tiles: hop.quickplayHistory; empty: "albums you play show up here." }
             Strip { title: "new"; tiles: hop.quickplayNew; empty: "recently added albums show up here." }
         }
