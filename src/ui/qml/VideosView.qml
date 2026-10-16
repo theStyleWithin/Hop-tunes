@@ -37,7 +37,7 @@ Item {
                 color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light }
             }
             Label {
-                text: "mkv, mp4, webm, mov, avi, wmv and a few others — anywhere under your music folders."
+                text: "mkv, mp4, webm, mov, avi, wmv and a few others — anywhere under your media folders."
                 color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
                 wrapMode: Text.WordWrap; Layout.maximumWidth: 640
             }

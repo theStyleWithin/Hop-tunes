@@ -7,11 +7,23 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#include <clocale>
+
 #include <mpv/client.h>
 
 namespace hop {
 
 namespace {
+
+// libmpv requires the process's LC_NUMERIC category to be "C": mpv_create() parses its
+// own option values (e.g. "1.0") assuming '.' as the decimal separator, and silently
+// returns null if the active locale could break that (see mpv/client.h's own docs on
+// this). Qt/GLib/GStreamer startup code commonly calls setlocale(LC_ALL, "") — pulling in
+// whatever locale the desktop is configured with — well before any MpvCore exists, so this
+// must be reasserted right before every mpv_create() call here, not just once at startup.
+// Reproduced on a real desktop locale (Steam Deck/SteamOS); CI's headless runners default
+// to the C locale already, which is why this never showed up there.
+void ensureMpvLocale() { std::setlocale(LC_NUMERIC, "C"); }
 
 QString nodeString(const mpv_node &n)
 {
@@ -53,14 +65,14 @@ MpvCore::~MpvCore()
 
 void MpvCore::setOption(const QString &name, const QString &value)
 {
-    if (!m_mpv) m_mpv = mpv_create();
+    if (!m_mpv) { ensureMpvLocale(); m_mpv = mpv_create(); }
     if (!m_mpv) { setError(QStringLiteral("mpv_create failed")); return; }
     mpv_set_option_string(m_mpv, name.toUtf8().constData(), value.toUtf8().constData());
 }
 
 bool MpvCore::init()
 {
-    if (!m_mpv) m_mpv = mpv_create();
+    if (!m_mpv) { ensureMpvLocale(); m_mpv = mpv_create(); }
     if (!m_mpv) { setError(QStringLiteral("mpv_create failed")); return false; }
     // "keep-open" so a finished file stays loaded (we report end-of-file ourselves and
     // decide what happens next; the UI layer owns "what's next", like Player does for audio).

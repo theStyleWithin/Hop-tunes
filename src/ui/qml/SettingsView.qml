@@ -244,9 +244,11 @@ Item {
             color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
         }
 
-        // ---- music folders --------------------------------------------------------
+        // ---- media folders ---------------------------------------------------------
+        // One shared folder list feeds both the music scanner and the video scanner
+        // (App::m_videoScanner.start(m_folders) uses this same list) — never music-only.
 
-        Label { text: "music folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+        Label { text: "media folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
         Label {
             text: "hop-tunes reads these folders and never changes or uploads your files."
             color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
