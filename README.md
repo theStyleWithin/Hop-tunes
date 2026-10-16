@@ -1,5 +1,7 @@
 # **A local-first music player inspired by the Zune software**
 
+*Missed the Zune software? This is for you.*
+
 **Hop-tunes** · Linux · GPL-3.0 · no accounts, no tracking
 
 > [!WARNING]
