@@ -82,6 +82,18 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.3.1" date="2026-10-17">
+      <description>
+        <p>Fixes video playback, which never actually played after v1.2.0's locale fix.</p>
+        <ul>
+          <li>Video opened to a black, frozen screen with no picture or audio and no visible
+            error — a QML call into the video surface silently failed before the video ever
+            loaded. Confirmed fixed on real hardware (Steam Deck, CachyOS Handheld
+            Edition).</li>
+          <li>Video rendered upside down; also confirmed fixed on the same hardware.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.0" date="2026-10-16">
       <description>
         <p>Quality-of-life release: per-profile album edits and drag-reorder everywhere, a

@@ -167,14 +167,14 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 > plain C++ method missing `Q_INVOKABLE`, so `VideoPlayerView.qml`'s call to it (the very
 > first thing it does on every video open) threw `TypeError: ... is not a function` and
 > silently aborted before the video ever loaded — never surfaced as an error since it's a QML
-> console warning, not something routed through `surface.error`. **Open follow-up, found from
-> that same hardware test, fixed here but not yet re-confirmed:** video rendered upside down
-> (`MPV_RENDER_PARAM_FLIP_Y` was `1`; mpv's own Qt Quick render-API example uses `0` for this
-> exact `QQuickFramebufferObject` integration). Covered by the regression test in
+> console warning, not something routed through `surface.error`. **A second bug, found from
+> that same hardware test, is also confirmed fixed on real hardware:** video rendered upside
+> down (`MPV_RENDER_PARAM_FLIP_Y` was `1`; mpv's own Qt Quick render-API example uses `0` for
+> this exact `QQuickFramebufferObject` integration). Covered by the regression test in
 > `test_ui.cpp` (`mpvVideoItemQmlInvokableMethods`) and a real (software-GL) end-to-end
-> harness outside the test suite — see `MpvVideoItem.h`'s header comment. Ships as v1.3.1
-> once the orientation fix is confirmed too. A `"video"` Quickplay pin kind and
-> pinned-videos group (§4.4) remain deferred, unrelated to this fix.
+> harness outside the test suite — see `MpvVideoItem.h`'s header comment. Ships as v1.3.1. A
+> `"video"` Quickplay pin kind and pinned-videos group (§4.4) remain deferred, unrelated to
+> this fix.
 
 *Implementation status: built and tested — probing, scanning, thumbnails, resume
 persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with

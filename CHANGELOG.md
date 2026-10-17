@@ -2,7 +2,7 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [1.3.1] - 2026-10-17
 
 ### Fixed
 - **Video still not playing after v1.2.0's locale fix** (found on the same Steam Deck
@@ -12,7 +12,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   very first thing that happens on every video open — threw and silently aborted before the
   video ever loaded. Fixed and **confirmed on the user's actual Steam Deck** — video plays.
 - **Video rendered upside down**, found from that same hardware test: `MPV_RENDER_PARAM_FLIP_Y`
-  was `1`; mpv's own Qt Quick render-API example uses `0` for this FBO integration.
+  was `1`; mpv's own Qt Quick render-API example uses `0` for this FBO integration. **Also
+  confirmed fixed on the user's actual Steam Deck.**
 
 ## [1.3.0] - 2026-10-16
 
@@ -114,6 +115,7 @@ First release, feature complete.
 First preview: library scanning, gapless playback, artists/albums/songs, cover art, Now
 Playing, media keys (MPRIS) and the portable AppImage.
 
+[1.3.1]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.3.1
 [1.3.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.3.0
 [1.2.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.2.0
 [1.1.0]: https://github.com/theStyleWithin/Hop-tunes/releases/tag/v1.1.0
