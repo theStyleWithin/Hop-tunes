@@ -176,6 +176,16 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 > `"video"` Quickplay pin kind and pinned-videos group (§4.4) remain deferred, unrelated to
 > this fix.
 
+> **Backlog (QoL, not started) — noted 2026-10-17 after v1.3.1 shipped:**
+> - Video player controls are missing fast-forward/rewind (skip) buttons.
+> - Video player has no volume control — only play/pause and stop.
+> - Collection's video thumbnails don't match the frame a file manager shows for the same
+>   file. Music's cover art is correct; videos aren't.
+> - Add a file-based art/thumbnail picker for videos, matching the one music albums already
+>   have in Collection (per-profile album override), even though a video's thumbnail isn't
+>   strictly required the way album art is — for consistency and to cover the mismatch above.
+> - The pinned-videos Quickplay group noted just above is still part of this backlog too.
+
 *Implementation status: built and tested — probing, scanning, thumbnails, resume
 persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with
 unit tests. Two engines exist, chosen at build time and reported at runtime as
