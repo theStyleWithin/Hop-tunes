@@ -654,6 +654,29 @@ private slots:
         // covers the same App-level behaviour with no QML engine involved at all.
     }
 
+    // Regression test for a real bug: setResumePosition() was a plain C++ method missing
+    // Q_INVOKABLE, so QML's call to it (VideoPlayerView.qml's onSurfaceLoaded(), the very
+    // first thing it does on every video open) threw "is not a function" and silently
+    // aborted before item.source was ever set or item.play() ever called — video simply
+    // never loaded, with no error reaching the UI (a QML console warning, not something
+    // routed through surface.error). Caught by building a real (software-GL) harness outside
+    // this suite that opens an actual video end to end; this is the cheap, GL-free piece of
+    // that regression that *can* run in CI: every method VideoPlayerView.qml calls on the
+    // surface from QML must actually be invokable through Qt's meta-object system, which is
+    // exactly the mechanism QML itself uses — this never creates a Renderer (no GL touched).
+    void mpvVideoItemQmlInvokableMethods()
+    {
+        MpvVideoItem item;
+        QVERIFY(QMetaObject::invokeMethod(&item, "setResumePosition", Q_ARG(qint64, 1234)));
+        QVERIFY(QMetaObject::invokeMethod(&item, "play"));
+        QVERIFY(QMetaObject::invokeMethod(&item, "pause"));
+        QVERIFY(QMetaObject::invokeMethod(&item, "togglePause"));
+        QVERIFY(QMetaObject::invokeMethod(&item, "seek", Q_ARG(qint64, 0)));
+        QVERIFY(QMetaObject::invokeMethod(&item, "stop"));
+        QVERIFY(QMetaObject::invokeMethod(&item, "setSubtitleTrack", Q_ARG(int, -1)));
+        QVERIFY(QMetaObject::invokeMethod(&item, "addSubtitleFile", Q_ARG(QString, QString())));
+    }
+
     // ---- per-profile album overrides: custom cover, editable title, live reorder ----
 
     void albumArtTitleAndReorder()

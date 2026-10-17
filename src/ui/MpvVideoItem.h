@@ -15,11 +15,14 @@ namespace hop {
 // as "auto-safe" (hardware decode with a safe software fallback) as soon as the mpv core
 // exists — before init(), as the spec's performance targets ask for.
 //
-// NOTE: this class could not be visually verified on real GPU hardware or against a real
-// display in the sandbox this was written in — only that it builds and that the
-// decode/position/subtitle logic (MpvCore, exercised headless with vo=null) is correct.
-// The render-thread glue below follows mpv's documented render API usage exactly, but
-// treat it as unverified until it's been seen actually painting a frame on screen.
+// NOTE: verified end to end against a real (software/llvmpipe) OpenGL context under Xvfb —
+// opening a real video through the real App + QML engine actually decodes and paints frames
+// into the item's FBO (confirmed by grabbing the window and sampling real pixel variation,
+// not a solid colour). That caught a real bug: setResumePosition() was missing Q_INVOKABLE,
+// so QML's call to it threw and silently aborted onSurfaceLoaded() before the video ever
+// loaded — the actual cause of video never playing, fixed below. Still not confirmed against
+// real GPU hardware/hwdec (this sandbox has none), so hwdec-specific issues could remain;
+// treat the render-thread glue as verified for the software-decode path only.
 class MpvVideoItem : public QQuickFramebufferObject {
     Q_OBJECT
     Q_PROPERTY(QString source READ source WRITE setSource NOTIFY sourceChanged)
@@ -51,7 +54,13 @@ public:
     void setVolume(int percent) { m_core.setVolume(percent); emit volumeChanged(); }
 
     // Resumes from this position (spec §5b "Resume") the next time setSource() loads a file.
-    void setResumePosition(qint64 ms) { m_pendingResumeMs = ms; }
+    // Must be Q_INVOKABLE: VideoPlayerView.qml calls this on the surface from QML, and a
+    // plain C++ method (as this was) is invisible to QML's meta-object system — calling it
+    // threw "is not a function", aborting onSurfaceLoaded() before it ever set item.source
+    // or called item.play(). That's the actual root cause of video "silently" never playing
+    // on the libmpv path: no error ever reached the UI because it was a QML console warning,
+    // not something routed through surface.error.
+    Q_INVOKABLE void setResumePosition(qint64 ms) { m_pendingResumeMs = ms; }
 
     Q_INVOKABLE void play() { m_core.play(); }
     Q_INVOKABLE void pause() { m_core.pause(); }

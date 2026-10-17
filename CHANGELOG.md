@@ -2,6 +2,17 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+- **Video still not playing after v1.2.0's locale fix** (found on the same Steam Deck
+  running CachyOS Handheld Edition): the `mpv_create failed` error was gone, but the player
+  screen came up black/frozen at 0:00 with no picture or audio and no visible error.
+  `MpvVideoItem::setResumePosition()` was missing `Q_INVOKABLE`, so QML's call to it — the
+  very first thing that happens on every video open — threw and silently aborted before the
+  video ever loaded. Fixed and verified end to end against a real (software) OpenGL context,
+  confirming actual decoded video frames render through the libmpv path.
+
 ## [1.3.0] - 2026-10-16
 
 ### Added
