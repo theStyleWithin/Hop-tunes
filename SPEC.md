@@ -175,7 +175,6 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 > harness outside the test suite — see `MpvVideoItem.h`'s header comment. Ships as v1.3.1. A
 > `"video"` Quickplay pin kind and pinned-videos group (§4.4) remain deferred, unrelated to
 > this fix.
-
 > **Backlog (QoL, not started) — noted 2026-10-17 after v1.3.1 shipped:**
 > - Video player controls are missing fast-forward/rewind (skip) buttons.
 > - Video player has no volume control — only play/pause and stop.
