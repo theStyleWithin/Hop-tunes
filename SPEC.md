@@ -161,20 +161,20 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ## 5b. Video (modern resolutions, including 4K) ✅ M7
 
-> **Known issue (fixed in code, pending hardware confirmation):** on the user's Steam Deck
-> (CachyOS Handheld Edition), opening a video no longer showed the `mpv_create failed` error
-> (fixed in v1.2.0 — `LC_NUMERIC`), but nothing actually played: black/frozen screen, no
-> picture or audio, no visible error. Root cause found: `MpvVideoItem::setResumePosition()`
-> was a plain C++ method missing `Q_INVOKABLE`, so `VideoPlayerView.qml`'s call to it — the
-> very first thing it does on every video open — threw `TypeError: ... is not a function`
-> and silently aborted before the video ever loaded. The error never reached the UI because
-> it's a QML console warning, not something routed through `surface.error`. Fixed, and
-> verified end to end with a real (software-GL) harness outside the test suite that confirmed
-> actual decoded video frames rendering through the libmpv path — see `MpvVideoItem.h`'s
-> header comment and the regression test in `test_ui.cpp`
-> (`mpvVideoItemQmlInvokableMethods`). Not yet confirmed on the user's real hardware; ships
-> as v1.3.1 once that's done. A `"video"` Quickplay pin kind and pinned-videos group (§4.4)
-> remain deferred, unrelated to this fix.
+> **The main bug is confirmed fixed on real hardware** (Steam Deck, CachyOS Handheld
+> Edition): video wasn't playing at all after v1.2.0's locale fix — black/frozen screen, no
+> picture or audio, no visible error. Root cause: `MpvVideoItem::setResumePosition()` was a
+> plain C++ method missing `Q_INVOKABLE`, so `VideoPlayerView.qml`'s call to it (the very
+> first thing it does on every video open) threw `TypeError: ... is not a function` and
+> silently aborted before the video ever loaded — never surfaced as an error since it's a QML
+> console warning, not something routed through `surface.error`. **Open follow-up, found from
+> that same hardware test, fixed here but not yet re-confirmed:** video rendered upside down
+> (`MPV_RENDER_PARAM_FLIP_Y` was `1`; mpv's own Qt Quick render-API example uses `0` for this
+> exact `QQuickFramebufferObject` integration). Covered by the regression test in
+> `test_ui.cpp` (`mpvVideoItemQmlInvokableMethods`) and a real (software-GL) end-to-end
+> harness outside the test suite — see `MpvVideoItem.h`'s header comment. Ships as v1.3.1
+> once the orientation fix is confirmed too. A `"video"` Quickplay pin kind and
+> pinned-videos group (§4.4) remain deferred, unrelated to this fix.
 
 *Implementation status: built and tested — probing, scanning, thumbnails, resume
 persistence, and both playback engines' load/play/pause/seek/subtitle logic, all with

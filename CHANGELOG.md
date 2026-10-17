@@ -10,8 +10,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   screen came up black/frozen at 0:00 with no picture or audio and no visible error.
   `MpvVideoItem::setResumePosition()` was missing `Q_INVOKABLE`, so QML's call to it — the
   very first thing that happens on every video open — threw and silently aborted before the
-  video ever loaded. Fixed and verified end to end against a real (software) OpenGL context,
-  confirming actual decoded video frames render through the libmpv path.
+  video ever loaded. Fixed and **confirmed on the user's actual Steam Deck** — video plays.
+- **Video rendered upside down**, found from that same hardware test: `MPV_RENDER_PARAM_FLIP_Y`
+  was `1`; mpv's own Qt Quick render-API example uses `0` for this FBO integration.
 
 ## [1.3.0] - 2026-10-16
 
