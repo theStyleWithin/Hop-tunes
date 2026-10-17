@@ -41,7 +41,11 @@ protected:
         if (!ensureContext()) return;
         QOpenGLFramebufferObject *fbo = framebufferObject();
         mpv_opengl_fbo target{int(fbo->handle()), fbo->width(), fbo->height(), 0};
-        int flip = 1;
+        // 0, not 1: confirmed on real hardware (Steam Deck) that 1 renders upside down.
+        // Matches mpv's own Qt Quick render-API example (qthelloworld), which uses 0 for
+        // exactly this QQuickFramebufferObject integration — Qt Quick's FBO texture is
+        // already in the orientation mpv expects, so no flip is needed here.
+        int flip = 0;
         mpv_render_param params[] = {
             {MPV_RENDER_PARAM_OPENGL_FBO, &target},
             {MPV_RENDER_PARAM_FLIP_Y, &flip},
