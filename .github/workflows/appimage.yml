@@ -218,9 +218,9 @@ jobs:
             --notes "IN DEVELOPMENT: DO NOT DOWNLOAD. Unfinished test build for development only. Latest automatic build from \`${GITHUB_REF_NAME}\` @ ${GITHUB_SHA::7}. Download the .AppImage, make it executable (chmod +x) and run it. Tested on Ubuntu 22.04/24.04, Debian 12/13, Linux Mint 22, Fedora 41, Arch and openSUSE Tumbleweed (headless, X11 and Wayland)." \
             Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS
 
-  # One private draft pre-release per pull request, so each improvement can be downloaded and
-  # tried on its own before it is merged. Drafts are visible only to people with write access,
-  # are never marked "latest", and each push to the PR replaces that PR's previous draft.
+  # One pre-release per pull request, so each improvement can be downloaded and tried on its
+  # own before it is merged. Pre-releases are never marked "latest", so the main release stays
+  # as it is, and each push to the PR replaces that PR's previous pre-release.
   publish-pr:
     needs: [build, smoke]
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
@@ -228,7 +228,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with: { name: appimage, path: dist }
-      - name: Publish the PR's draft pre-release
+      - name: Publish the PR's pre-release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -238,10 +238,10 @@ jobs:
         run: |
           cd dist && sha256sum Hop-tunes-* > SHA256SUMS
           title="Hop-tunes test build: PR #$PR"
-          # Drafts have no tag to address them by; find this PR's earlier draft by title.
-          for id in $(gh api "repos/$GH_REPO/releases?per_page=100" --jq ".[] | select(.draft and .name == \"$title\") | .id"); do
-            gh api -X DELETE "repos/$GH_REPO/releases/$id"
+          # Each push gets a new tag; drop this PR's earlier pre-release (found by title) and its tag.
+          for tag in $(gh api "repos/$GH_REPO/releases?per_page=100" --jq ".[] | select(.name == \"$title\") | .tag_name"); do
+            gh release delete "$tag" --yes --cleanup-tag
           done
-          gh release create "pr-$PR-${SHA::7}" --draft --prerelease --target "$SHA" --title "$title" \
+          gh release create "pr-$PR-${SHA::7}" --prerelease --target "$SHA" --title "$title" \
             --notes "TEST BUILD, NOT A RELEASE. Pull request #$PR (\`$BRANCH\` @ ${SHA::7}). Download the .AppImage, chmod +x, run." \
             Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS
