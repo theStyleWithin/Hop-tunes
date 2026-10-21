@@ -44,6 +44,7 @@ QVariant VideoListModel::data(const QModelIndex &index, int role) const
     case ResolutionBadgeRole:  return resolutionBadge(v.width, v.height);
     case HdrRole:              return v.hdr;
     case CodecBadgeRole:       return v.codec.toUpper();
+    case CustomThumbRole:      return v.customThumb;
     }
     return {};
 }
@@ -54,7 +55,7 @@ QHash<int, QByteArray> VideoListModel::roleNames() const
         {VideoIdRole, "videoId"}, {TitleRole, "title"}, {PathRole, "path"},
         {ThumbRole, "thumb"}, {DurationRole, "duration"}, {WidthRole, "width"},
         {HeightRole, "height"}, {ResolutionBadgeRole, "resolutionBadge"},
-        {HdrRole, "hdr"}, {CodecBadgeRole, "codecBadge"},
+        {HdrRole, "hdr"}, {CodecBadgeRole, "codecBadge"}, {CustomThumbRole, "customThumb"},
     };
 }
 

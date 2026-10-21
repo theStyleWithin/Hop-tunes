@@ -228,6 +228,8 @@ public:
     Q_INVOKABLE QString formatTime(qint64 ms) const { return TrackListModel::formatDuration(ms); }
 
     // videos (spec §5b)
+    Q_INVOKABLE QString setVideoThumb(int row, const QUrl &image);   // "" ok, else a message
+    Q_INVOKABLE void clearVideoThumb(int row);                       // back to the detected frame
     Q_INVOKABLE void playVideo(int row);                                  // opens the player, resumes if we have a position
     Q_INVOKABLE void closeVideoPlayer(qint64 positionMs, qint64 durationMs);  // saves resume position, closes
     Q_INVOKABLE void saveVideoProgress(qint64 positionMs, qint64 durationMs); // periodic save while playing
@@ -279,6 +281,7 @@ private:
     QList<Track> m_library;                 // everything under the profile's folders
     QHash<QString, int> m_libraryIndex;     // path -> row in m_library
     Collection m_fullCollection;            // unfiltered, for quickplay
+    QHash<QString, QString> m_videoThumbOverrides;   // this profile's picked video thumbnails, by video path
     QHash<QString, AlbumOverride> m_albumOverrides;   // this profile's title/cover edits, by ref
     QStringList m_songOrder;                // this profile's manual order for the songs tab
     QString m_search;

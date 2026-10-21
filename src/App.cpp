@@ -323,6 +323,7 @@ void App::activate(const QString &id, bool guest)
     }
     m_stats = m_db.allStats();
     m_albumOverrides = m_db.albumOverrides();
+    m_videoThumbOverrides = m_db.videoThumbOverrides();
     m_songOrder = m_db.songOrder();
     m_search.clear();
     m_djSeed.clear();
@@ -351,6 +352,7 @@ void App::leaveProfile()
     m_db.close();
     m_stats.clear();
     m_albumOverrides.clear();
+    m_videoThumbOverrides.clear();
     m_songOrder.clear();
     m_search.clear();
     m_selPlaylist.clear();
@@ -543,7 +545,44 @@ void App::reload()
 
 void App::reloadVideos()
 {
-    m_videos.setVideos(m_videoIndex.videosUnder(m_folders));
+    QList<Video> list = m_videoIndex.videosUnder(m_folders);
+    for (Video &v : list) {
+        const auto it = m_videoThumbOverrides.constFind(v.path);
+        if (it == m_videoThumbOverrides.constEnd() || !QFile::exists(it.value())) continue;
+        v.thumb = it.value();
+        v.customThumb = true;
+    }
+    m_videos.setVideos(list);
+}
+
+QString App::setVideoThumb(int row, const QUrl &image)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    if (row < 0 || row >= m_videos.count()) return QStringLiteral("no video selected");
+    const QString videoPath = m_videos.videos()[row].path;
+    QImage img(image.isLocalFile() ? image.toLocalFile() : image.toString());
+    if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    if (img.width() > 1280 || img.height() > 1280)
+        img = img.scaled(1280, 1280, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const QString dir = m_store.dirFor(m_profileId) + QStringLiteral("/video-thumbs");
+    QDir().mkpath(dir);
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(videoPath.toUtf8(), QCryptographicHash::Sha1).toHex());
+    const QString path = dir + QLatin1Char('/') + hash + QStringLiteral(".jpg");
+    if (!img.save(path, "JPG", 85)) return QStringLiteral("could not save the picture");
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!m_db.setVideoThumbOverride(videoPath, path)) return QStringLiteral("could not save the change");
+    m_videoThumbOverrides[videoPath] = path;
+    reloadVideos();
+    return {};
+}
+
+void App::clearVideoThumb(int row)
+{
+    if (!profileReady() || m_guest || row < 0 || row >= m_videos.count()) return;
+    const QString videoPath = m_videos.videos()[row].path;
+    if (!m_db.setVideoThumbOverride(videoPath, QString())) return;
+    QFile::remove(m_videoThumbOverrides.take(videoPath));
+    reloadVideos();
 }
 
 QString App::videoPlayerTitle() const
