@@ -20,6 +20,7 @@ struct Video {
     bool    hdr = false;   // BT.2020 / PQ / HLG colorimetry
     double  frameRate = 0.0;
     QString thumb;         // cached frame-grab path, may be empty
+    bool customThumb = false;   // thumb is this profile's own picked image (not stored in the index)
     qint64  added = 0;     // when the file first appeared in the index
 
     QString displayTitle() const;   // file name, extension stripped
