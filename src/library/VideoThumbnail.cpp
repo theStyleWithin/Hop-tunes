@@ -53,7 +53,11 @@ QString grab(const QString &videoPath, qint64 mtime, qint64 durationMs, const QS
                         "! video/x-raw,format=RGB ! appsink name=sink sync=false max-buffers=1 drop=true")
             .arg(uri).toUtf8();
     GstElement *bin = gst_parse_launch(desc.constData(), &err);
-    if (err) { g_error_free(err); err = nullptr; }
+    if (err) {
+        qWarning("video thumbnail: pipeline for %s failed: %s", qPrintable(videoPath), err->message);
+        g_error_free(err);
+        err = nullptr;
+    }
     if (!bin) return {};
     PipelineGuard guard{bin};
 
