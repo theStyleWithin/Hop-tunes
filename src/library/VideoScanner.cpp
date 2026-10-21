@@ -83,7 +83,10 @@ VideoScanner::Result VideoScanner::scanFolders(VideoIndex *index, const QStringL
             ++r.scanned;
             const auto k = known.constFind(path);
             const qint64 mtime = fi.lastModified().toSecsSinceEpoch();
-            if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size()) continue;
+            // Unchanged files are skipped, except ones that never got a thumbnail: those are retried
+            // so a fix to the grab (or a codec appearing) fills them in without touching the files.
+            if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size()
+                && (k->hasThumb || thumbCacheDir.isEmpty())) continue;
             (k == known.constEnd() ? r.added : r.updated)++;
 
             Video v;
