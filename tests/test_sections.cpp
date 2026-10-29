@@ -115,6 +115,11 @@ private slots:
         m.setProgress(it.path, 0.25);
         QCOMPARE(changed.count(), 1);
         QCOMPARE(m.data(i, SectionListModel::ProgressRole).toDouble(), 0.25);
+        QVERIFY(!m.data(i, SectionListModel::PlayedRole).toBool());
+        m.setPlayed(it.path, true);
+        QVERIFY(m.data(i, SectionListModel::PlayedRole).toBool());
+        m.setPlayed(it.path, false);
+        QVERIFY(!m.data(i, SectionListModel::PlayedRole).toBool());
     }
 };
 

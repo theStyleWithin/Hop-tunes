@@ -36,6 +36,7 @@ QVariant SectionListModel::data(const QModelIndex &index, int role) const
     case DurationRole:  return it.durationMs > 0 ? TrackListModel::formatDuration(it.durationMs) : QString();
     case ProgressRole:  return m_progress.value(it.path, 0.0);
     case SizeTextRole:  return formatSize(it.size);
+    case PlayedRole:    return m_played.contains(it.path);
     }
     return {};
 }
@@ -45,7 +46,7 @@ QHash<int, QByteArray> SectionListModel::roleNames() const
     return {
         {ItemIdRole, "itemId"}, {TitleRole, "title"}, {PathRole, "path"}, {FileUrlRole, "fileUrl"},
         {GroupRole, "group"}, {DurationRole, "duration"}, {ProgressRole, "progress"},
-        {SizeTextRole, "sizeText"},
+        {SizeTextRole, "sizeText"}, {PlayedRole, "played"},
     };
 }
 
@@ -64,13 +65,22 @@ QString SectionListModel::pathAt(int row) const
     return row >= 0 && row < m_items.size() ? m_items[row].path : QString();
 }
 
-void SectionListModel::setItems(const QList<SectionItem> &items, const QHash<QString, double> &progress)
+void SectionListModel::setItems(const QList<SectionItem> &items, const QHash<QString, double> &progress,
+                                const QSet<QString> &played)
 {
     beginResetModel();
     m_items = items;
     m_progress = progress;
+    m_played = played;
     endResetModel();
     emit countChanged();
+}
+
+void SectionListModel::setPlayed(const QString &path, bool played)
+{
+    if (played) m_played.insert(path); else m_played.remove(path);
+    for (int i = 0; i < m_items.size(); ++i)
+        if (m_items[i].path == path) { emit dataChanged(index(i), index(i), {PlayedRole}); break; }
 }
 
 void SectionListModel::setProgress(const QString &path, double fraction)

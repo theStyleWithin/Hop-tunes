@@ -90,6 +90,8 @@ public:
     QHash<QString, AlbumOverride> albumOverrides() const;   // all of them, loaded once per profile
     bool setAlbumOverrideTitle(const QString &ref, const QString &title);   // "" clears it
     bool setAlbumOverrideArt(const QString &ref, const QString &artPath);   // "" clears it
+    QSet<QString> playedItems() const;                       // finished audiobooks / podcast episodes
+    bool setItemPlayed(const QString &path, bool played);
     QHash<QString, QString> videoThumbOverrides() const;   // video path -> picked image, loaded once per profile
     bool setVideoThumbOverride(const QString &videoPath, const QString &thumbPath);   // "" clears it
     QStringList albumTrackOrder(const QString &ref) const;          // paths, in order; empty: natural order

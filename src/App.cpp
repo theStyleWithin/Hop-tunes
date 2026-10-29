@@ -357,6 +357,7 @@ void App::activate(const QString &id, bool guest)
     }
     m_stats = m_db.allStats();
     m_albumOverrides = m_db.albumOverrides();
+    m_played = m_db.playedItems();
     m_videoThumbOverrides = m_db.videoThumbOverrides();
     m_songOrder = m_db.songOrder();
     m_search.clear();
@@ -388,6 +389,7 @@ void App::leaveProfile()
     m_db.close();
     m_stats.clear();
     m_albumOverrides.clear();
+    m_played.clear();
     m_videoThumbOverrides.clear();
     m_songOrder.clear();
     m_search.clear();
@@ -622,7 +624,7 @@ void App::reloadSection(int i)
             if (p.durationMs > 0 && p.positionMs > 0) progress.insert(it.path, double(p.positionMs) / double(p.durationMs));
         }
     }
-    sec.model.setItems(items, progress);
+    sec.model.setItems(items, progress, m_played);
 }
 
 void App::removeVideoFolder(const QString &path)
@@ -959,6 +961,21 @@ void App::saveResume(bool force)
     const double frac = m_resumeDurationMs > 0 && m_resumeLastMs < m_resumeDurationMs - 5000
         ? double(m_resumeLastMs) / double(m_resumeDurationMs) : 0.0;
     for (auto &sec : m_sec) sec->model.setProgress(m_resumePath, frac);
+    // Reaching the end counts as played; the resume position is forgotten at that point.
+    if (m_resumeDurationMs > 0 && m_resumeLastMs >= m_resumeDurationMs - 5000 && !m_played.contains(m_resumePath)) {
+        m_played.insert(m_resumePath);
+        m_db.setItemPlayed(m_resumePath, true);
+        for (auto &sec : m_sec) sec->model.setPlayed(m_resumePath, true);
+    }
+}
+
+void App::toggleItemPlayed(const QString &path)
+{
+    if (path.isEmpty() || !m_db.isOpen() || m_guest) return;
+    const bool now = !m_played.contains(path);
+    if (now) m_played.insert(path); else m_played.remove(path);
+    m_db.setItemPlayed(path, now);
+    for (auto &sec : m_sec) sec->model.setPlayed(path, now);
 }
 
 // The tracked item stopped being the current track (or the profile is closing): save and forget it.

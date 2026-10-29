@@ -19,6 +19,7 @@
 
 #include <QObject>
 #include <memory>
+#include <QSet>
 #include <QStringList>
 #include <QHash>
 #include <QTimer>
@@ -118,7 +119,7 @@ public:
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
     SectionListModel *podcasts() { return &m_sec[3]->model; }
-    QStringList sectionKinds() const { return {QStringLiteral("pictures"), QStringLiteral("audiobooks")}; }
+    QStringList sectionKinds() const { return {QStringLiteral("pictures"), QStringLiteral("audiobooks"), QStringLiteral("podcasts")}; }
     QVariantMap sectionFolders() const;
     QVariantMap sectionStatus() const;
     bool scanning() const { return m_scanner.isRunning(); }
@@ -251,6 +252,7 @@ public:
     Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
     // Audiobooks and podcasts: plays the item, resuming where this profile left off.
     Q_INVOKABLE void playSectionItem(const QString &kind, int row);
+    Q_INVOKABLE void toggleItemPlayed(const QString &path);   // mark an audiobook / episode played or unplayed
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
@@ -371,6 +373,7 @@ private:
         bool rescanPending = false;
     };
     // The audiobook / podcast currently playing, whose position is saved as it plays.
+    QSet<QString> m_played;   // this profile's finished audiobooks and episodes
     QString m_resumePath;
     qint64 m_resumeSavedMs = 0;
     qint64 m_resumeLastMs = 0;

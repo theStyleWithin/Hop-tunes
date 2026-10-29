@@ -141,6 +141,8 @@ Item {
                 required property string duration
                 required property string sizeText
                 required property real progress
+                required property bool played
+                required property string path
                 objectName: "sectionRow_" + root.kind + "_" + index
                 width: list.width; height: 64
                 hoverEnabled: true
@@ -153,7 +155,22 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Label { text: row.title; Layout.fillWidth: true; elide: Text.ElideRight
-                                color: Theme.text; font { family: Theme.font; pixelSize: 17 } }
+                                color: row.played ? Theme.muted : Theme.text; font { family: Theme.font; pixelSize: 17 } }
+                        AbstractButton {
+                            id: playedBtn
+                            objectName: "sectionPlayed_" + root.kind + "_" + row.index
+                            visible: (root.kind === "audiobooks" || root.kind === "podcasts") && !hop.guest && (row.hovered || row.played)
+                            hoverEnabled: true
+                            implicitHeight: 18
+                            Accessible.name: row.played ? "mark unplayed" : "mark played"
+                            onClicked: hop.toggleItemPlayed(row.path)
+                            contentItem: Label {
+                                text: row.played ? "played ✓" : "mark played"
+                                color: playedBtn.hovered ? hop.accent : Theme.muted
+                                font { family: Theme.font; pixelSize: 12; underline: playedBtn.hovered }
+                            }
+                            background: Item {}
+                        }
                         Label { text: row.duration !== "" ? row.duration : row.sizeText
                                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
                     }
