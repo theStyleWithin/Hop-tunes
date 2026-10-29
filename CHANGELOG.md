@@ -2,6 +2,32 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.0] - 2026-10-29
+
+### Added
+- **Four new collection sections: pictures, audiobooks, ebooks and podcasts.** Each has its
+  own per-profile folder list and its own "choose a folder" button (also listed in settings,
+  one list per section); nothing is scanned until you add a folder to that section.
+  - **pictures**: a thumbnail grid and a full-window viewer (arrow keys, slideshow).
+  - **audiobooks**: plays through the normal player and remembers where you stopped, also
+    after closing the app; the list shows how far you are.
+  - **podcasts**: local episode files grouped by show, with the same resume, plus played /
+    unplayed marks. Local files only: no feeds, no network.
+  - **ebooks**: EPUBs open in a built-in reader (chapters, contents list, text size, saved
+    reading position). PDFs open in your default PDF viewer.
+- **Videos have their own folders.** A "choose a video folder…" button in the empty videos
+  tab and a "video folders" list in settings. Until you add one, videos keep being found under
+  your music folders, so existing libraries are unchanged; the first video folder you add starts
+  from those folders so nothing disappears.
+- **Pick your own video thumbnail.** An "image" button under each video opens a picture picker
+  (PNG/JPEG), with a "reset" link back to the detected frame. Saved per profile, hidden in
+  guest mode.
+
+### Changed
+- The settings folder list that feeds music is now labelled "music folders".
+- Profile databases migrate to schema v6 automatically on first launch (new tables only; no
+  data is changed or removed). EPUB reading adds a build dependency on zlib.
+
 ## [1.3.1] - 2026-10-17
 
 ### Fixed

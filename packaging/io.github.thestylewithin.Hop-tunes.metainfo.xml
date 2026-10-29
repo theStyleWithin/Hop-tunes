@@ -82,6 +82,18 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.4.0" date="2026-10-29">
+      <description>
+        <p>Four new collection sections, video folders of their own, and your own video thumbnails.</p>
+        <ul>
+          <li>Pictures, audiobooks, ebooks and podcasts, each with its own folders and its own
+            choose-folder button. Audiobooks, podcasts and ebooks remember where you stopped.</li>
+          <li>EPUB books open in a built-in reader; PDFs open in your PDF viewer.</li>
+          <li>The videos tab can have its own folders; existing libraries are unchanged.</li>
+          <li>An "image" button under each video lets you choose its thumbnail.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.1" date="2026-10-17">
       <description>
         <p>Fixes video playback, which never actually played after v1.2.0's locale fix.</p>
