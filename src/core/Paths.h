@@ -5,7 +5,9 @@
 
 namespace hop {
 
-// XDG locations (spec §3.4). Everything lives under ~/.local/share/hop-tunes etc.
+// XDG locations (spec §3.4). Everything lives under ~/.local/share/hop-tunes etc.; on Windows the
+// per-user AppData folders. HOPTUNES_DATA_DIR (or portable.txt beside the exe on Windows)
+// moves it all under one folder, for the portable build.
 namespace Paths {
     QString dataDir();        // $XDG_DATA_HOME/hop-tunes
     QString sharedDir();      // dataDir()/shared

@@ -1,6 +1,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "platform/Mpris.h"
 
+#ifdef Q_OS_WIN
+
+// No MPRIS on Windows: there is no D-Bus session bus. Media keys and the system media overlay
+// would use the Windows media-session API instead (not done yet). Everything here is a no-op, so
+// the rest of the app needs no Windows-specific code.
+namespace hop {
+bool Mpris::forwardToRunningInstance(const QStringList &) { return false; }
+Mpris::Mpris(Player *, QObject *parent) : QObject(parent) {}
+Mpris::~Mpris() = default;
+void Mpris::start() {}
+} // namespace hop
+
+#else  // !Q_OS_WIN
+
 #include "playback/Player.h"
 
 #include <QMetaObject>
@@ -372,3 +386,5 @@ int Mpris::onSetProperty(GDBusConnection *, const char *, const char *, const ch
 }
 
 } // namespace hop
+
+#endif // !Q_OS_WIN

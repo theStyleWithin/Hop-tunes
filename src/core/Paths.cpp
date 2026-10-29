@@ -1,11 +1,40 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "core/Paths.h"
 
+#include <QByteArray>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QStandardPaths>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 namespace hop::Paths {
+
+// Where everything lives when it must not go to the usual per-user locations: the
+// HOPTUNES_DATA_DIR environment variable (the portable build's launcher sets it, and it is
+// handy for tests), or on Windows a "portable.txt" next to the exe. Empty means "use the
+// platform's normal data and cache folders".
+static QString overrideRoot()
+{
+    static const QString root = [] {
+        const QByteArray env = qgetenv("HOPTUNES_DATA_DIR");
+        if (!env.isEmpty()) return QDir::cleanPath(QString::fromLocal8Bit(env));
+#ifdef Q_OS_WIN
+        wchar_t buf[32768];
+        const DWORD n = GetModuleFileNameW(nullptr, buf, DWORD(sizeof buf / sizeof buf[0]));
+        if (n > 0 && n < sizeof buf / sizeof buf[0]) {
+            const QFileInfo exe(QString::fromWCharArray(buf, int(n)));
+            if (QFileInfo::exists(exe.absolutePath() + QStringLiteral("/portable.txt")))
+                return exe.absolutePath() + QStringLiteral("/Hop-tunes-data");
+        }
+#endif
+        return QString();
+    }();
+    return root;
+}
 
 static QString xdg(QStandardPaths::StandardLocation loc)
 {
@@ -13,11 +42,11 @@ static QString xdg(QStandardPaths::StandardLocation loc)
     return QStandardPaths::writableLocation(loc) + QStringLiteral("/hop-tunes");
 }
 
-QString dataDir()     { return xdg(QStandardPaths::GenericDataLocation); }
+QString dataDir()     { return overrideRoot().isEmpty() ? xdg(QStandardPaths::GenericDataLocation) : overrideRoot() + QStringLiteral("/data"); }
 QString sharedDir()   { return dataDir() + QStringLiteral("/shared"); }
 QString indexDbPath() { return sharedDir() + QStringLiteral("/index.sqlite"); }
 QString profilesDir() { return dataDir() + QStringLiteral("/profiles"); }
-QString cacheDir()    { return xdg(QStandardPaths::GenericCacheLocation); }
+QString cacheDir()    { return overrideRoot().isEmpty() ? xdg(QStandardPaths::GenericCacheLocation) : overrideRoot() + QStringLiteral("/cache"); }
 QString artCacheDir() { return cacheDir() + QStringLiteral("/art"); }
 QString videoIndexDbPath()   { return sharedDir() + QStringLiteral("/videos.sqlite"); }
 QString sectionIndexDbPath() { return sharedDir() + QStringLiteral("/sections.sqlite"); }

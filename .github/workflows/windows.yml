@@ -1,0 +1,204 @@
+name: windows
+
+# Builds Hop-tunes for Windows 10/11 (64-bit) on a Windows runner with MSYS2, packs the installer and
+# the single-file portable exe, and starts each of them for real before anything is published.
+# Pull requests get a test-build pre-release; a v* tag attaches both files to that version's release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Version
+        id: ver
+        run: |
+          base=$(sed -n 's/^project(hop-tunes VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then v="${GITHUB_REF#refs/tags/v}"; else v="$base-git.$(git rev-parse --short HEAD)"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+        shell: bash
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          pacboy: >-
+            toolchain:p cmake:p ninja:p pkgconf:p
+            qt6-base:p qt6-declarative:p qt6-tools:p qt6-imageformats:p qt6-svg:p
+            taglib:p sqlite3:p zlib:p
+            gstreamer:p gst-plugins-base:p gst-plugins-good:p gst-plugins-bad:p gst-plugins-ugly:p gst-libav:p
+            mpv:p
+          install: zip perl
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      # Informational for now: the suite was written on Linux, so a failure here names a Windows
+      # difference to look at, and does not block the installer.
+      - name: Test
+        continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: offscreen
+          HOPTUNES_SOFTWARE_RENDER: '1'
+        run: ctest --test-dir build --output-on-failure --timeout 240
+
+      - name: Stage the app and everything it needs
+        run: packaging/windows/stage.sh build stage
+
+      - name: Check the version of the staged build
+        shell: pwsh
+        run: |
+          $out = & "$PWD\stage\hop-tunes.exe" --version 2>&1 | Out-String
+          Write-Host $out
+          if ($out -notmatch "hop-tunes ${{ steps.ver.outputs.base }}") { throw "unexpected version output" }
+
+      # Starts the real UI from the staged folder (not the MSYS2 prefix) and saves a screenshot.
+      - name: Start the staged app
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          HOPTUNES_SOFTWARE_RENDER: '1'
+          HOPTUNES_PROFILE: ':guest'
+        run: |
+          $env:HOPTUNES_DATA_DIR = Join-Path $env:RUNNER_TEMP "ht-smoke"
+          $env:HOPTUNES_SCREENSHOT = Join-Path $PWD "smoke-staged.png"
+          $p = Start-Process -FilePath "$PWD\stage\hop-tunes.exe" -PassThru -Wait -NoNewWindow -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err
+          Get-Content smoke.out, smoke.err | Write-Host
+          if ($p.ExitCode -ne 0) { throw "the staged app exited with code $($p.ExitCode)" }
+          if (-not (Select-String -Path smoke.out -Pattern "selftest: version=${{ steps.ver.outputs.base }}")) { throw "no self-test line" }
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          & $iscc "/DAppVersion=${{ steps.ver.outputs.version }}" "/DStageDir=$PWD\stage" "/DOutDir=$PWD\dist" packaging\windows\hop-tunes.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Portable exe
+        run: |
+          mkdir -p dist
+          packaging/windows/build-portable.sh build/hop-tunes-portable.exe stage "dist/Hop-tunes-${{ steps.ver.outputs.version }}-portable-x64.exe"
+
+      # Install silently into a fresh folder, start it, uninstall: the installer is what users run.
+      - name: Try the installer
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          HOPTUNES_SOFTWARE_RENDER: '1'
+          HOPTUNES_PROFILE: ':guest'
+        run: |
+          $setup = (Get-ChildItem dist -Filter "Hop-tunes-Setup-*.exe").FullName
+          $dir = "C:\ht-installed"
+          $p = Start-Process -FilePath $setup -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/CURRENTUSER","/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit code $($p.ExitCode)" }
+          if (-not (Test-Path "$dir\hop-tunes.exe")) { throw "hop-tunes.exe was not installed" }
+          $env:HOPTUNES_DATA_DIR = Join-Path $env:RUNNER_TEMP "ht-installed-data"
+          $env:HOPTUNES_SCREENSHOT = Join-Path $PWD "smoke-installed.png"
+          $r = Start-Process -FilePath "$dir\hop-tunes.exe" -PassThru -Wait -NoNewWindow -RedirectStandardOutput inst.out -RedirectStandardError inst.err
+          Get-Content inst.out, inst.err | Write-Host
+          if ($r.ExitCode -ne 0) { throw "the installed app exited with code $($r.ExitCode)" }
+          $u = Get-ChildItem $dir -Filter "unins*.exe" | Select-Object -First 1
+          Start-Process -FilePath $u.FullName -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait
+          if (Test-Path "$dir\hop-tunes.exe") { throw "uninstall left hop-tunes.exe behind" }
+
+      # Run the single file from a fresh folder: it must unpack, start the app, and keep its data beside itself.
+      - name: Try the portable exe
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          HOPTUNES_SOFTWARE_RENDER: '1'
+          HOPTUNES_PROFILE: ':guest'
+        run: |
+          $src = (Get-ChildItem dist -Filter "*-portable-x64.exe").FullName
+          $dir = "C:\ht-portable"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item $src "$dir\Hop-tunes-portable.exe"
+          $v = Start-Process -FilePath "$dir\Hop-tunes-portable.exe" -ArgumentList "--version" -PassThru -Wait -NoNewWindow -RedirectStandardOutput pv.out -RedirectStandardError pv.err
+          Get-Content pv.out, pv.err | Write-Host
+          if (-not (Select-String -Path pv.out -Pattern "hop-tunes ${{ steps.ver.outputs.base }}")) { throw "portable --version printed nothing useful" }
+          Remove-Item Env:HOPTUNES_DATA_DIR -ErrorAction SilentlyContinue
+          $env:HOPTUNES_SCREENSHOT = Join-Path $PWD "smoke-portable.png"
+          $r = Start-Process -FilePath "$dir\Hop-tunes-portable.exe" -PassThru -Wait -NoNewWindow -RedirectStandardOutput po.out -RedirectStandardError po.err
+          Get-Content po.out, po.err | Write-Host
+          if ($r.ExitCode -ne 0) { throw "the portable exe exited with code $($r.ExitCode)" }
+          # Guest mode keeps no profile, but the data folder is created next to the exe on start-up.
+          if (-not (Test-Path "$dir\Hop-tunes-data")) { throw "no Hop-tunes-data folder beside the portable exe" }
+
+      - name: Checksums
+        shell: bash
+        run: cd dist && sha256sum Hop-tunes-* > SHA256SUMS-windows.txt && cat SHA256SUMS-windows.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/*
+            smoke-*.png
+          if-no-files-found: error
+
+  # One pre-release per pull request, so a Windows build can be downloaded and tried before merging.
+  publish-pr:
+    needs: build
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: windows, path: out }
+      - name: Publish the PR's Windows pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          title="Hop-tunes Windows test build: PR #$PR"
+          for tag in $(gh api "repos/$GH_REPO/releases?per_page=100" --jq ".[] | select(.name == \"$title\") | .tag_name"); do
+            gh release delete "$tag" --yes --cleanup-tag
+          done
+          gh release create "win-pr-$PR-${SHA::7}" --prerelease --target "$SHA" --title "$title" \
+            --notes "WINDOWS TEST BUILD, NOT A RELEASE. Pull request #$PR (\`$BRANCH\` @ ${SHA::7}). Unsigned, so Windows SmartScreen may warn: choose More info, then Run anyway. Setup: run the Hop-tunes-Setup file. Portable: run the -portable file from any folder (your data stays in a Hop-tunes-data folder beside it)." \
+            out/dist/Hop-tunes-*.exe out/dist/SHA256SUMS-windows.txt
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: windows, path: out }
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ver="${GITHUB_REF#refs/tags/v}"
+          # The AppImage workflow creates (or fills in) the release; wait for it rather than race it.
+          for i in $(seq 1 60); do gh release view "v$ver" >/dev/null 2>&1 && break; sleep 30; done
+          gh release view "v$ver" >/dev/null 2>&1 || gh release create "v$ver" --verify-tag --title "Hop-tunes $ver" --notes "Hop-tunes $ver"
+          gh release upload "v$ver" out/dist/Hop-tunes-*.exe out/dist/SHA256SUMS-windows.txt --clobber
