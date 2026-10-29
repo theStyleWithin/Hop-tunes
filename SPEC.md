@@ -372,6 +372,13 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
   rich text); PDFs open in the system viewer rather than adding a PDF rendering dependency.
   Not done and possible later: EXIF/zoom for pictures, chapter navigation inside an audiobook
   file, EPUB styling beyond plain text, in-app PDF.
+- **Next up (requested 2026-10-29): Windows and Android builds.** Windows: an **installer** and a
+  **portable exe** (no install, runs from any folder, keeps its data beside it or in the user
+  profile). Android: a native app with the UI revised for touch. Both build on the same Qt/QML
+  core; decisions to make first: how the Windows build gets GStreamer, libmpv and TagLib (MSYS2 or
+  vcpkg), code signing, the MPRIS desktop integration (Linux only, needs a Windows media-session
+  equivalent), and storage access on Android (scoped storage vs. "point at any folder"). The
+  Android item below has the longer reasoning.
 - **Short-term stretch goal: Android port.** Same local-only, always-offline vision, with the
   UI revised for touch and mobile screens rather than ported as-is. Qt/QML, GStreamer and
   libmpv all have working Android ports already, and sideloading/F-Droid distribution fits
