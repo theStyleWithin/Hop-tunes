@@ -38,7 +38,7 @@ for f in "$QT_ROOT"/plugins/imageformats/q{jpeg,webp,gif,ico,tiff,svg}.dll; do [
 # ---- GStreamer: only the plugins Hop-tunes uses.
 echo "== GStreamer plugins"
 GST_PLUGINS="coreelements playback typefindfunctions audioconvert audioresample volume
-  autodetect directsoundsink directsound wasapi wasapi2 app wavparse flac audioparsers id3demux apetag ogg vorbis opus
+  autodetect directsound wasapi wasapi2 app wavparse flac audioparsers id3demux apetag ogg vorbis opus
   isomp4 libav mpg123 lame wavpack asf matroska aiff equalizer replaygain spectrum level audiorate
   audiofx scaletempo interleave videoconvertscale videoconvert videoscale videoparsersbad avi mpegtsdemux mpegpsdemux
   gio qml6 opengl"

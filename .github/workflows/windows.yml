@@ -64,6 +64,14 @@ jobs:
           HOPTUNES_SOFTWARE_RENDER: '1'
         run: ctest --test-dir build --output-on-failure --timeout 240
 
+      # Re-runs whatever failed, verbosely, so the reason is in the log (the first run is terse).
+      - name: Show why tests failed
+        continue-on-error: true
+        env:
+          QT_QPA_PLATFORM: offscreen
+          HOPTUNES_SOFTWARE_RENDER: '1'
+        run: ctest --test-dir build --rerun-failed --output-on-failure -VV --timeout 240 2>&1 | tail -n 400
+
       - name: Stage the app and everything it needs
         run: packaging/windows/stage.sh build stage
 
@@ -74,20 +82,35 @@ jobs:
           Write-Host $out
           if ($out -notmatch "hop-tunes ${{ steps.ver.outputs.base }}") { throw "unexpected version output" }
 
-      # Starts the real UI from the staged folder (not the MSYS2 prefix) and saves a screenshot.
+      # Starts the real UI from the staged folder (not the MSYS2 prefix), with a generated tone in the
+      # music folder: it must find the song and play it through the bundled GStreamer, then save a screenshot.
       - name: Start the staged app
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
           HOPTUNES_SOFTWARE_RENDER: '1'
           HOPTUNES_PROFILE: ':guest'
+          HOPTUNES_AUDIO_SINK: 'fakesink sync=true'
+          HOPTUNES_AUTOPLAY: '0'
         run: |
+          $music = Join-Path $env:USERPROFILE "Music"
+          New-Item -ItemType Directory -Force $music | Out-Null
+          $n = 22050 * 3
+          $ms = New-Object IO.MemoryStream
+          $w = New-Object IO.BinaryWriter($ms)
+          $w.Write([Text.Encoding]::ASCII.GetBytes("RIFF")); $w.Write([int](36 + $n * 2)); $w.Write([Text.Encoding]::ASCII.GetBytes("WAVEfmt "))
+          $w.Write([int]16); $w.Write([int16]1); $w.Write([int16]1); $w.Write([int]22050); $w.Write([int]44100); $w.Write([int16]2); $w.Write([int16]16)
+          $w.Write([Text.Encoding]::ASCII.GetBytes("data")); $w.Write([int]($n * 2))
+          for ($i = 0; $i -lt $n; $i++) { $w.Write([int16](8000 * [Math]::Sin(2 * [Math]::PI * 440 * $i / 22050))) }
+          $w.Flush()
+          [IO.File]::WriteAllBytes((Join-Path $music "smoke tone.wav"), $ms.ToArray())
           $env:HOPTUNES_DATA_DIR = Join-Path $env:RUNNER_TEMP "ht-smoke"
           $env:HOPTUNES_SCREENSHOT = Join-Path $PWD "smoke-staged.png"
           $p = Start-Process -FilePath "$PWD\stage\hop-tunes.exe" -PassThru -Wait -NoNewWindow -RedirectStandardOutput smoke.out -RedirectStandardError smoke.err
           Get-Content smoke.out, smoke.err | Write-Host
           if ($p.ExitCode -ne 0) { throw "the staged app exited with code $($p.ExitCode)" }
           if (-not (Select-String -Path smoke.out -Pattern "selftest: version=${{ steps.ver.outputs.base }}")) { throw "no self-test line" }
+          if (-not (Select-String -Path smoke.out -Pattern "songs=1 playing=1")) { throw "the staged app did not find and play the test song" }
 
       - name: Installer
         shell: pwsh
