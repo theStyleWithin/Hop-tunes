@@ -361,16 +361,17 @@ Hop-tunes is an **independent, original program**. It is inspired by how Zune be
 - Encrypted profiles (SQLCipher + key from PIN).
 - Local network sharing (DLNA server) for TVs and consoles.
 - Last.fm / ListenBrainz scrobbling as an *optional* plugin (that would be the only login, user-initiated and off by default).
-- **Short-term stretch goal: audiobooks, pictures, ebooks and podcasts as new Collection
-  sections.** Audiobooks are the closest fit (long local audio files with chapters/resume,
-  mostly reusing the existing scanner/player and video's resume-position pattern). Podcasts
-  return here too, but local-only this time — episode files a profile already has, no RSS/
-  network subscriptions (that network requirement is why podcasts were dropped after M7, per
-  `CHANGELOG.md`'s 1.1.0 entry, and that reasoning still holds). Pictures and ebooks are a
-  bigger lift each — neither shares any infrastructure with the audio/video pipeline (a
-  photo viewer needs its own grid/zoom/EXIF handling, an ebook reader needs EPUB/PDF parsing
-  and pagination) — closer to bolting on separate small apps than extending this one. Not
-  scoped or started; likely built as separate pieces rather than one push.
+- **Audiobooks, pictures, ebooks and podcasts as new Collection sections: built (M8).** Each
+  has its own per-profile folder list and its own "choose a folder" button, one shared index
+  (`sections.sqlite`, table keyed by kind + path) and one incremental scanner, so none of the
+  older music/video scan paths are touched. Pictures: thumbnail grid and a full-window viewer
+  with a slideshow. Audiobooks and podcasts: local files only (no RSS or network), played by
+  the normal player with a per-profile resume position (reusing the per-path resume table the
+  video player uses) and played/unplayed marks; podcasts group by show. Ebooks: EPUBs open in a
+  built-in reader (own zip reader on zlib, reading order from the package file, chapters as Qt
+  rich text); PDFs open in the system viewer rather than adding a PDF rendering dependency.
+  Not done and possible later: EXIF/zoom for pictures, chapter navigation inside an audiobook
+  file, EPUB styling beyond plain text, in-app PDF.
 - **Short-term stretch goal: Android port.** Same local-only, always-offline vision, with the
   UI revised for touch and mobile screens rather than ported as-is. Qt/QML, GStreamer and
   libmpv all have working Android ports already, and sideloading/F-Droid distribution fits
