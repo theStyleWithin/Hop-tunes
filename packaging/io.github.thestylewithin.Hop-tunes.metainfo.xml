@@ -84,10 +84,13 @@
   <releases>
     <release version="1.4.0" date="2026-10-29">
       <description>
-        <p>Choose your own thumbnail for any video.</p>
+        <p>Four new collection sections, video folders of their own, and your own video thumbnails.</p>
         <ul>
-          <li>An "image" button under each video in the collection opens a picture picker, with
-            a "reset" link to go back to the detected frame. Saved per profile.</li>
+          <li>Pictures, audiobooks, ebooks and podcasts, each with its own folders and its own
+            choose-folder button. Audiobooks, podcasts and ebooks remember where you stopped.</li>
+          <li>EPUB books open in a built-in reader; PDFs open in your PDF viewer.</li>
+          <li>The videos tab can have its own folders; existing libraries are unchanged.</li>
+          <li>An "image" button under each video lets you choose its thumbnail.</li>
         </ul>
       </description>
     </release>
