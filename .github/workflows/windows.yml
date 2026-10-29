@@ -212,7 +212,7 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag
           done
           gh release create "win-pr-$PR-${SHA::7}" --prerelease --target "$SHA" --title "$title" \
-            --notes "WINDOWS TEST BUILD, NOT A RELEASE. Pull request #$PR (\`$BRANCH\` @ ${SHA::7}). Unsigned, so Windows SmartScreen may warn: choose More info, then Run anyway. Setup: run the Hop-tunes-Setup file. Portable: run the -portable file from any folder (your data stays in a Hop-tunes-data folder beside it)." \
+            --notes "WINDOWS TEST BUILD, NOT A RELEASE. The developer never tests on Windows (only Linux): only automated tests have run this, install at your own risk, testers wanted. Pull request #$PR (\`$BRANCH\` @ ${SHA::7}). Unsigned, so Windows SmartScreen may warn: choose More info, then Run anyway. Setup: run the Hop-tunes-Setup file. Portable: run the -portable file from any folder (your data stays in a Hop-tunes-data folder beside it)." \
             out/dist/Hop-tunes-*.exe out/dist/SHA256SUMS-windows.txt
 
   release:

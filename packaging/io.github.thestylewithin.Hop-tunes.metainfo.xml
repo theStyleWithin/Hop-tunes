@@ -84,7 +84,7 @@
   <releases>
     <release version="1.5.0" date="2026-10-30">
       <description>
-        <p>Hop-tunes for Windows (experimental: tested by automation only).</p>
+        <p>Hop-tunes for Windows (experimental, install at your own risk: the developer never tests on Windows, only automated tests do; Windows testers wanted).</p>
         <ul>
           <li>A Windows 10/11 installer and a single-file portable exe, both with everything included.</li>
           <li>Fixes replacing a damaged profile database on Windows.</li>

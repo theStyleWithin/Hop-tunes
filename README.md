@@ -9,6 +9,9 @@
 
 ## Install
 
+> [!WARNING]
+> **Windows: the developer never tests on Windows.** Hop-tunes is tested on Linux (and Android, once it exists), not Windows. The Windows installer and portable exe are built and run by automated tests only, never by a person on a real PC. **Install at your own risk. Windows testers wanted:** please [open an issue](https://github.com/theStyleWithin/Hop-tunes/issues) to say what works and what doesn't.
+
 | | |
 |---|---|
 | **Flatpak** | `Hop-tunes-x86_64.flatpak` from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases), then `flatpak install --user Hop-tunes-x86_64.flatpak` |

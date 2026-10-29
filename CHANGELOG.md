@@ -21,8 +21,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   "More info", then "Run anyway".
 - No Windows media keys or system media overlay yet, and opening a second file does not hand it to an
   already-running window.
-- **Experimental.** The developer uses Linux and has no Windows PC, so these builds have only ever been
-  run by automated tests on GitHub's Windows machines, never on real hardware. If you try them, please
+- **WARNING: the developer never tests on Windows.** Hop-tunes is tested on Linux (and Android, once it
+  exists), not Windows. These builds have only ever been run by automated tests on GitHub's Windows
+  machines, never by a person on a real PC. **Install at your own risk. Windows testers wanted:** please
   report what works and what doesn't at https://github.com/theStyleWithin/Hop-tunes/issues.
 
 ### Fixed

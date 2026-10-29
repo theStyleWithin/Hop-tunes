@@ -1,0 +1,15 @@
+PLEASE READ BEFORE INSTALLING
+
+The developer of Hop-tunes uses Linux and never tests it on Windows.
+The Windows version has only been run by automated tests, never on a real
+Windows PC by a person. It is experimental.
+
+Install and use it at your own risk. Back up anything you care about, and
+keep your music, videos and books where they are: Hop-tunes only reads them
+and never changes or deletes your files.
+
+Windows testers are wanted! If you try it, please tell us what works and what
+doesn't:  https://github.com/theStyleWithin/Hop-tunes/issues
+
+Windows may also warn that the program is from an unknown publisher (it is not
+code-signed yet). If it does, choose "More info", then "Run anyway".
