@@ -73,7 +73,11 @@ jobs:
         run: |
           for t in profiles m4 video robust ui; do
             echo "=== test_$t"
-            timeout 100 build/test_$t.exe 2>&1 | grep -a -E "^(FAIL|XFAIL|XPASS|QFATAL|Totals)|^   Loc:|^   Actual|^   Expected|^QFATAL" | head -40 || true
+            timeout 100 build/test_$t.exe > "$RUNNER_TEMP/t_$t.txt" 2>&1
+            echo "exit code: $?"
+            grep -a -c "" "$RUNNER_TEMP/t_$t.txt" | sed 's/^/output lines: /'
+            grep -a -E "FAIL|QFATAL|Totals|Loc:|Actual|Expected|exception|error" "$RUNNER_TEMP/t_$t.txt" | grep -a -v "^TagLib" | head -30 | cut -c1-200
+            echo "--- first lines:"; head -n 8 "$RUNNER_TEMP/t_$t.txt" | cut -c1-200
           done
 
       - name: Stage the app and everything it needs
