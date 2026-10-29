@@ -58,6 +58,14 @@ bool writeTestClip(const QString &path, int width = 320, int height = 240, int m
 
 } // namespace
 
+// The GStreamer video fallback needs gst-plugins-good's qml6glsink, which some builds (Windows) do not have.
+static bool hasGstQtSink()
+{
+    GstElementFactory *f = gst_element_factory_find("qml6glsink");
+    if (f) gst_object_unref(f);
+    return f != nullptr;
+}
+
 class TestVideo : public QObject {
     Q_OBJECT
 private slots:
@@ -238,6 +246,7 @@ private slots:
     // — nothing here needs a real QQuickItem, unlike the on-screen render path.
     void gstVideoPlayerLoadsPlaysSeeksAndReportsDuration()
     {
+        if (!hasGstQtSink()) QSKIP("GStreamer's Qt video sink (qml6glsink) is not part of this build; libmpv is the video engine here");
         QTemporaryDir dir;
         const QString clip = dir.filePath(QStringLiteral("clip.mkv"));
         QVERIFY(writeTestClip(clip, 320, 240, 2000));
@@ -268,6 +277,7 @@ private slots:
 
     void gstVideoPlayerFindsSidecarSubtitle()
     {
+        if (!hasGstQtSink()) QSKIP("GStreamer's Qt video sink (qml6glsink) is not part of this build; libmpv is the video engine here");
         QTemporaryDir dir;
         const QString clip = dir.filePath(QStringLiteral("movie.mkv"));
         QVERIFY(writeTestClip(clip, 320, 240, 1000));

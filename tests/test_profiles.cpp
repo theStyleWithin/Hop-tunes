@@ -68,8 +68,10 @@ private slots:
 
         // Private files: profile list 0600, folders 0700, no PIN in clear text.
         const QString json = root + QStringLiteral("/profiles.json");
+#ifndef Q_OS_WIN   // group/other permission bits are a POSIX idea; Windows uses per-user folder ACLs
         QCOMPARE(QFile::permissions(json) & 0x0077, QFileDevice::Permissions{});
         QCOMPARE(QFile::permissions(s.dirFor(a)) & 0x0077, QFileDevice::Permissions{});
+#endif
         QFile f(json);
         QVERIFY(f.open(QIODevice::ReadOnly));
         QVERIFY(!f.readAll().contains("9876"));

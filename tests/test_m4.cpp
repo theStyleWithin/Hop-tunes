@@ -43,7 +43,9 @@ private slots:
         {
             ProfileDb db;
             QVERIFY(db.open(file));
+#ifndef Q_OS_WIN   // POSIX group/other bits do not exist on Windows
             QCOMPARE(QFile::permissions(file) & 0x0077, QFileDevice::Permissions{});
+#endif
             QVERIFY(db.recordPlay(QStringLiteral("/m/a.flac"), 100));
             QVERIFY(db.recordPlay(QStringLiteral("/m/a.flac"), 200));
             QVERIFY(db.recordPlay(QStringLiteral("/m/b.flac"), 150));

@@ -353,6 +353,7 @@ void App::activate(const QString &id, bool guest)
         // Damaged: keep it aside for recovery and start this profile's lists afresh,
         // rather than running without playlists and play counts at all.
         qWarning("hop-tunes: profile database unreadable (%s); set aside, starting a new one", qPrintable(m_db.lastError()));
+        m_db.close();   // Windows will not rename a file that is still open
         setAside(dbPath);
         if (!m_db.open(dbPath)) qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
     }
