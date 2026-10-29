@@ -47,7 +47,7 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         emit scanningChanged();
         if (added || updated || removed || m_songs.count() == 0) reload();
         if (m_rescanPending) { m_rescanPending = false; rescan(); }
-        m_watcher.setFolders(m_folders);   // pick up any subfolder the scan just found
+        m_watcher.setFolders(watchedFolders());   // pick up any subfolder the scan just found
     });
 
     // Video (spec §5b): kept as its own scanner/index (see VideoScanner's header comment),
@@ -62,8 +62,8 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_videoScanner, &VideoScanner::finished, this, [this](int added, int updated, int removed, int) {
         emit videoScanProgressChanged();
         if (added || updated || removed || m_videos.count() == 0) reloadVideos();
-        if (m_videoScanRescanPending) { m_videoScanRescanPending = false; m_videoScanner.start(m_folders); }
-        m_watcher.setFolders(m_folders);
+        if (m_videoScanRescanPending) { m_videoScanRescanPending = false; m_videoScanner.start(videoFolders()); }
+        m_watcher.setFolders(watchedFolders());
     });
     // Live library updates (spec §6): a local inotify watch, nothing more — see
     // LibraryWatcher's header comment. Debounced, so one rescan covers a whole copy.
@@ -297,10 +297,16 @@ void App::activate(const QString &id, bool guest)
     m_guest = guest;
     const QJsonObject s = guest ? QJsonObject{} : m_store.settings(id);
     m_folders.clear();
+    m_videoFolders.clear();
+    m_videoFoldersOwn = false;
     if (guest) {
         if (!suggestedFolder().isEmpty()) m_folders << suggestedFolder();
     } else {
         for (const QJsonValue &v : s.value(QStringLiteral("folders")).toArray()) m_folders << v.toString();
+        if (s.contains(QStringLiteral("videoFolders"))) {
+            m_videoFoldersOwn = true;
+            for (const QJsonValue &v : s.value(QStringLiteral("videoFolders")).toArray()) m_videoFolders << v.toString();
+        }
     }
     m_loadingSettings = true;
     m_player.setVolume(s.value(QStringLiteral("volume")).toDouble(1.0));
@@ -363,6 +369,8 @@ void App::leaveProfile()
     m_reduceMotion = false;
     emit appearanceChanged();
     m_folders.clear();
+    m_videoFolders.clear();
+    m_videoFoldersOwn = false;
     reload();
     emit foldersChanged();
     emit profileChanged();
@@ -373,6 +381,7 @@ void App::saveProfileSettings()
     if (m_profileId.isEmpty()) return;   // guest mode keeps nothing
     QJsonObject s = m_store.settings(m_profileId);
     s.insert(QStringLiteral("folders"), QJsonArray::fromStringList(m_folders));
+    if (m_videoFoldersOwn) s.insert(QStringLiteral("videoFolders"), QJsonArray::fromStringList(m_videoFolders));
     s.insert(QStringLiteral("volume"), m_player.volume());
     s.insert(QStringLiteral("crossfadeMs"), m_player.crossfadeMs());
     s.insert(QStringLiteral("replayGain"), m_player.replayGainMode());
@@ -450,6 +459,8 @@ QString App::removeProfile()
     m_stats.clear();
     m_profileId.clear();          // nothing is written back for a profile being removed
     m_folders.clear();
+    m_videoFolders.clear();
+    m_videoFoldersOwn = false;
     reload();
     emit foldersChanged();
     const bool ok = m_store.remove(id);
@@ -479,22 +490,57 @@ void App::removeFolder(const QString &path)
     reload();
 }
 
+void App::addVideoFolder(const QUrl &folder)
+{
+    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString())
+                             .canonicalFilePath();
+    const QStringList current = videoFolders();
+    if (path.isEmpty() || current.contains(path)) return;
+    // First video folder of its own: start from what videos already scan (the shared media
+    // folders), so nothing disappears from the library; the user can then remove what they don't want.
+    if (!m_videoFoldersOwn) { m_videoFolders = current; m_videoFoldersOwn = true; }
+    m_videoFolders << path;
+    saveFolders();
+    emit foldersChanged();
+    rescan();
+}
+
+void App::removeVideoFolder(const QString &path)
+{
+    if (!m_videoFoldersOwn) { m_videoFolders = m_folders; m_videoFoldersOwn = true; }
+    if (!m_videoFolders.removeAll(path)) return;
+    saveFolders();
+    emit foldersChanged();
+    reloadVideos();
+}
+
+QStringList App::watchedFolders() const
+{
+    QStringList all = m_folders;
+    for (const QString &f : videoFolders()) if (!all.contains(f)) all << f;
+    return all;
+}
+
 void App::rescan()
 {
-    if (m_folders.isEmpty()) return;
-    if (m_scanner.isRunning()) m_rescanPending = true;   // e.g. right after a profile switch
-    else {
-        m_scanDone = m_scanTotal = 0;
-        emit scanProgressChanged();
-        m_scanner.start(m_folders);
+    if (m_folders.isEmpty() && videoFolders().isEmpty()) return;
+    if (!m_folders.isEmpty()) {
+        if (m_scanner.isRunning()) m_rescanPending = true;   // e.g. right after a profile switch
+        else {
+            m_scanDone = m_scanTotal = 0;
+            emit scanProgressChanged();
+            m_scanner.start(m_folders);
+        }
     }
-    if (m_videoScanner.isRunning()) m_videoScanRescanPending = true;
-    else {
-        m_videoScanDone = m_videoScanTotal = 0;
-        emit videoScanProgressChanged();
-        m_videoScanner.start(m_folders);
+    if (!videoFolders().isEmpty()) {
+        if (m_videoScanner.isRunning()) m_videoScanRescanPending = true;
+        else {
+            m_videoScanDone = m_videoScanTotal = 0;
+            emit videoScanProgressChanged();
+            m_videoScanner.start(videoFolders());
+        }
     }
-    m_watcher.setFolders(m_folders);
+    m_watcher.setFolders(watchedFolders());
 }
 
 void App::playSongs(int row)
@@ -545,7 +591,7 @@ void App::reload()
 
 void App::reloadVideos()
 {
-    QList<Video> list = m_videoIndex.videosUnder(m_folders);
+    QList<Video> list = m_videoIndex.videosUnder(videoFolders());
     for (Video &v : list) {
         const auto it = m_videoThumbOverrides.constFind(v.path);
         if (it == m_videoThumbOverrides.constEnd() || !QFile::exists(it.value())) continue;
@@ -770,7 +816,7 @@ int App::selectedAlbumYear() const
     return a ? a->year : 0;
 }
 
-void App::saveFolders() { saveProfileSettings(); m_watcher.setFolders(m_folders); }
+void App::saveFolders() { saveProfileSettings(); m_watcher.setFolders(watchedFolders()); }
 
 // ---- listening stats ----------------------------------------------------------------
 // A play counts once half the song (or 4 minutes) has been heard; moving on before that

@@ -8,6 +8,7 @@ import QtQuick.Layouts
 Item {
     id: root
     signal addFolderRequested()
+    signal addVideoFolderRequested()
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
     property string collectionTab: "music"   // music | videos (spec §4.1)
     function showArtists() { mode = "artists"; collectionTab = "music" }
@@ -183,6 +184,7 @@ Item {
         }
 
         VideosView {
+            onAddFolderRequested: root.addVideoFolderRequested()
             visible: root.collectionTab === "videos"
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18

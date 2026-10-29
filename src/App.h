@@ -32,6 +32,8 @@ class App : public QObject {
     Q_PROPERTY(hop::TrackListModel *songs READ songs CONSTANT)
     Q_PROPERTY(hop::Player *player READ player CONSTANT)
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
+    // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
+    Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
     Q_PROPERTY(int scanTotal READ scanTotal NOTIFY scanProgressChanged)
@@ -98,6 +100,7 @@ public:
     TrackListModel *songs() { return &m_songs; }
     Player *player() { return &m_player; }
     QStringList folders() const { return m_folders; }
+    QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }
     bool scanning() const { return m_scanner.isRunning(); }
     int scanDone() const { return m_scanDone; }
     int scanTotal() const { return m_scanTotal; }
@@ -222,6 +225,8 @@ public:
 
     Q_INVOKABLE void addFolder(const QUrl &folder);
     Q_INVOKABLE void removeFolder(const QString &path);
+    Q_INVOKABLE void addVideoFolder(const QUrl &folder);
+    Q_INVOKABLE void removeVideoFolder(const QString &path);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
@@ -308,6 +313,9 @@ private:
     TrackListModel m_songs;
     Player m_player;
     QStringList m_folders;
+    QStringList m_videoFolders;       // used only when m_videoFoldersOwn
+    bool m_videoFoldersOwn = false;   // this profile has set its own video folders
+    QStringList watchedFolders() const;   // music + video folders, deduplicated
     int m_scanDone = 0;
     int m_scanTotal = 0;
     bool m_rescanPending = false;

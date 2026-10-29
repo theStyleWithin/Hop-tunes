@@ -8,6 +8,7 @@ import QtQuick.Layouts
 Item {
     id: root
     signal addFolderRequested()
+    signal addVideoFolderRequested()
 
     property string profileMsg: ""
     property bool confirmRemove: false
@@ -244,11 +245,11 @@ Item {
             color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
         }
 
-        // ---- media folders ---------------------------------------------------------
-        // One shared folder list feeds both the music scanner and the video scanner
-        // (App::m_videoScanner.start(m_folders) uses this same list) — never music-only.
+        // ---- music folders ---------------------------------------------------------
+        // The music scanner's list. Videos use their own list below once one is added; until
+        // then they scan these same folders, so existing libraries keep working.
 
-        Label { text: "media folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+        Label { text: "music folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
         Label {
             text: "hop-tunes reads these folders and never changes or uploads your files."
             color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
@@ -290,6 +291,41 @@ Item {
                 contentItem: Label { text: parent.text; color: parent.enabled ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { implicitWidth: 150; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
             }
+        }
+
+        // ---- video folders ---------------------------------------------------------
+        // The videos tab scans these. Until one is added here it uses the media folders above.
+        Label { text: "video folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+        Label {
+            visible: hop.videoFolders.length === 0
+            text: "no video folders yet."
+            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+        }
+        Repeater {
+            model: hop.videoFolders
+            delegate: Rectangle {
+                required property string modelData
+                Layout.fillWidth: true; Layout.maximumWidth: 760
+                implicitHeight: 56
+                color: Theme.panel
+                RowLayout {
+                    anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
+                    Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    Button {
+                        text: "remove"
+                        onClicked: hop.removeVideoFolder(modelData)
+                        Accessible.name: "remove video folder " + modelData
+                        contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: 15 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
+                    }
+                }
+            }
+        }
+        Button {
+            text: "+ add video folder"
+            onClicked: root.addVideoFolderRequested()
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+            background: Rectangle { implicitWidth: 190; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
         }
 
         // ---- remove profile ------------------------------------------------------
