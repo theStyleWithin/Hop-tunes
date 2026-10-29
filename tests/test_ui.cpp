@@ -5,6 +5,7 @@
 #include "ui/MpvVideoItem.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFont>
 #include <QFontDatabase>
@@ -94,6 +95,20 @@ class TestUi : public QObject {
         if (!i) qWarning("no item %s", name);
         return i;
     }
+    // For things the test has just asked for (a popup, a page): they appear a moment after the click or
+    // call that opens them, so give the event loop a few seconds before calling it missing. This
+    // was a real flake on slower CI machines ("no item namePromptField").
+    QQuickItem *waitItem(const char *name, int timeoutMs = 4000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < timeoutMs) {
+            auto *i = find(window()->contentItem(), QLatin1String(name));
+            if (i && i->isVisible()) return i;
+            QTest::qWait(25);
+        }
+        return item(name);
+    }
     // Scrolls the nearest Flickable so the item is on screen (Settings is a long page).
     void ensureVisible(QQuickItem *i)
     {
@@ -110,7 +125,7 @@ class TestUi : public QObject {
     }
     bool click(const char *name)
     {
-        QQuickItem *i = item(name);
+        QQuickItem *i = waitItem(name);
         if (!i || !i->isVisible() || !i->isEnabled()) { qWarning("cannot click %s", name); return false; }
         ensureVisible(i);
         const QPointF c = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
@@ -119,7 +134,7 @@ class TestUi : public QObject {
     }
     void type(const char *name, const QString &text)
     {
-        QQuickItem *i = item(name);
+        QQuickItem *i = waitItem(name);
         QVERIFY(i);
         i->forceActiveFocus();
         i->setProperty("text", QString());
