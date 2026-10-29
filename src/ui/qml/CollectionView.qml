@@ -215,6 +215,7 @@ Item {
                 onAddFolderRequested: function (k) { root.addSectionFolderRequested(k) }
                 onItemActivated: function (row) {
                     if (secView.kind === "pictures") pictureViewer.openAt(row)
+                    else if (secView.kind === "ebooks") hop.openBook(row)
                     else hop.playSectionItem(secView.kind, row)
                 }
                 Layout.fillWidth: true; Layout.fillHeight: true
@@ -222,6 +223,7 @@ Item {
             }
         }
         PictureViewer { id: pictureViewer; model: hop.pictures }
+        EbookReader { id: ebookReader }
 
         StackLayout {
             visible: root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")

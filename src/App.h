@@ -3,6 +3,7 @@
 
 #include "core/ProfileStore.h"
 #include "library/CollectionModels.h"
+#include "library/EpubBook.h"
 #include "library/LibraryWatcher.h"
 #include "library/ProfileDb.h"
 #include "library/SectionIndex.h"
@@ -46,6 +47,15 @@ class App : public QObject {
     Q_PROPERTY(hop::SectionListModel *audiobooks READ audiobooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *ebooks READ ebooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *podcasts READ podcasts CONSTANT)
+    // The open ebook (EPUB reader).
+    Q_PROPERTY(bool bookOpen READ bookOpen NOTIFY bookChanged)
+    Q_PROPERTY(QString bookTitle READ bookTitle NOTIFY bookChanged)
+    Q_PROPERTY(QString bookAuthor READ bookAuthor NOTIFY bookChanged)
+    Q_PROPERTY(int bookChapterIndex READ bookChapterIndex NOTIFY bookChanged)
+    Q_PROPERTY(int bookChapterCount READ bookChapterCount NOTIFY bookChanged)
+    Q_PROPERTY(QString bookChapterHtml READ bookChapterHtml NOTIFY bookChanged)
+    Q_PROPERTY(QStringList bookChapterTitles READ bookChapterTitles NOTIFY bookChanged)
+    Q_PROPERTY(double bookResumeFraction READ bookResumeFraction NOTIFY bookChanged)   // scroll position within the chapter
     Q_PROPERTY(QVariantMap sectionFolders READ sectionFolders NOTIFY sectionFoldersChanged)   // key -> [paths]
     Q_PROPERTY(QVariantMap sectionStatus READ sectionStatus NOTIFY sectionStatusChanged)      // key -> {scanning, done, total}
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
@@ -119,7 +129,15 @@ public:
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
     SectionListModel *podcasts() { return &m_sec[3]->model; }
-    QStringList sectionKinds() const { return {QStringLiteral("pictures"), QStringLiteral("audiobooks"), QStringLiteral("podcasts")}; }
+    QStringList sectionKinds() const { return {QStringLiteral("pictures"), QStringLiteral("audiobooks"), QStringLiteral("ebooks"), QStringLiteral("podcasts")}; }
+    bool bookOpen() const { return m_book.isOpen(); }
+    QString bookTitle() const { return m_book.title(); }
+    QString bookAuthor() const { return m_book.author(); }
+    int bookChapterIndex() const { return m_bookChapter; }
+    int bookChapterCount() const { return m_book.chapterCount(); }
+    QString bookChapterHtml() { return m_book.chapterHtml(m_bookChapter); }
+    QStringList bookChapterTitles();
+    double bookResumeFraction() const { return m_bookResumeFraction; }
     QVariantMap sectionFolders() const;
     QVariantMap sectionStatus() const;
     bool scanning() const { return m_scanner.isRunning(); }
@@ -252,7 +270,12 @@ public:
     Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
     // Audiobooks and podcasts: plays the item, resuming where this profile left off.
     Q_INVOKABLE void playSectionItem(const QString &kind, int row);
-    Q_INVOKABLE void toggleItemPlayed(const QString &path);   // mark an audiobook / episode played or unplayed
+    Q_INVOKABLE void toggleItemPlayed(const QString &path);
+    // Ebooks: EPUBs open in the built-in reader, PDFs in the default PDF viewer.
+    Q_INVOKABLE void openBook(int row);
+    Q_INVOKABLE void goToBookChapter(int index);
+    Q_INVOKABLE void saveBookProgress(double fractionInChapter);
+    Q_INVOKABLE void closeBook(double fractionInChapter);   // mark an audiobook / episode played or unplayed
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
@@ -269,6 +292,7 @@ signals:
     void foldersChanged();
     void sectionFoldersChanged();
     void sectionStatusChanged();
+    void bookChanged();
     void scanningChanged();
     void scanProgressChanged();
     void selectionChanged();
@@ -373,6 +397,10 @@ private:
         bool rescanPending = false;
     };
     // The audiobook / podcast currently playing, whose position is saved as it plays.
+    EpubBook m_book;
+    QString m_bookPath;
+    int m_bookChapter = 0;
+    double m_bookResumeFraction = 0.0;
     QSet<QString> m_played;   // this profile's finished audiobooks and episodes
     QString m_resumePath;
     qint64 m_resumeSavedMs = 0;

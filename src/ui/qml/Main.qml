@@ -28,7 +28,8 @@ ApplicationWindow {
     }
     function openSectionFolderDialog(k) {
         sectionFolderDialog.kind = k
-        sectionFolderDialog.title = "choose a " + k.replace(/s$/, "") + " folder"
+        const noun = k.replace(/s$/, "")
+        sectionFolderDialog.title = "choose " + (/^[aeiou]/.test(noun) ? "an " : "a ") + noun + " folder"
         sectionFolderDialog.open()
     }
     // Folder picker for the pictures / audiobooks / ebooks / podcasts sections.

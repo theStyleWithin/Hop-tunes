@@ -8,6 +8,7 @@
 #include "playback/GstVideoPlayer.h"
 
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QColor>
 #include <QCryptographicHash>
 #include <QGuiApplication>
@@ -380,6 +381,7 @@ void App::leaveProfile()
     saveProfileSettings();
     m_listen = {};                // plays are counted as they happen; leaving is not a skip
     flushResume();
+    if (m_book.isOpen()) closeBook(0.0);
     m_player.setQueue({}, 0);
     m_listen = {};
     m_scanner.cancel();
@@ -609,6 +611,77 @@ void App::playSectionItem(const QString &kind, int row)
     m_resumeSavedMs = m_resumeLastMs = p.positionMs;
     m_resumeDurationMs = p.durationMs;
     m_player.playFrom(t, p.positionMs);
+}
+
+QStringList App::bookChapterTitles()
+{
+    QStringList t;
+    for (int i = 0; i < m_book.chapterCount(); ++i) t << m_book.chapterTitle(i);
+    return t;
+}
+
+// Reading positions share the per-path resume table: chapter * 1e6 + fraction of the chapter,
+// out of chapters * 1e6, so the list's progress bar is simply position / duration.
+namespace { constexpr qint64 kChapterScale = 1'000'000; }
+
+void App::openBook(int row)
+{
+    const int i = sectionIndexOf(QStringLiteral("ebooks"));
+    if (i < 0 || !profileReady()) return;
+    const QString path = m_sec[i]->model.pathAt(row);
+    if (path.isEmpty() || !QFileInfo::exists(path)) return;
+    if (QFileInfo(path).suffix().toLower() != QLatin1String("epub")) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));   // PDFs: the default viewer
+        return;
+    }
+    if (!m_book.open(path, Paths::cacheDir() + QStringLiteral("/epub"))) {
+        qWarning("hop-tunes: cannot open %s: %s", qPrintable(path), qPrintable(m_book.lastError()));
+        return;
+    }
+    m_bookPath = path;
+    m_bookChapter = 0;
+    m_bookResumeFraction = 0.0;
+    const VideoProgress p = m_db.isOpen() ? m_db.videoProgress(path) : VideoProgress{};
+    if (p.positionMs > 0) {
+        m_bookChapter = qBound<int>(0, int(p.positionMs / kChapterScale), m_book.chapterCount() - 1);
+        m_bookResumeFraction = double(p.positionMs % kChapterScale) / double(kChapterScale - 1);
+    }
+    emit bookChanged();
+}
+
+void App::goToBookChapter(int index)
+{
+    if (!m_book.isOpen() || index < 0 || index >= m_book.chapterCount()) return;
+    m_bookChapter = index;
+    m_bookResumeFraction = 0.0;
+    emit bookChanged();
+    saveBookProgress(0.0);
+}
+
+void App::saveBookProgress(double fraction)
+{
+    if (!m_book.isOpen() || m_bookPath.isEmpty() || !m_db.isOpen() || m_guest) return;
+    fraction = qBound(0.0, fraction, 1.0);
+    const int n = m_book.chapterCount();
+    const qint64 pos = qint64(m_bookChapter) * kChapterScale + qint64(fraction * double(kChapterScale - 1));
+    m_db.setVideoProgress(m_bookPath, pos, qint64(n) * kChapterScale);
+    const bool finished = m_bookChapter == n - 1 && fraction >= 0.99;
+    for (auto &sec : m_sec) sec->model.setProgress(m_bookPath, finished ? 0.0 : (double(m_bookChapter) + fraction) / double(n));
+    if (finished && !m_played.contains(m_bookPath)) {
+        m_played.insert(m_bookPath);
+        m_db.setItemPlayed(m_bookPath, true);
+        for (auto &sec : m_sec) sec->model.setPlayed(m_bookPath, true);
+    }
+}
+
+void App::closeBook(double fraction)
+{
+    saveBookProgress(fraction);
+    m_book.close();
+    m_bookPath.clear();
+    m_bookChapter = 0;
+    m_bookResumeFraction = 0.0;
+    emit bookChanged();
 }
 
 void App::reloadSections() { for (int i = 0; i < 4; ++i) reloadSection(i); }

@@ -12,6 +12,7 @@ option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui)
 find_package(PkgConfig REQUIRED)
+find_package(ZLIB REQUIRED)   # EpubBook unzips the book itself
 pkg_check_modules(TAGLIB  REQUIRED IMPORTED_TARGET taglib)
 pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
 
@@ -36,9 +37,10 @@ add_library(hoptunes_core STATIC
     src/library/Section.h     src/library/Section.cpp
     src/library/SectionIndex.h src/library/SectionIndex.cpp
     src/library/SectionListModel.h src/library/SectionListModel.cpp
+    src/library/EpubBook.h    src/library/EpubBook.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
-target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3)
+target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
@@ -138,6 +140,10 @@ if(HOPTUNES_BUILD_TESTS)
     target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
     add_test(NAME mpris COMMAND test_mpris)
     set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
+
+    add_executable(test_epub tests/test_epub.cpp)
+    target_link_libraries(test_epub PRIVATE hoptunes_core Qt6::Gui Qt6::Test)
+    add_test(NAME epub COMMAND test_epub)
 
     add_executable(test_sections tests/test_sections.cpp)
     target_link_libraries(test_sections PRIVATE hoptunes_playback Qt6::Test)
