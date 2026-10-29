@@ -118,7 +118,7 @@ public:
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
     SectionListModel *podcasts() { return &m_sec[3]->model; }
-    QStringList sectionKinds() const { return {QStringLiteral("pictures")}; }
+    QStringList sectionKinds() const { return {QStringLiteral("pictures"), QStringLiteral("audiobooks")}; }
     QVariantMap sectionFolders() const;
     QVariantMap sectionStatus() const;
     bool scanning() const { return m_scanner.isRunning(); }
@@ -249,6 +249,8 @@ public:
     Q_INVOKABLE void removeVideoFolder(const QString &path);
     Q_INVOKABLE void addSectionFolder(const QString &kind, const QUrl &folder);   // kind: pictures | audiobooks | ebooks | podcasts
     Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
+    // Audiobooks and podcasts: plays the item, resuming where this profile left off.
+    Q_INVOKABLE void playSectionItem(const QString &kind, int row);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
@@ -302,6 +304,8 @@ private:
     QList<Track> tracksForAlbumRef(const QString &ref) const;
     QVariantMap tile(const QString &kind, const QString &ref, const QString &label) const;
     void onPosition();
+    void saveResume(bool force);
+    void flushResume();
     void onTrackChanged();
     void djTopUp();
     void saveProfileSettings();
@@ -366,6 +370,11 @@ private:
         int total = 0;
         bool rescanPending = false;
     };
+    // The audiobook / podcast currently playing, whose position is saved as it plays.
+    QString m_resumePath;
+    qint64 m_resumeSavedMs = 0;
+    qint64 m_resumeLastMs = 0;
+    qint64 m_resumeDurationMs = 0;
     SectionIndex m_sectionIndex;
     std::unique_ptr<SectionState> m_sec[4];
 

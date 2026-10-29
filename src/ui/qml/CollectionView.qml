@@ -204,15 +204,22 @@ Item {
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
         }
 
-        SectionView {
-            id: picturesView
-            kind: "pictures"
-            model: hop.pictures
-            visible: root.collectionTab === "pictures"
-            onAddFolderRequested: function (k) { root.addSectionFolderRequested(k) }
-            onItemActivated: function (row) { pictureViewer.openAt(row) }
-            Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+        Repeater {
+            model: hop.sectionKinds
+            delegate: SectionView {
+                id: secView
+                required property string modelData
+                kind: modelData
+                model: hop[modelData]
+                visible: root.collectionTab === modelData
+                onAddFolderRequested: function (k) { root.addSectionFolderRequested(k) }
+                onItemActivated: function (row) {
+                    if (secView.kind === "pictures") pictureViewer.openAt(row)
+                    else hop.playSectionItem(secView.kind, row)
+                }
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+            }
         }
         PictureViewer { id: pictureViewer; model: hop.pictures }
 

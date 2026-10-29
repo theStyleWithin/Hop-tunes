@@ -149,6 +149,7 @@ Item {
                 background: Rectangle { color: row.hovered ? Theme.hover : "transparent" }
                 contentItem: ColumnLayout {
                     spacing: 2
+                    Item { Layout.preferredHeight: 6 }
                     RowLayout {
                         Layout.fillWidth: true
                         Label { text: row.title; Layout.fillWidth: true; elide: Text.ElideRight
@@ -170,6 +171,7 @@ Item {
                         visible: row.progress > 0
                         Rectangle { width: parent.width * Math.min(1, row.progress); height: parent.height; color: hop.accent }
                     }
+                    Item { Layout.fillHeight: true }
                 }
             }
         }

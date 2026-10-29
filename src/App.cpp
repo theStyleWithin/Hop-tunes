@@ -378,6 +378,7 @@ void App::leaveProfile()
     if (!profileReady()) return;
     saveProfileSettings();
     m_listen = {};                // plays are counted as they happen; leaving is not a skip
+    flushResume();
     m_player.setQueue({}, 0);
     m_listen = {};
     m_scanner.cancel();
@@ -585,6 +586,27 @@ void App::removeSectionFolder(const QString &kind, const QString &path)
     saveFolders();
     emit sectionFoldersChanged();
     reloadSection(i);
+}
+
+void App::playSectionItem(const QString &kind, int row)
+{
+    const int i = sectionIndexOf(kind);
+    if (i < 0 || !profileReady()) return;
+    const SectionKind k = m_sec[i]->kind;
+    if (k != SectionKind::Audiobooks && k != SectionKind::Podcasts) return;
+    const QString path = m_sec[i]->model.pathAt(row);
+    if (path.isEmpty() || !QFileInfo::exists(path)) return;
+    flushResume();
+    const int lib = m_libraryIndex.value(path, -1);
+    Track t = lib >= 0 ? m_library[lib] : TagReader::read(QFileInfo(path));
+    t.path = path;
+    const VideoProgress p = m_db.isOpen() ? m_db.videoProgress(path) : VideoProgress{};
+    m_djSeed.clear();
+    emit djChanged();
+    m_resumePath = path;
+    m_resumeSavedMs = m_resumeLastMs = p.positionMs;
+    m_resumeDurationMs = p.durationMs;
+    m_player.playFrom(t, p.positionMs);
 }
 
 void App::reloadSections() { for (int i = 0; i < 4; ++i) reloadSection(i); }
@@ -928,8 +950,35 @@ void App::saveFolders() { saveProfileSettings(); m_watcher.setFolders(watchedFol
 // A play counts once half the song (or 4 minutes) has been heard; moving on before that
 // counts as a skip. Hearts and counts feed smart playlists and the smart DJ.
 
+void App::saveResume(bool force)
+{
+    if (m_resumePath.isEmpty() || !m_db.isOpen() || m_guest) return;
+    if (!force && qAbs(m_resumeLastMs - m_resumeSavedMs) < 5000) return;
+    m_resumeSavedMs = m_resumeLastMs;
+    m_db.setVideoProgress(m_resumePath, m_resumeLastMs, m_resumeDurationMs);   // the same per-path resume table videos use
+    const double frac = m_resumeDurationMs > 0 && m_resumeLastMs < m_resumeDurationMs - 5000
+        ? double(m_resumeLastMs) / double(m_resumeDurationMs) : 0.0;
+    for (auto &sec : m_sec) sec->model.setProgress(m_resumePath, frac);
+}
+
+// The tracked item stopped being the current track (or the profile is closing): save and forget it.
+void App::flushResume()
+{
+    saveResume(true);
+    m_resumePath.clear();
+    m_resumeSavedMs = m_resumeLastMs = m_resumeDurationMs = 0;
+}
+
 void App::onPosition()
 {
+    if (!m_resumePath.isEmpty()) {
+        const Track *cur = m_player.currentTrack();
+        if (cur && cur->path == m_resumePath) {
+            m_resumeLastMs = m_player.position();
+            m_resumeDurationMs = m_player.duration();
+            saveResume(false);
+        }
+    }
     if (m_listen.path.isEmpty() || m_listen.counted) return;
     m_listen.maxPos = qMax(m_listen.maxPos, m_player.position());
     const qint64 dur = m_listen.duration > 0 ? m_listen.duration : m_player.duration();
@@ -947,6 +996,10 @@ void App::onPosition()
 
 void App::onTrackChanged()
 {
+    if (!m_resumePath.isEmpty()) {
+        const Track *cur = m_player.currentTrack();
+        if (!cur || cur->path != m_resumePath) flushResume();
+    }
     if (!m_listen.path.isEmpty() && !m_listen.counted && m_listen.maxPos >= 1000) {
         m_db.recordSkip(m_listen.path);
         m_stats[m_listen.path].skipCount++;
