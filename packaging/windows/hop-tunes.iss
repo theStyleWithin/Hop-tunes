@@ -27,6 +27,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+InfoBeforeFile=windows-notice.txt
 LicenseFile=..\..\LICENSE
 SetupIconFile=hop-tunes.ico
 UninstallDisplayIcon={app}\hop-tunes.exe
