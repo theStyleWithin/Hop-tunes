@@ -65,6 +65,23 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         if (m_videoScanRescanPending) { m_videoScanRescanPending = false; m_videoScanner.start(videoFolders()); }
         m_watcher.setFolders(watchedFolders());
     });
+    // The other collection sections: one scanner per kind over the shared SectionIndex.
+    for (int i = 0; i < 4; ++i) {
+        m_sec[i] = std::make_unique<SectionState>(kAllSections[i], &m_sectionIndex);
+        SectionState *st = m_sec[i].get();
+        connect(&st->scanner, &SectionScanner::started, this, &App::sectionStatusChanged);
+        connect(&st->scanner, &SectionScanner::progress, this, [this, st](int done, int total) {
+            st->done = done;
+            st->total = total;
+            emit sectionStatusChanged();
+        });
+        connect(&st->scanner, &SectionScanner::finished, this, [this, st, i](int added, int updated, int removed, int) {
+            emit sectionStatusChanged();
+            if (added || updated || removed || st->model.count() == 0) reloadSection(i);
+            if (st->rescanPending) { st->rescanPending = false; st->scanner.start(st->folders); }
+            m_watcher.setFolders(watchedFolders());
+        });
+    }
     // Live library updates (spec §6): a local inotify watch, nothing more — see
     // LibraryWatcher's header comment. Debounced, so one rescan covers a whole copy.
     connect(&m_watcher, &LibraryWatcher::changed, this, [this] { rescan(); });
@@ -120,6 +137,13 @@ bool App::init()
         setAside(Paths::videoIndexDbPath());
         if (!m_videoIndex.open(Paths::videoIndexDbPath()))
             qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::videoIndexDbPath()), qPrintable(m_videoIndex.lastError()));
+    }
+    if (!m_sectionIndex.open(Paths::sectionIndexDbPath())) {
+        qWarning("hop-tunes: sections index unreadable (%s); rebuilding it", qPrintable(m_sectionIndex.lastError()));
+        m_sectionIndex.close();
+        setAside(Paths::sectionIndexDbPath());
+        if (!m_sectionIndex.open(Paths::sectionIndexDbPath()))
+            qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::sectionIndexDbPath()), qPrintable(m_sectionIndex.lastError()));
     }
     if (!m_store.load()) {
         // Never overwrite an unreadable profile list: set it aside and start fresh.
@@ -299,10 +323,14 @@ void App::activate(const QString &id, bool guest)
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    for (auto &sec : m_sec) sec->folders.clear();
     if (guest) {
         if (!suggestedFolder().isEmpty()) m_folders << suggestedFolder();
     } else {
         for (const QJsonValue &v : s.value(QStringLiteral("folders")).toArray()) m_folders << v.toString();
+        for (auto &sec : m_sec)
+            for (const QJsonValue &v : s.value(sectionKey(sec->kind) + QStringLiteral("Folders")).toArray())
+                sec->folders << v.toString();
         if (s.contains(QStringLiteral("videoFolders"))) {
             m_videoFoldersOwn = true;
             for (const QJsonValue &v : s.value(QStringLiteral("videoFolders")).toArray()) m_videoFolders << v.toString();
@@ -354,6 +382,7 @@ void App::leaveProfile()
     m_listen = {};
     m_scanner.cancel();
     m_videoScanner.cancel();
+    for (auto &sec : m_sec) sec->scanner.cancel();
     m_videoPlayerOpen = false;
     m_db.close();
     m_stats.clear();
@@ -371,8 +400,10 @@ void App::leaveProfile()
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    for (auto &sec : m_sec) { sec->scanner.cancel(); sec->folders.clear(); }
     reload();
     emit foldersChanged();
+    emit sectionFoldersChanged();
     emit profileChanged();
 }
 
@@ -382,6 +413,8 @@ void App::saveProfileSettings()
     QJsonObject s = m_store.settings(m_profileId);
     s.insert(QStringLiteral("folders"), QJsonArray::fromStringList(m_folders));
     if (m_videoFoldersOwn) s.insert(QStringLiteral("videoFolders"), QJsonArray::fromStringList(m_videoFolders));
+    for (const auto &sec : m_sec)
+        s.insert(sectionKey(sec->kind) + QStringLiteral("Folders"), QJsonArray::fromStringList(sec->folders));
     s.insert(QStringLiteral("volume"), m_player.volume());
     s.insert(QStringLiteral("crossfadeMs"), m_player.crossfadeMs());
     s.insert(QStringLiteral("replayGain"), m_player.replayGainMode());
@@ -461,8 +494,10 @@ QString App::removeProfile()
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    for (auto &sec : m_sec) sec->folders.clear();
     reload();
     emit foldersChanged();
+    emit sectionFoldersChanged();
     const bool ok = m_store.remove(id);
     emit profilesChanged();
     emit profileChanged();
@@ -505,6 +540,69 @@ void App::addVideoFolder(const QUrl &folder)
     rescan();
 }
 
+int App::sectionIndexOf(const QString &kind) const
+{
+    SectionKind k;
+    if (!sectionFromKey(kind, &k)) return -1;
+    for (int i = 0; i < 4; ++i) if (m_sec[i]->kind == k) return i;
+    return -1;
+}
+
+QVariantMap App::sectionFolders() const
+{
+    QVariantMap out;
+    for (const auto &sec : m_sec) out.insert(sectionKey(sec->kind), sec->folders);
+    return out;
+}
+
+QVariantMap App::sectionStatus() const
+{
+    QVariantMap out;
+    for (const auto &sec : m_sec)
+        out.insert(sectionKey(sec->kind), QVariantMap{{QStringLiteral("scanning"), sec->scanner.isRunning()},
+                                                      {QStringLiteral("done"), sec->done},
+                                                      {QStringLiteral("total"), sec->total}});
+    return out;
+}
+
+void App::addSectionFolder(const QString &kind, const QUrl &folder)
+{
+    const int i = sectionIndexOf(kind);
+    if (i < 0) return;
+    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString())
+                             .canonicalFilePath();
+    if (path.isEmpty() || m_sec[i]->folders.contains(path)) return;
+    m_sec[i]->folders << path;
+    saveFolders();
+    emit sectionFoldersChanged();
+    rescan();
+}
+
+void App::removeSectionFolder(const QString &kind, const QString &path)
+{
+    const int i = sectionIndexOf(kind);
+    if (i < 0 || !m_sec[i]->folders.removeAll(path)) return;
+    saveFolders();
+    emit sectionFoldersChanged();
+    reloadSection(i);
+}
+
+void App::reloadSections() { for (int i = 0; i < 4; ++i) reloadSection(i); }
+
+void App::reloadSection(int i)
+{
+    SectionState &sec = *m_sec[i];
+    const QList<SectionItem> items = m_sectionIndex.itemsUnder(sec.kind, sec.folders);
+    QHash<QString, double> progress;
+    if (sec.kind != SectionKind::Pictures && m_db.isOpen()) {
+        for (const SectionItem &it : items) {
+            const VideoProgress p = m_db.videoProgress(it.path);   // same per-path resume table videos use
+            if (p.durationMs > 0 && p.positionMs > 0) progress.insert(it.path, double(p.positionMs) / double(p.durationMs));
+        }
+    }
+    sec.model.setItems(items, progress);
+}
+
 void App::removeVideoFolder(const QString &path)
 {
     if (!m_videoFoldersOwn) { m_videoFolders = m_folders; m_videoFoldersOwn = true; }
@@ -518,12 +616,19 @@ QStringList App::watchedFolders() const
 {
     QStringList all = m_folders;
     for (const QString &f : videoFolders()) if (!all.contains(f)) all << f;
+    for (const auto &sec : m_sec)
+        for (const QString &f : sec->folders) if (!all.contains(f)) all << f;
     return all;
 }
 
 void App::rescan()
 {
-    if (m_folders.isEmpty() && videoFolders().isEmpty()) return;
+    for (auto &sec : m_sec) {
+        if (sec->folders.isEmpty()) continue;
+        if (sec->scanner.isRunning()) sec->rescanPending = true;
+        else { sec->done = sec->total = 0; sec->scanner.start(sec->folders); }
+    }
+    if (m_folders.isEmpty() && videoFolders().isEmpty()) { m_watcher.setFolders(watchedFolders()); return; }
     if (!m_folders.isEmpty()) {
         if (m_scanner.isRunning()) m_rescanPending = true;   // e.g. right after a profile switch
         else {
@@ -587,6 +692,7 @@ void App::reload()
     refreshPlaylist();
     refreshQuickplay();
     reloadVideos();
+    reloadSections();
 }
 
 void App::reloadVideos()

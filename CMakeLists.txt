@@ -33,6 +33,9 @@ add_library(hoptunes_core STATIC
     src/library/VideoIndex.h  src/library/VideoIndex.cpp
     src/library/VideoListModel.h src/library/VideoListModel.cpp
     src/library/LibraryWatcher.h src/library/LibraryWatcher.cpp
+    src/library/Section.h     src/library/Section.cpp
+    src/library/SectionIndex.h src/library/SectionIndex.cpp
+    src/library/SectionListModel.h src/library/SectionListModel.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3)
@@ -65,6 +68,7 @@ add_library(hoptunes_playback STATIC
     src/library/VideoProbe.h     src/library/VideoProbe.cpp
     src/library/VideoThumbnail.h src/library/VideoThumbnail.cpp
     src/library/VideoScanner.h   src/library/VideoScanner.cpp
+    src/library/SectionScanner.h src/library/SectionScanner.cpp
 )
 target_link_libraries(hoptunes_playback PUBLIC hoptunes_core Qt6::Gui PkgConfig::GST PkgConfig::GIO
     PkgConfig::GST_PBUTILS PkgConfig::GST_APP PkgConfig::GST_VIDEO)
@@ -134,6 +138,10 @@ if(HOPTUNES_BUILD_TESTS)
     target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
     add_test(NAME mpris COMMAND test_mpris)
     set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
+
+    add_executable(test_sections tests/test_sections.cpp)
+    target_link_libraries(test_sections PRIVATE hoptunes_playback Qt6::Test)
+    add_test(NAME sections COMMAND test_sections)
 
     # Video (spec §5b): probing, thumbnailing and the headless (vo=null/ao=null) mpv core —
     # no Qt Quick needed, same shape as test_player/test_mpris.

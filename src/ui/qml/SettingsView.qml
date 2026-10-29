@@ -9,6 +9,7 @@ Item {
     id: root
     signal addFolderRequested()
     signal addVideoFolderRequested()
+    signal addSectionFolderRequested(string kind)
 
     property string profileMsg: ""
     property bool confirmRemove: false
@@ -326,6 +327,51 @@ Item {
             onClicked: root.addVideoFolderRequested()
             contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { implicitWidth: 190; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
+        }
+
+        // ---- pictures, audiobooks, ebooks, podcasts: each section has its own folders ----
+        Repeater {
+            model: hop.sectionKinds
+            delegate: ColumnLayout {
+                id: sec
+                required property string modelData
+                readonly property var paths: hop.sectionFolders[modelData] || []
+                Layout.fillWidth: true
+                spacing: 8
+                Label { text: sec.modelData + " folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+                Label {
+                    visible: sec.paths.length === 0
+                    text: "no " + sec.modelData + " folders yet."
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                }
+                Repeater {
+                    model: sec.paths
+                    delegate: Rectangle {
+                        required property string modelData
+                        Layout.fillWidth: true; Layout.maximumWidth: 760
+                        implicitHeight: 56
+                        color: Theme.panel
+                        RowLayout {
+                            anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
+                            Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            Button {
+                                text: "remove"
+                                onClicked: hop.removeSectionFolder(sec.modelData, modelData)
+                                Accessible.name: "remove " + sec.modelData + " folder " + modelData
+                                contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: 15 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
+                            }
+                        }
+                    }
+                }
+                Button {
+                    objectName: "settingsAddFolder_" + sec.modelData
+                    text: "+ add " + sec.modelData + " folder"
+                    onClicked: root.addSectionFolderRequested(sec.modelData)
+                    contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
+                }
+            }
         }
 
         // ---- remove profile ------------------------------------------------------

@@ -20,6 +20,7 @@ QString profilesDir() { return dataDir() + QStringLiteral("/profiles"); }
 QString cacheDir()    { return xdg(QStandardPaths::GenericCacheLocation); }
 QString artCacheDir() { return cacheDir() + QStringLiteral("/art"); }
 QString videoIndexDbPath()   { return sharedDir() + QStringLiteral("/videos.sqlite"); }
+QString sectionIndexDbPath() { return sharedDir() + QStringLiteral("/sections.sqlite"); }
 QString videoThumbCacheDir() { return cacheDir() + QStringLiteral("/video-thumbs"); }
 
 bool ensureDirs()

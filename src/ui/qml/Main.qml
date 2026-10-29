@@ -26,6 +26,18 @@ ApplicationWindow {
         title: "choose a video folder"
         onAccepted: hop.addVideoFolder(selectedFolder)
     }
+    function openSectionFolderDialog(k) {
+        sectionFolderDialog.kind = k
+        sectionFolderDialog.title = "choose a " + k.replace(/s$/, "") + " folder"
+        sectionFolderDialog.open()
+    }
+    // Folder picker for the pictures / audiobooks / ebooks / podcasts sections.
+    FolderDialog {
+        id: sectionFolderDialog
+        property string kind: ""
+        title: "choose a folder"
+        onAccepted: hop.addSectionFolder(kind, selectedFolder)
+    }
     FolderDialog {
         id: folderDialog
         title: "choose a music folder"
@@ -117,10 +129,10 @@ ApplicationWindow {
                 NumberAnimation { target: stack; property: "opacity"; from: 0.0; to: 1.0; duration: Theme.motion; easing.type: Easing.OutCubic }
                 NumberAnimation { target: slide; property: "x"; from: 28; to: 0; duration: Theme.motion; easing.type: Easing.OutCubic }
             }
-            CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open() }
+            CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
-            SettingsView { onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open() }
+            SettingsView { onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
         }
 
         MiniPlayer {

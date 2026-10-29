@@ -5,6 +5,9 @@
 #include "library/CollectionModels.h"
 #include "library/LibraryWatcher.h"
 #include "library/ProfileDb.h"
+#include "library/SectionIndex.h"
+#include "library/SectionListModel.h"
+#include "library/SectionScanner.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
 #include "library/TrackListModel.h"
@@ -15,6 +18,7 @@
 #include "playback/Player.h"
 
 #include <QObject>
+#include <memory>
 #include <QStringList>
 #include <QHash>
 #include <QTimer>
@@ -34,6 +38,15 @@ class App : public QObject {
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
     // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
     Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
+    // Pictures, audiobooks, ebooks and podcasts: each has its own models and folder list.
+    // The extra sections that are switched on, in tab order (single source of truth for the UI).
+    Q_PROPERTY(QStringList sectionKinds READ sectionKinds CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *pictures READ pictures CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *audiobooks READ audiobooks CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *ebooks READ ebooks CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *podcasts READ podcasts CONSTANT)
+    Q_PROPERTY(QVariantMap sectionFolders READ sectionFolders NOTIFY sectionFoldersChanged)   // key -> [paths]
+    Q_PROPERTY(QVariantMap sectionStatus READ sectionStatus NOTIFY sectionStatusChanged)      // key -> {scanning, done, total}
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
     Q_PROPERTY(int scanTotal READ scanTotal NOTIFY scanProgressChanged)
@@ -101,6 +114,13 @@ public:
     Player *player() { return &m_player; }
     QStringList folders() const { return m_folders; }
     QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }
+    SectionListModel *pictures() { return &m_sec[0]->model; }
+    SectionListModel *audiobooks() { return &m_sec[1]->model; }
+    SectionListModel *ebooks() { return &m_sec[2]->model; }
+    SectionListModel *podcasts() { return &m_sec[3]->model; }
+    QStringList sectionKinds() const { return {QStringLiteral("pictures")}; }
+    QVariantMap sectionFolders() const;
+    QVariantMap sectionStatus() const;
     bool scanning() const { return m_scanner.isRunning(); }
     int scanDone() const { return m_scanDone; }
     int scanTotal() const { return m_scanTotal; }
@@ -227,6 +247,8 @@ public:
     Q_INVOKABLE void removeFolder(const QString &path);
     Q_INVOKABLE void addVideoFolder(const QUrl &folder);
     Q_INVOKABLE void removeVideoFolder(const QString &path);
+    Q_INVOKABLE void addSectionFolder(const QString &kind, const QUrl &folder);   // kind: pictures | audiobooks | ebooks | podcasts
+    Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
@@ -241,6 +263,8 @@ public:
 
 signals:
     void foldersChanged();
+    void sectionFoldersChanged();
+    void sectionStatusChanged();
     void scanningChanged();
     void scanProgressChanged();
     void selectionChanged();
@@ -260,6 +284,9 @@ signals:
 private:
     void reload();
     void reloadVideos();
+    void reloadSections();
+    void reloadSection(int i);
+    int sectionIndexOf(const QString &kind) const;
     void openVideoFile(const QString &path);
     void saveFolders();
     void applySelection(const QString &artistName, const QString &albumTitle);
@@ -328,6 +355,19 @@ private:
     int m_selArtist = -1;
     int m_selAlbum = -1;
     QStringList m_mosaicArt;
+
+    struct SectionState {
+        SectionState(SectionKind k, SectionIndex *idx) : kind(k), model(k), scanner(k, idx) {}
+        SectionKind kind;
+        SectionListModel model;
+        SectionScanner scanner;
+        QStringList folders;
+        int done = 0;
+        int total = 0;
+        bool rescanPending = false;
+    };
+    SectionIndex m_sectionIndex;
+    std::unique_ptr<SectionState> m_sec[4];
 
     VideoIndex m_videoIndex;
     VideoScanner m_videoScanner{&m_videoIndex};

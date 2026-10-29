@@ -23,6 +23,8 @@
     <file>qml/SmartRulesEditor.qml</file>
     <file>qml/VideoThumb.qml</file>
     <file>qml/VideosView.qml</file>
+    <file>qml/SectionView.qml</file>
+    <file>qml/PictureViewer.qml</file>
     <file>qml/VideoPlayerView.qml</file>
     <file>qml/GstVideoSurfaceView.qml</file>
   </qresource>
