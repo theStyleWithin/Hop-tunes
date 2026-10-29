@@ -236,6 +236,10 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
+          # A bare download loses the executable bit; inside a tarball it survives extraction,
+          # so the AppImage runs by double-click with no chmod.
+          chmod +x dist/Hop-tunes-*-x86_64.AppImage
+          tar -C dist -czf "dist/Hop-tunes-PR$PR-x86_64.tar.gz" $(cd dist && ls Hop-tunes-*-x86_64.AppImage)
           cd dist && sha256sum Hop-tunes-* > SHA256SUMS
           title="Hop-tunes test build: PR #$PR"
           # Each push gets a new tag; drop this PR's earlier pre-release (found by title) and its tag.
@@ -243,5 +247,5 @@ jobs:
             gh release delete "$tag" --yes --cleanup-tag
           done
           gh release create "pr-$PR-${SHA::7}" --prerelease --target "$SHA" --title "$title" \
-            --notes "TEST BUILD, NOT A RELEASE. Pull request #$PR (\`$BRANCH\` @ ${SHA::7}). Download the .AppImage, chmod +x, run." \
-            Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS
+            --notes "TEST BUILD, NOT A RELEASE. Pull request #$PR (\`$BRANCH\` @ ${SHA::7}). Download the .tar.gz, extract it (right-click, Extract here) and double-click the AppImage inside. No chmod needed." \
+            Hop-tunes-PR*-x86_64.tar.gz Hop-tunes-*-x86_64.AppImage Hop-tunes-*-x86_64.AppImage.zsync SHA256SUMS
