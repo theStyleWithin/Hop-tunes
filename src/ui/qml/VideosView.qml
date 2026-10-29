@@ -2,11 +2,22 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Dialogs
 
 // collection › videos (spec §5b): a grid of what VideoScanner has found under the
 // profile's folders — the same folders music is scanned from.
 Item {
     id: root
+
+    // Per-profile thumbnail override, like the album "image" button in collection › music.
+    // The row is set right before open().
+    FileDialog {
+        id: thumbDialog
+        property int row: -1
+        title: "choose video thumbnail"
+        nameFilters: ["pictures (*.png *.jpg *.jpeg)"]
+        onAccepted: hop.setVideoThumb(row, selectedFile)
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -51,7 +62,7 @@ Item {
             clip: true
             model: hop.videos
             readonly property int columns: Math.max(2, Math.floor(width / 260))
-            cellWidth: width / columns; cellHeight: cellWidth * 9 / 16 + 50
+            cellWidth: width / columns; cellHeight: cellWidth * 9 / 16 + 70
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
             delegate: AbstractButton {
@@ -64,6 +75,7 @@ Item {
                 required property string resolutionBadge
                 required property string codecBadge
                 required property bool hdr
+                required property bool customThumb
                 objectName: "videoTile_" + index
                 width: grid.cellWidth - 16; height: grid.cellHeight
                 hoverEnabled: true
@@ -85,6 +97,39 @@ Item {
                     }
                     Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight
                             color: Theme.text; font { family: Theme.font; pixelSize: 14 } }
+                    RowLayout {
+                        visible: !hop.guest
+                        spacing: 12
+                        AbstractButton {
+                            id: imageBtn
+                            objectName: "videoImageBtn_" + tile.index
+                            hoverEnabled: true
+                            implicitHeight: 18
+                            Accessible.name: "change video thumbnail"
+                            onClicked: { thumbDialog.row = tile.index; thumbDialog.open() }
+                            contentItem: Label {
+                                text: "image"
+                                color: imageBtn.hovered ? hop.accent : Theme.muted
+                                font { family: Theme.font; pixelSize: 12; underline: imageBtn.hovered }
+                            }
+                            background: Item {}
+                        }
+                        AbstractButton {
+                            id: resetBtn
+                            visible: tile.customThumb
+                            objectName: "videoResetBtn_" + tile.index
+                            hoverEnabled: true
+                            implicitHeight: 18
+                            Accessible.name: "use the detected thumbnail"
+                            onClicked: hop.clearVideoThumb(tile.index)
+                            contentItem: Label {
+                                text: "reset"
+                                color: resetBtn.hovered ? hop.accent : Theme.muted
+                                font { family: Theme.font; pixelSize: 12; underline: resetBtn.hovered }
+                            }
+                            background: Item {}
+                        }
+                    }
                 }
             }
         }

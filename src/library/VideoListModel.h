@@ -23,7 +23,8 @@ public:
         HeightRole,
         ResolutionBadgeRole,   // "4K" | "1440p" | "1080p" | "720p" | "SD" | ""
         HdrRole,
-        CodecBadgeRole,    // upper-case short codec name for the badge row, e.g. "HEVC"
+        CodecBadgeRole,
+        CustomThumbRole,   // true when the profile picked its own thumbnail    // upper-case short codec name for the badge row, e.g. "HEVC"
     };
 
     explicit VideoListModel(QObject *parent = nullptr);

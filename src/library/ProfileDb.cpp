@@ -98,6 +98,15 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=4")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 4;
+    }
+    if (version < 5) {
+        // v5: a picked thumbnail per video, per profile.
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE video_thumb_override (path TEXT PRIMARY KEY, thumb TEXT NOT NULL)")
+            && exec("PRAGMA user_version=5")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -348,6 +357,29 @@ bool ProfileDb::setAlbumOverrideArt(const QString &ref, const QString &artPath)
     Stmt s(m_db, "INSERT INTO album_override(ref, art) VALUES(?1, ?2) "
                  "ON CONFLICT(ref) DO UPDATE SET art = ?2");
     s.bind(1, ref); s.bind(2, artPath);
+    return s.run();
+}
+
+QHash<QString, QString> ProfileDb::videoThumbOverrides() const
+{
+    QHash<QString, QString> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path, thumb FROM video_thumb_override");
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0), s.str(1));
+    return out;
+}
+
+bool ProfileDb::setVideoThumbOverride(const QString &videoPath, const QString &thumbPath)
+{
+    if (!m_db || videoPath.isEmpty()) return false;
+    if (thumbPath.isEmpty()) {
+        Stmt d(m_db, "DELETE FROM video_thumb_override WHERE path = ?1");
+        d.bind(1, videoPath);
+        return d.run();
+    }
+    Stmt s(m_db, "INSERT INTO video_thumb_override(path, thumb) VALUES(?1, ?2) "
+                 "ON CONFLICT(path) DO UPDATE SET thumb = ?2");
+    s.bind(1, videoPath); s.bind(2, thumbPath);
     return s.run();
 }
 
