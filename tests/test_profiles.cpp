@@ -74,7 +74,13 @@ private slots:
 #endif
         QFile f(json);
         QVERIFY(f.open(QIODevice::ReadOnly));
-        QVERIFY(!f.readAll().contains("9876"));
+        // The PIN must not be stored as a value. (A bare search for "9876" is not enough: the random salt,
+        // hash and ids in the file contain every 4-digit sequence now and then, which made this test fail
+        // about once in a thousand runs.)
+        const QByteArray raw = f.readAll();
+        QVERIFY(!raw.contains("\"9876\""));
+        QVERIFY(!raw.contains(":9876"));
+        QVERIFY(!raw.contains(": 9876"));
 
         QVERIFY(s.saveSettings(a, {{QStringLiteral("folders"), QJsonArray{QStringLiteral("/music")}}}));
         QVERIFY(!s.saveSettings(QStringLiteral("not-a-profile"), {}));
