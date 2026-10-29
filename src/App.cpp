@@ -184,7 +184,10 @@ QStringList App::accents() const
 QString App::suggestedFolder() const
 {
     if (!m_legacyFolders.isEmpty()) return m_legacyFolders.constFirst();
-    const QString music = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+    // HOPTUNES_MUSIC_DIR names the folder offered on first run (tests, kiosks, portable setups).
+    const QByteArray forced = qgetenv("HOPTUNES_MUSIC_DIR");
+    const QString music = forced.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+                                           : QString::fromLocal8Bit(forced);
     return QFileInfo(music).isDir() ? QFileInfo(music).canonicalFilePath() : QString();
 }
 
