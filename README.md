@@ -14,7 +14,7 @@
 | **Flatpak** | `Hop-tunes-x86_64.flatpak` from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases), then `flatpak install --user Hop-tunes-x86_64.flatpak` |
 | **Arch / CachyOS (AUR)** | `yay -S hop-tunes` (or `hop-tunes-git` for the latest code) |
 | **AppImage** | download, `chmod +x`, run. Any x86_64 distro from 2022 on |
-| **Windows 10/11 (64-bit)** | `Hop-tunes-Setup-<version>-x64.exe` (installer), or `Hop-tunes-<version>-portable-x64.exe` (one file, no install; keeps its data in a `Hop-tunes-data` folder beside it) from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases). Not code-signed yet: if SmartScreen warns, choose *More info → Run anyway* |
+| **Windows 10/11 (64-bit), experimental** | `Hop-tunes-Setup-<version>-x64.exe` (installer), or `Hop-tunes-<version>-portable-x64.exe` (one file, no install; keeps its data in a `Hop-tunes-data` folder beside it) from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases). Not code-signed yet (if SmartScreen warns, choose *More info → Run anyway*), and only ever run by automated tests, never on a real PC by the developer (who uses Linux): reports welcome |
 
 **Tested on 16 distros, with CachyOS first.** See [which distros Hop-tunes runs on](docs/COMPATIBILITY.md). Distros older than 2022 may not work with the AppImage; use the Flatpak there.
 

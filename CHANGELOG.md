@@ -5,7 +5,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [1.5.0] - 2026-10-30
 
 ### Added
-- **Hop-tunes for Windows 10 and 11 (64-bit):** an **installer** (`Hop-tunes-Setup-<version>-x64.exe`:
+- **Hop-tunes for Windows 10 and 11 (64-bit), experimental:** an **installer** (`Hop-tunes-Setup-<version>-x64.exe`:
   per user by default, no administrator prompt, Start Menu and optional desktop shortcut, and
   uninstalling never touches your profiles or library) and a **single-file portable exe**
   (`Hop-tunes-<version>-portable-x64.exe`: no install, run it from anywhere, even a USB stick).
@@ -21,7 +21,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   "More info", then "Run anyway".
 - No Windows media keys or system media overlay yet, and opening a second file does not hand it to an
   already-running window.
-- These builds have been tested by automation only so far, not on a range of real PCs.
+- **Experimental.** The developer uses Linux and has no Windows PC, so these builds have only ever been
+  run by automated tests on GitHub's Windows machines, never on real hardware. If you try them, please
+  report what works and what doesn't at https://github.com/theStyleWithin/Hop-tunes/issues.
 
 ### Fixed
 - A damaged profile database could not be replaced on Windows (the file was still open when the app
