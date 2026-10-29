@@ -64,13 +64,17 @@ jobs:
           HOPTUNES_SOFTWARE_RENDER: '1'
         run: ctest --test-dir build --output-on-failure --timeout 240
 
-      # Re-runs whatever failed, verbosely, so the reason is in the log (the first run is terse).
+      # Runs each test program that failed on its own and prints just the failing lines.
       - name: Show why tests failed
         continue-on-error: true
         env:
           QT_QPA_PLATFORM: offscreen
           HOPTUNES_SOFTWARE_RENDER: '1'
-        run: ctest --test-dir build --rerun-failed --output-on-failure -VV --timeout 240 2>&1 | tail -n 400
+        run: |
+          for t in profiles m4 video robust ui; do
+            echo "=== test_$t"
+            timeout 100 build/test_$t.exe 2>&1 | grep -a -E "^(FAIL|XFAIL|XPASS|QFATAL|Totals)|^   Loc:|^   Actual|^   Expected|^QFATAL" | head -40 || true
+          done
 
       - name: Stage the app and everything it needs
         run: packaging/windows/stage.sh build stage
