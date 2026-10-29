@@ -71,6 +71,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           HOPTUNES_SOFTWARE_RENDER: '1'
         run: |
+          set +e
           for t in profiles m4 video robust ui; do
             echo "=== test_$t"
             timeout 100 build/test_$t.exe > "$RUNNER_TEMP/t_$t.txt" 2>&1
