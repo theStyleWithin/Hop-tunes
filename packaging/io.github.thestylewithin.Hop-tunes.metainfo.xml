@@ -82,6 +82,15 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.4.0" date="2026-10-29">
+      <description>
+        <p>Choose your own thumbnail for any video.</p>
+        <ul>
+          <li>An "image" button under each video in the collection opens a picture picker, with
+            a "reset" link to go back to the detected frame. Saved per profile.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.3.1" date="2026-10-17">
       <description>
         <p>Fixes video playback, which never actually played after v1.2.0's locale fix.</p>

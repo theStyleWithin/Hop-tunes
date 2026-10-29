@@ -2,6 +2,19 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.4.0] - 2026-10-29
+
+### Added
+- **Pick your own video thumbnail.** Every tile in `collection › videos` has an "image"
+  button that opens a picture picker (PNG/JPEG), like the album cover button in music. Use it
+  when the detected frame is missing or you simply prefer another picture; a "reset" link
+  returns to the detected frame. The choice is stored per profile (private to it, never seen
+  by another profile on the same install), and the button is hidden in guest mode.
+
+### Changed
+- Profile databases migrate to schema v5 automatically on first launch (one new table; no
+  data is changed or removed).
+
 ## [1.3.1] - 2026-10-17
 
 ### Fixed
