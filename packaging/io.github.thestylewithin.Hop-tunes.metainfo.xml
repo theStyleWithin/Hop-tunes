@@ -82,6 +82,15 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.5.0" date="2026-10-30">
+      <description>
+        <p>Hop-tunes for Windows.</p>
+        <ul>
+          <li>A Windows 10/11 installer and a single-file portable exe, both with everything included.</li>
+          <li>Fixes replacing a damaged profile database on Windows.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.4.0" date="2026-10-29">
       <description>
         <p>Four new collection sections, video folders of their own, and your own video thumbnails.</p>

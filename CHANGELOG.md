@@ -2,6 +2,36 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
+## [1.5.0] - 2026-10-30
+
+### Added
+- **Hop-tunes for Windows 10 and 11 (64-bit):** an **installer** (`Hop-tunes-Setup-<version>-x64.exe`:
+  per user by default, no administrator prompt, Start Menu and optional desktop shortcut, and
+  uninstalling never touches your profiles or library) and a **single-file portable exe**
+  (`Hop-tunes-<version>-portable-x64.exe`: no install, run it from anywhere, even a USB stick).
+  The portable exe unpacks itself once on first launch (a few seconds, with a progress window) and
+  then starts at once; your profiles, playlists and settings stay in a `Hop-tunes-data` folder
+  beside it, so they travel with the file. Both include everything they need: Qt, GStreamer, libmpv.
+- Both Windows builds are built and tested on GitHub's Windows machines before they are published
+  (the full test suite; the app started from the staged folder, from a real silent install and
+  uninstall, and from the portable exe; and a generated song found and played).
+
+### Known limits on Windows
+- The files are **not code-signed**, so Windows SmartScreen may warn on first run: choose
+  "More info", then "Run anyway".
+- No Windows media keys or system media overlay yet, and opening a second file does not hand it to an
+  already-running window.
+- These builds have been tested by automation only so far, not on a range of real PCs.
+
+### Fixed
+- A damaged profile database could not be replaced on Windows (the file was still open when the app
+  tried to move it aside); it is now closed first.
+
+### Changed
+- Tests no longer share the real user folders (they use `HOPTUNES_DATA_DIR` and
+  `HOPTUNES_MUSIC_DIR`, new overrides that also work for kiosks and portable setups), and a flaky UI
+  test now waits for its popup instead of failing on slow machines.
+
 ## [1.4.0] - 2026-10-29
 
 ### Added
