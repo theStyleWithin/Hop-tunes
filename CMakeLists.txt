@@ -73,7 +73,21 @@ pkg_check_modules(GST_VIDEO   REQUIRED IMPORTED_TARGET gstreamer-video-1.0)
 # own qml6glsink/glsinkbin, needing no new dependency beyond gstreamer-plugins-base
 # above) if that's available, else "none". Library scanning/probing (VideoScanner etc.)
 # needs only gstreamer-plugins-base regardless, so Videos always scans and lists.
-pkg_check_modules(MPV IMPORTED_TARGET mpv)
+if(WIN32)
+    # MSYS2's mpv.pc reports POSIX-style paths ("/ucrt64/include") that Windows CMake rejects, so
+    # find libmpv directly and give it the same target name the rest of this file uses.
+    find_path(MPV_INCLUDE_DIR mpv/client.h)
+    find_library(MPV_LIBRARY NAMES mpv libmpv mpv-2 libmpv-2)
+    if(MPV_INCLUDE_DIR AND MPV_LIBRARY)
+        set(MPV_FOUND TRUE)
+        add_library(PkgConfig::MPV INTERFACE IMPORTED)
+        set_target_properties(PkgConfig::MPV PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${MPV_INCLUDE_DIR}"
+            INTERFACE_LINK_LIBRARIES "${MPV_LIBRARY}")
+    endif()
+else()
+    pkg_check_modules(MPV IMPORTED_TARGET mpv)
+endif()
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
     src/playback/MpvCore.h    src/playback/MpvCore.cpp
