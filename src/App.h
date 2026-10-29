@@ -3,8 +3,12 @@
 
 #include "core/ProfileStore.h"
 #include "library/CollectionModels.h"
+#include "library/EpubBook.h"
 #include "library/LibraryWatcher.h"
 #include "library/ProfileDb.h"
+#include "library/SectionIndex.h"
+#include "library/SectionListModel.h"
+#include "library/SectionScanner.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
 #include "library/TrackListModel.h"
@@ -15,6 +19,8 @@
 #include "playback/Player.h"
 
 #include <QObject>
+#include <memory>
+#include <QSet>
 #include <QStringList>
 #include <QHash>
 #include <QTimer>
@@ -32,6 +38,26 @@ class App : public QObject {
     Q_PROPERTY(hop::TrackListModel *songs READ songs CONSTANT)
     Q_PROPERTY(hop::Player *player READ player CONSTANT)
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
+    // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
+    Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
+    // Pictures, audiobooks, ebooks and podcasts: each has its own models and folder list.
+    // The extra sections that are switched on, in tab order (single source of truth for the UI).
+    Q_PROPERTY(QStringList sectionKinds READ sectionKinds CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *pictures READ pictures CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *audiobooks READ audiobooks CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *ebooks READ ebooks CONSTANT)
+    Q_PROPERTY(hop::SectionListModel *podcasts READ podcasts CONSTANT)
+    // The open ebook (EPUB reader).
+    Q_PROPERTY(bool bookOpen READ bookOpen NOTIFY bookChanged)
+    Q_PROPERTY(QString bookTitle READ bookTitle NOTIFY bookChanged)
+    Q_PROPERTY(QString bookAuthor READ bookAuthor NOTIFY bookChanged)
+    Q_PROPERTY(int bookChapterIndex READ bookChapterIndex NOTIFY bookChanged)
+    Q_PROPERTY(int bookChapterCount READ bookChapterCount NOTIFY bookChanged)
+    Q_PROPERTY(QString bookChapterHtml READ bookChapterHtml NOTIFY bookChanged)
+    Q_PROPERTY(QStringList bookChapterTitles READ bookChapterTitles NOTIFY bookChanged)
+    Q_PROPERTY(double bookResumeFraction READ bookResumeFraction NOTIFY bookChanged)   // scroll position within the chapter
+    Q_PROPERTY(QVariantMap sectionFolders READ sectionFolders NOTIFY sectionFoldersChanged)   // key -> [paths]
+    Q_PROPERTY(QVariantMap sectionStatus READ sectionStatus NOTIFY sectionStatusChanged)      // key -> {scanning, done, total}
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
     Q_PROPERTY(int scanTotal READ scanTotal NOTIFY scanProgressChanged)
@@ -98,6 +124,22 @@ public:
     TrackListModel *songs() { return &m_songs; }
     Player *player() { return &m_player; }
     QStringList folders() const { return m_folders; }
+    QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }
+    SectionListModel *pictures() { return &m_sec[0]->model; }
+    SectionListModel *audiobooks() { return &m_sec[1]->model; }
+    SectionListModel *ebooks() { return &m_sec[2]->model; }
+    SectionListModel *podcasts() { return &m_sec[3]->model; }
+    QStringList sectionKinds() const { return {QStringLiteral("pictures"), QStringLiteral("audiobooks"), QStringLiteral("ebooks"), QStringLiteral("podcasts")}; }
+    bool bookOpen() const { return m_book.isOpen(); }
+    QString bookTitle() const { return m_book.title(); }
+    QString bookAuthor() const { return m_book.author(); }
+    int bookChapterIndex() const { return m_bookChapter; }
+    int bookChapterCount() const { return m_book.chapterCount(); }
+    QString bookChapterHtml() { return m_book.chapterHtml(m_bookChapter); }
+    QStringList bookChapterTitles();
+    double bookResumeFraction() const { return m_bookResumeFraction; }
+    QVariantMap sectionFolders() const;
+    QVariantMap sectionStatus() const;
     bool scanning() const { return m_scanner.isRunning(); }
     int scanDone() const { return m_scanDone; }
     int scanTotal() const { return m_scanTotal; }
@@ -222,6 +264,18 @@ public:
 
     Q_INVOKABLE void addFolder(const QUrl &folder);
     Q_INVOKABLE void removeFolder(const QString &path);
+    Q_INVOKABLE void addVideoFolder(const QUrl &folder);
+    Q_INVOKABLE void removeVideoFolder(const QString &path);
+    Q_INVOKABLE void addSectionFolder(const QString &kind, const QUrl &folder);   // kind: pictures | audiobooks | ebooks | podcasts
+    Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
+    // Audiobooks and podcasts: plays the item, resuming where this profile left off.
+    Q_INVOKABLE void playSectionItem(const QString &kind, int row);
+    Q_INVOKABLE void toggleItemPlayed(const QString &path);
+    // Ebooks: EPUBs open in the built-in reader, PDFs in the default PDF viewer.
+    Q_INVOKABLE void openBook(int row);
+    Q_INVOKABLE void goToBookChapter(int index);
+    Q_INVOKABLE void saveBookProgress(double fractionInChapter);
+    Q_INVOKABLE void closeBook(double fractionInChapter);   // mark an audiobook / episode played or unplayed
     Q_INVOKABLE void rescan();
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
@@ -236,6 +290,9 @@ public:
 
 signals:
     void foldersChanged();
+    void sectionFoldersChanged();
+    void sectionStatusChanged();
+    void bookChanged();
     void scanningChanged();
     void scanProgressChanged();
     void selectionChanged();
@@ -255,6 +312,9 @@ signals:
 private:
     void reload();
     void reloadVideos();
+    void reloadSections();
+    void reloadSection(int i);
+    int sectionIndexOf(const QString &kind) const;
     void openVideoFile(const QString &path);
     void saveFolders();
     void applySelection(const QString &artistName, const QString &albumTitle);
@@ -270,6 +330,8 @@ private:
     QList<Track> tracksForAlbumRef(const QString &ref) const;
     QVariantMap tile(const QString &kind, const QString &ref, const QString &label) const;
     void onPosition();
+    void saveResume(bool force);
+    void flushResume();
     void onTrackChanged();
     void djTopUp();
     void saveProfileSettings();
@@ -308,6 +370,9 @@ private:
     TrackListModel m_songs;
     Player m_player;
     QStringList m_folders;
+    QStringList m_videoFolders;       // used only when m_videoFoldersOwn
+    bool m_videoFoldersOwn = false;   // this profile has set its own video folders
+    QStringList watchedFolders() const;   // music + video folders, deduplicated
     int m_scanDone = 0;
     int m_scanTotal = 0;
     bool m_rescanPending = false;
@@ -320,6 +385,29 @@ private:
     int m_selArtist = -1;
     int m_selAlbum = -1;
     QStringList m_mosaicArt;
+
+    struct SectionState {
+        SectionState(SectionKind k, SectionIndex *idx) : kind(k), model(k), scanner(k, idx) {}
+        SectionKind kind;
+        SectionListModel model;
+        SectionScanner scanner;
+        QStringList folders;
+        int done = 0;
+        int total = 0;
+        bool rescanPending = false;
+    };
+    // The audiobook / podcast currently playing, whose position is saved as it plays.
+    EpubBook m_book;
+    QString m_bookPath;
+    int m_bookChapter = 0;
+    double m_bookResumeFraction = 0.0;
+    QSet<QString> m_played;   // this profile's finished audiobooks and episodes
+    QString m_resumePath;
+    qint64 m_resumeSavedMs = 0;
+    qint64 m_resumeLastMs = 0;
+    qint64 m_resumeDurationMs = 0;
+    SectionIndex m_sectionIndex;
+    std::unique_ptr<SectionState> m_sec[4];
 
     VideoIndex m_videoIndex;
     VideoScanner m_videoScanner{&m_videoIndex};

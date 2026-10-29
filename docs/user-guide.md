@@ -80,6 +80,34 @@ media folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, 
   music. Either way the Videos grid works the same; if truly neither is available,
   opening a video shows a plain message instead of a crash.
 
+## Videos have their own folders
+
+`collection → videos` can have its own folders, separate from your music. Until you add one,
+videos are found under your music folders, so nothing changes for an existing library. The
+first video folder you add starts from those folders (so nothing disappears); remove the ones
+you don't want in **settings → video folders**. The "image" button under a video lets you pick
+your own thumbnail (and "reset" returns to the detected frame); it is saved per profile.
+
+## Pictures, audiobooks, ebooks and podcasts
+
+Four more `collection` tabs, each with **its own folders and its own "choose a folder" button**
+(also listed in **settings**, one list per section). Nothing is scanned until you add a folder
+to that section, and a folder in one section is never read for another.
+
+- **pictures**: a thumbnail grid (jpg, png, webp, gif and a few others). Click one to open the
+  full-window viewer: left/right arrows (or the buttons) move, space starts or stops a
+  slideshow, escape closes.
+- **audiobooks**: m4b, mp3, m4a, ogg, opus, flac. Click to play. Hop-tunes remembers where you
+  stopped (also after closing the app) and picks up there; the list shows how far you are.
+- **ebooks**: epub opens in the built-in reader (chapters, a contents list, text size, left/right
+  arrows for chapters, space and the page keys to scroll). Your place is remembered. pdf files
+  open in your default PDF viewer.
+- **podcasts**: local audio episodes, grouped by show (the album tag, or the folder name).
+  Resume works like audiobooks, and finished episodes are shown dimmed with "played"; "mark
+  played" toggles it by hand.
+
+Everything here is private to the profile and works offline. Hop-tunes only reads these folders.
+
 ## Playing music
 
 - **Double-click** a song (or press `Enter`) to play from there. **Play album** plays the

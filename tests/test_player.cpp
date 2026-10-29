@@ -114,6 +114,26 @@ private slots:
         QVERIFY(!p.isPlaying());
     }
 
+    // Audiobooks and podcasts resume where they were left: playFrom() seeks once the pipeline
+    // has prerolled (a seek before that is silently dropped).
+    void playFromResumes()
+    {
+        QTemporaryDir dir;
+        const QString a = dir.filePath(QStringLiteral("book.wav"));
+        QVERIFY(writeWav(a, 6000));
+        Player p;
+        p.playFrom(wavTrack(a, 1, 6000), 3000);
+        QVERIFY(p.isPlaying());
+        QTRY_VERIFY_WITH_TIMEOUT(p.position() >= 3000, 10000);
+        p.stop();
+
+        // From the start when there is nothing to resume.
+        p.playFrom(wavTrack(a, 1, 6000), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(p.position() > 0, 10000);
+        QVERIFY(p.position() < 2500);
+        p.stop();
+    }
+
     // ---- M5 ----
     void albumContinuity()
     {

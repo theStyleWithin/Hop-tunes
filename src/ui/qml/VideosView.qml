@@ -9,6 +9,8 @@ import QtQuick.Dialogs
 Item {
     id: root
 
+    signal addFolderRequested()
+
     // Per-profile thumbnail override, like the album "image" button in collection › music.
     // The row is set right before open().
     FileDialog {
@@ -44,13 +46,20 @@ Item {
             Layout.topMargin: 40
             spacing: 18
             Label {
-                text: hop.folders.length === 0 ? "add a folder to find videos too" : "no videos found yet"
+                text: hop.videoFolders.length === 0 ? "add a folder to find videos" : "no videos found yet"
                 color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light }
             }
             Label {
-                text: "mkv, mp4, webm, mov, avi, wmv and a few others — anywhere under your media folders."
+                text: "mkv, mp4, webm, mov, avi, wmv and a few others — anywhere under your video folders."
                 color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
                 wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+            Button {
+                objectName: "videosChooseFolder"
+                text: "choose a video folder…"
+                onClicked: root.addFolderRequested()
+                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 18; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
             }
             Item { Layout.fillHeight: true }
         }

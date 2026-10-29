@@ -107,6 +107,15 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=5")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 5;
+    }
+    if (version < 6) {
+        // v6: finished audiobooks / podcast episodes (resume positions are forgotten at the end).
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE item_played (path TEXT PRIMARY KEY, played_at INTEGER NOT NULL DEFAULT 0)")
+            && exec("PRAGMA user_version=6")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -357,6 +366,28 @@ bool ProfileDb::setAlbumOverrideArt(const QString &ref, const QString &artPath)
     Stmt s(m_db, "INSERT INTO album_override(ref, art) VALUES(?1, ?2) "
                  "ON CONFLICT(ref) DO UPDATE SET art = ?2");
     s.bind(1, ref); s.bind(2, artPath);
+    return s.run();
+}
+
+QSet<QString> ProfileDb::playedItems() const
+{
+    QSet<QString> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path FROM item_played");
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0));
+    return out;
+}
+
+bool ProfileDb::setItemPlayed(const QString &path, bool played)
+{
+    if (!m_db || path.isEmpty()) return false;
+    if (!played) {
+        Stmt d(m_db, "DELETE FROM item_played WHERE path = ?1");
+        d.bind(1, path);
+        return d.run();
+    }
+    Stmt s(m_db, "INSERT INTO item_played(path, played_at) VALUES(?1, ?2) ON CONFLICT(path) DO NOTHING");
+    s.bind(1, path); s.bind(2, qint64(QDateTime::currentSecsSinceEpoch()));
     return s.run();
 }
 

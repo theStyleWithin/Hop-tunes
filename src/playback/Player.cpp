@@ -337,6 +337,12 @@ void Player::setShuffle(bool on)
 
 // ---- transport -------------------------------------------------------------------------
 
+void Player::playFrom(const Track &track, qint64 positionMs)
+{
+    setQueue({track}, 0);
+    m_startSeekMs = positionMs > 0 ? positionMs : 0;   // after setQueue: startAt() must not clear it
+}
+
 void Player::startAt(int index)
 {
     finishFade();
@@ -564,6 +570,13 @@ void Player::pollBus()
             setError(text);
             return;
         }
+        case GST_MESSAGE_ASYNC_DONE:
+            if (m_startSeekMs > 0 && GST_MESSAGE_SRC(msg) == GST_OBJECT(m_playbin)) {
+                const qint64 ms = m_startSeekMs;
+                m_startSeekMs = 0;
+                seek(ms);
+            }
+            break;
         case GST_MESSAGE_DURATION_CHANGED:
             updatePosition();
             break;

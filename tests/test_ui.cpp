@@ -654,6 +654,37 @@ private slots:
         // covers the same App-level behaviour with no QML engine involved at all.
     }
 
+    // Pictures (and the other new sections) have their own folder list and their own
+    // "choose a folder" button, separate from the music and video folders.
+    void sectionsHaveTheirOwnFolders()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(m_app->sectionKinds().contains(QStringLiteral("pictures")));
+        QVERIFY(m_app->pictures()->count() == 0);
+        QVERIFY(click("subTab_pictures"));
+        QTRY_VERIFY(item("sectionChooseFolder_pictures") != nullptr);
+        QVERIFY(item("sectionChooseFolder_pictures")->isVisible());
+
+        const QString dir = m_home.filePath(QStringLiteral("Pictures"));
+        QVERIFY(QDir().mkpath(dir));
+        QImage img(40, 30, QImage::Format_RGB32);
+        img.fill(Qt::blue);
+        QVERIFY(img.save(dir + QStringLiteral("/one.png")));
+
+        m_app->addSectionFolder(QStringLiteral("pictures"), QUrl::fromLocalFile(dir));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->pictures()->count(), 1, 15000);
+        QVERIFY(m_app->sectionFolders().value(QStringLiteral("pictures")).toStringList()
+                    .contains(QFileInfo(dir).canonicalFilePath()));
+        // Not mixed into the music or video folder lists.
+        QVERIFY(!m_app->folders().contains(QFileInfo(dir).canonicalFilePath()));
+        QVERIFY(!m_app->videoFolders().contains(QFileInfo(dir).canonicalFilePath()));
+        QTRY_VERIFY(item("pictureTile_0") != nullptr);
+
+        m_app->removeSectionFolder(QStringLiteral("pictures"), QFileInfo(dir).canonicalFilePath());
+        QTRY_COMPARE(m_app->pictures()->count(), 0);
+        QVERIFY(click("subTab_music"));
+    }
+
     // Regression test for a real bug: setResumePosition() was a plain C++ method missing
     // Q_INVOKABLE, so QML's call to it (VideoPlayerView.qml's onSurfaceLoaded(), the very
     // first thing it does on every video open) threw "is not a function" and silently

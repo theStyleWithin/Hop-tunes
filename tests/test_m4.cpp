@@ -101,6 +101,25 @@ private slots:
         QVERIFY(!db.albumOverrides().contains(QStringLiteral("Other\x1fAlbum")));
     }
 
+    void playedItems()
+    {
+        QTemporaryDir tmp;
+        const QString file = tmp.filePath(QStringLiteral("profile.sqlite"));
+        {
+            ProfileDb db;
+            QVERIFY(db.open(file));
+            QVERIFY(db.playedItems().isEmpty());
+            QVERIFY(db.setItemPlayed(QStringLiteral("/p/ep1.mp3"), true));
+            QVERIFY(db.setItemPlayed(QStringLiteral("/p/ep1.mp3"), true));   // twice is fine
+            QVERIFY(db.setItemPlayed(QStringLiteral("/p/ep2.mp3"), true));
+        }
+        ProfileDb db;
+        QVERIFY(db.open(file));   // persisted
+        QCOMPARE(db.playedItems().size(), 2);
+        QVERIFY(db.setItemPlayed(QStringLiteral("/p/ep1.mp3"), false));
+        QCOMPARE(db.playedItems(), QSet<QString>{QStringLiteral("/p/ep2.mp3")});
+    }
+
     void videoThumbOverrides()
     {
         QTemporaryDir tmp;

@@ -94,6 +94,9 @@ public:
     // Replaces the queue and starts playing at `start` (with shuffle on, `start` plays
     // first and the rest is shuffled).
     void setQueue(const QList<Track> &tracks, int start);
+    // Plays one track from positionMs (resuming an audiobook or podcast). The seek happens once
+    // the pipeline has prerolled, because a seek before that is silently dropped.
+    void playFrom(const Track &track, qint64 positionMs);
     QList<Track> queue() const { return m_queue; }
     Q_INVOKABLE QString queueTitle(int i) const
     {
@@ -179,6 +182,7 @@ private:
     double m_rgPreamp = 0.0;
 
     bool m_playing = false;
+    qint64 m_startSeekMs = 0;   // pending resume position for playFrom()
     qint64 m_position = 0;
     qint64 m_duration = 0;
     double m_volume = 1.0;

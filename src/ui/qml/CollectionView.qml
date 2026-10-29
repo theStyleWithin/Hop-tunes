@@ -8,8 +8,10 @@ import QtQuick.Layouts
 Item {
     id: root
     signal addFolderRequested()
+    signal addVideoFolderRequested()
+    signal addSectionFolderRequested(string kind)
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
-    property string collectionTab: "music"   // music | videos (spec §4.1)
+    property string collectionTab: "music"   // music | videos | pictures | audiobooks | ebooks | podcasts (spec §4.1)
     function showArtists() { mode = "artists"; collectionTab = "music" }
 
     TrackMenu {
@@ -67,6 +69,19 @@ Item {
                 contentItem: Label { text: "videos"; color: root.collectionTab === "videos" ? hop.accent : (videosTab.hovered ? Theme.text2 : Theme.dim)
                                       font { family: Theme.font; pixelSize: 22 } }
                 background: Item {}
+            }
+            Repeater {
+                model: hop.sectionKinds
+                delegate: AbstractButton {
+                    id: secTab
+                    required property string modelData
+                    objectName: "subTab_" + modelData
+                    hoverEnabled: true
+                    onClicked: root.collectionTab = modelData
+                    contentItem: Label { text: secTab.modelData; color: root.collectionTab === secTab.modelData ? hop.accent : (secTab.hovered ? Theme.text2 : Theme.dim)
+                                          font { family: Theme.font; pixelSize: 22 } }
+                    background: Item {}
+                }
             }
             Item { Layout.fillWidth: true }
             Label {
@@ -183,10 +198,32 @@ Item {
         }
 
         VideosView {
+            onAddFolderRequested: root.addVideoFolderRequested()
             visible: root.collectionTab === "videos"
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
         }
+
+        Repeater {
+            model: hop.sectionKinds
+            delegate: SectionView {
+                id: secView
+                required property string modelData
+                kind: modelData
+                model: hop[modelData]
+                visible: root.collectionTab === modelData
+                onAddFolderRequested: function (k) { root.addSectionFolderRequested(k) }
+                onItemActivated: function (row) {
+                    if (secView.kind === "pictures") pictureViewer.openAt(row)
+                    else if (secView.kind === "ebooks") hop.openBook(row)
+                    else hop.playSectionItem(secView.kind, row)
+                }
+                Layout.fillWidth: true; Layout.fillHeight: true
+                Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+            }
+        }
+        PictureViewer { id: pictureViewer; model: hop.pictures }
+        EbookReader { id: ebookReader }
 
         StackLayout {
             visible: root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
