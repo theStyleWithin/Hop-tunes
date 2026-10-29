@@ -3,6 +3,9 @@
 #include "core/Paths.h"
 #include "core/ProfileStore.h"
 #include "platform/Mpris.h"
+#ifdef Q_OS_WIN
+#include "platform/WinRuntime.h"
+#endif
 #include "ui/MpvVideoItem.h"
 
 #include <QCommandLineParser>
@@ -26,7 +29,20 @@ int main(int argc, char *argv[])
 {
     // QQuickFramebufferObject (MpvVideoItem, spec §5b) needs the OpenGL scenegraph backend;
     // must be set before QGuiApplication exists.
-    QQuickWindow::setGraphicsApi(QSGRendererInterface::OpenGL);
+    // HOPTUNES_SOFTWARE_RENDER=1 draws without OpenGL (headless smoke tests, machines with no usable
+    // GPU driver); video through libmpv needs the OpenGL path, everything else works.
+    QQuickWindow::setGraphicsApi(qEnvironmentVariableIsSet("HOPTUNES_SOFTWARE_RENDER")
+                                     ? QSGRendererInterface::Software : QSGRendererInterface::OpenGL);
+#ifdef Q_OS_WIN
+    hop::winruntime::setupBundledRuntime();
+    for (int i = 1; i < argc; ++i) {
+        const QByteArray a(argv[i]);
+        if (a == "--version" || a == "-v" || a == "--help" || a == "-h" || a == "--forget-pin") {
+            hop::winruntime::attachConsoleForTextOutput();
+            break;
+        }
+    }
+#endif
     // --help / --version answer without a display (packaging checks, servers).
     for (int i = 1; i < argc; ++i) {
         const QByteArray a(argv[i]);

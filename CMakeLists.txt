@@ -7,6 +7,18 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Windows resources (icon, version details) for hop-tunes.exe and the portable launcher.
+if(WIN32)
+    enable_language(RC)
+    set(HOPTUNES_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/packaging/windows/hop-tunes.ico")
+    set(HOPTUNES_RC_DESCRIPTION "Hop-tunes, a local-first music and video player")
+    set(HOPTUNES_RC_FILENAME "hop-tunes.exe")
+    configure_file(packaging/windows/hop-tunes.rc.in ${CMAKE_BINARY_DIR}/hop-tunes.rc @ONLY)
+    set(HOPTUNES_RC_DESCRIPTION "Hop-tunes (portable)")
+    set(HOPTUNES_RC_FILENAME "Hop-tunes-portable.exe")
+    configure_file(packaging/windows/hop-tunes.rc.in ${CMAKE_BINARY_DIR}/hop-tunes-portable.rc @ONLY)
+endif()
+
 option(HOPTUNES_BUILD_APP   "Build the desktop application" ON)
 option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 
@@ -61,7 +73,21 @@ pkg_check_modules(GST_VIDEO   REQUIRED IMPORTED_TARGET gstreamer-video-1.0)
 # own qml6glsink/glsinkbin, needing no new dependency beyond gstreamer-plugins-base
 # above) if that's available, else "none". Library scanning/probing (VideoScanner etc.)
 # needs only gstreamer-plugins-base regardless, so Videos always scans and lists.
-pkg_check_modules(MPV IMPORTED_TARGET mpv)
+if(WIN32)
+    # MSYS2's mpv.pc reports POSIX-style paths ("/ucrt64/include") that Windows CMake rejects, so
+    # find libmpv directly and give it the same target name the rest of this file uses.
+    find_path(MPV_INCLUDE_DIR mpv/client.h)
+    find_library(MPV_LIBRARY NAMES mpv libmpv mpv-2 libmpv-2)
+    if(MPV_INCLUDE_DIR AND MPV_LIBRARY)
+        set(MPV_FOUND TRUE)
+        add_library(PkgConfig::MPV INTERFACE IMPORTED)
+        set_target_properties(PkgConfig::MPV PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${MPV_INCLUDE_DIR}"
+            INTERFACE_LINK_LIBRARIES "${MPV_LIBRARY}")
+    endif()
+else()
+    pkg_check_modules(MPV IMPORTED_TARGET mpv)
+endif()
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
     src/playback/MpvCore.h    src/playback/MpvCore.cpp
@@ -88,16 +114,30 @@ if(HOPTUNES_BUILD_APP)
     # since Qt 6 split QOpenGLFramebufferObject etc. out of Gui.
     find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Quick QuickControls2 OpenGL)
 
-    add_executable(hop-tunes
+    # WIN32: a GUI program on Windows (no console window); the keyword does nothing elsewhere.
+    add_executable(hop-tunes WIN32
         src/main.cpp
         src/App.h                    src/App.cpp
         src/ui/MpvVideoItem.h        src/ui/MpvVideoItem.cpp
         src/ui/qml.qrc
         assets/assets.qrc
     )
+    if(WIN32)
+        target_sources(hop-tunes PRIVATE src/platform/WinRuntime.h src/platform/WinRuntime.cpp ${CMAKE_BINARY_DIR}/hop-tunes.rc)
+    endif()
     target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
     target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
     target_compile_options(hop-tunes PRIVATE -Wall -Wextra)
+
+    # The single-file portable exe: a small launcher the packaging step appends the app to
+    # (packaging/windows/build-portable.sh). Static, so it needs nothing next to it.
+    if(WIN32)
+        add_executable(hop-tunes-portable WIN32 packaging/windows/portable-launcher.cpp ${CMAKE_BINARY_DIR}/hop-tunes-portable.rc)
+        target_compile_features(hop-tunes-portable PRIVATE cxx_std_17)
+        target_compile_definitions(hop-tunes-portable PRIVATE UNICODE _UNICODE)
+        target_link_options(hop-tunes-portable PRIVATE -municode -static -static-libgcc -static-libstdc++)
+        target_link_libraries(hop-tunes-portable PRIVATE z)
+    endif()
 
     include(GNUInstallDirs)
     install(TARGETS hop-tunes RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -136,10 +176,16 @@ if(HOPTUNES_BUILD_TESTS)
     set_tests_properties(player-playbin3 PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true;HOPTUNES_PLAYBIN=playbin3")
 
     # MPRIS needs a D-Bus session bus; the test starts its own private one (skips if unavailable).
-    add_executable(test_mpris tests/test_mpris.cpp)
-    target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
-    add_test(NAME mpris COMMAND test_mpris)
-    set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
+    if(NOT WIN32)
+        add_executable(test_mpris tests/test_mpris.cpp)
+        target_link_libraries(test_mpris PRIVATE hoptunes_playback Qt6::Test)
+        add_test(NAME mpris COMMAND test_mpris)
+        set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
+    endif()
+
+    add_executable(test_paths tests/test_paths.cpp)
+    target_link_libraries(test_paths PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME paths COMMAND test_paths)
 
     add_executable(test_epub tests/test_epub.cpp)
     target_link_libraries(test_epub PRIVATE hoptunes_core Qt6::Gui Qt6::Test)

@@ -184,7 +184,10 @@ QStringList App::accents() const
 QString App::suggestedFolder() const
 {
     if (!m_legacyFolders.isEmpty()) return m_legacyFolders.constFirst();
-    const QString music = QStandardPaths::writableLocation(QStandardPaths::MusicLocation);
+    // HOPTUNES_MUSIC_DIR names the folder offered on first run (tests, kiosks, portable setups).
+    const QByteArray forced = qgetenv("HOPTUNES_MUSIC_DIR");
+    const QString music = forced.isEmpty() ? QStandardPaths::writableLocation(QStandardPaths::MusicLocation)
+                                           : QString::fromLocal8Bit(forced);
     return QFileInfo(music).isDir() ? QFileInfo(music).canonicalFilePath() : QString();
 }
 
@@ -353,6 +356,7 @@ void App::activate(const QString &id, bool guest)
         // Damaged: keep it aside for recovery and start this profile's lists afresh,
         // rather than running without playlists and play counts at all.
         qWarning("hop-tunes: profile database unreadable (%s); set aside, starting a new one", qPrintable(m_db.lastError()));
+        m_db.close();   // Windows will not rename a file that is still open
         setAside(dbPath);
         if (!m_db.open(dbPath)) qWarning("hop-tunes: cannot open profile database: %s", qPrintable(m_db.lastError()));
     }

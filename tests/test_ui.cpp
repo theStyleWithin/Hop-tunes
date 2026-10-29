@@ -2,9 +2,11 @@
 // End-to-end profile flows through the real QML UI (offscreen): first run, PIN curtain,
 // switching, guest mode, removal, restart behaviour.
 #include "App.h"
+#include "core/Paths.h"
 #include "ui/MpvVideoItem.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFont>
 #include <QFontDatabase>
@@ -94,6 +96,20 @@ class TestUi : public QObject {
         if (!i) qWarning("no item %s", name);
         return i;
     }
+    // For things the test has just asked for (a popup, a page): they appear a moment after the click or
+    // call that opens them, so give the event loop a few seconds before calling it missing. This
+    // was a real flake on slower CI machines ("no item namePromptField").
+    QQuickItem *waitItem(const char *name, int timeoutMs = 4000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < timeoutMs) {
+            auto *i = find(window()->contentItem(), QLatin1String(name));
+            if (i && i->isVisible()) return i;
+            QTest::qWait(25);
+        }
+        return item(name);
+    }
     // Scrolls the nearest Flickable so the item is on screen (Settings is a long page).
     void ensureVisible(QQuickItem *i)
     {
@@ -110,7 +126,7 @@ class TestUi : public QObject {
     }
     bool click(const char *name)
     {
-        QQuickItem *i = item(name);
+        QQuickItem *i = waitItem(name);
         if (!i || !i->isVisible() || !i->isEnabled()) { qWarning("cannot click %s", name); return false; }
         ensureVisible(i);
         const QPointF c = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
@@ -119,7 +135,7 @@ class TestUi : public QObject {
     }
     void type(const char *name, const QString &text)
     {
-        QQuickItem *i = item(name);
+        QQuickItem *i = waitItem(name);
         QVERIFY(i);
         i->forceActiveFocus();
         i->setProperty("text", QString());
@@ -153,6 +169,10 @@ private slots:
     {
         qputenv("HOME", m_home.path().toLocal8Bit());
         for (const char *v : {"XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "HOPTUNES_PROFILE"}) qunsetenv(v);
+        // HOME and XDG_* only isolate the test on Linux; these two work on every platform (Windows
+        // otherwise reads and writes the real user folders, and runs leak into each other).
+        qputenv("HOPTUNES_DATA_DIR", m_home.filePath(QStringLiteral("hoptunes-root")).toLocal8Bit());
+        qputenv("HOPTUNES_MUSIC_DIR", m_home.filePath(QStringLiteral("Music")).toLocal8Bit());
         qputenv("HOPTUNES_AUDIO_SINK", "fakesink sync=true");
         QDir().mkpath(m_home.filePath(QStringLiteral("Music/A/B")));
         QVERIFY(writeWav(m_home.filePath(QStringLiteral("Music/A/B/01 Song.wav")), 3000));
@@ -218,14 +238,14 @@ private slots:
     void guestKeepsNothing()
     {
         QCOMPARE(gateMode(), QStringLiteral("pick"));
-        const QStringList before = QDir(m_home.filePath(QStringLiteral(".local/share/hop-tunes/profiles"))).entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+        const QStringList before = QDir(hop::Paths::profilesDir()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
         QVERIFY(click("guestButton"));
         QTRY_VERIFY(m_app->profileReady());
         QVERIFY(m_app->guest());
         QTRY_COMPARE_WITH_TIMEOUT(m_app->songs()->count(), 1, 10000);
         m_app->player()->setVolume(0.3);
         m_app->leaveProfile();
-        const QStringList after = QDir(m_home.filePath(QStringLiteral(".local/share/hop-tunes/profiles"))).entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
+        const QStringList after = QDir(hop::Paths::profilesDir()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot);
         QCOMPARE(after, before);
         QCOMPARE(m_app->profileStore()->count(), 1);
     }

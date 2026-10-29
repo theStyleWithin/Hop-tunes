@@ -98,6 +98,10 @@ private slots:
     {
         qputenv("HOME", m_home.path().toLocal8Bit());
         for (const char *v : {"XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "HOPTUNES_PROFILE"}) qunsetenv(v);
+        // HOME and XDG_* only isolate the test on Linux; these two work on every platform (Windows
+        // otherwise reads and writes the real user folders, and runs leak into each other).
+        qputenv("HOPTUNES_DATA_DIR", m_home.filePath(QStringLiteral("hoptunes-root")).toLocal8Bit());
+        qputenv("HOPTUNES_MUSIC_DIR", m_home.filePath(QStringLiteral("Music")).toLocal8Bit());
         qputenv("HOPTUNES_AUDIO_SINK", "fakesink sync=true");
     }
 
@@ -117,8 +121,13 @@ private slots:
         QVERIFY(writeWav(m + QStringLiteral("/名前/曲 ♪.wav"), 300));
         QVERIFY(writeWav(m + QStringLiteral("/emoji 🎵🎧.wav"), 300));
         QVERIFY(writeWav(m + QStringLiteral("/עברית שיר.wav"), 300));
+#ifdef Q_OS_WIN   // Windows file names cannot contain quotes, angle brackets or newlines
+        QVERIFY(writeWav(m + QStringLiteral("/it's quoted & odd.wav"), 300));
+        QVERIFY(writeWav(m + QStringLiteral("/line break.wav"), 300));
+#else
         QVERIFY(writeWav(m + QStringLiteral("/it's \"quoted\" & <odd>.wav"), 300));
         QVERIFY(writeWav(m + QStringLiteral("/line\nbreak.wav"), 300));
+#endif
         // Deep nesting and a symlink loop.
         QString deep = m;
         for (int i = 0; i < 40; ++i) deep += QStringLiteral("/d%1").arg(i);
@@ -134,7 +143,11 @@ private slots:
         const QList<Track> tracks = index.tracksUnder({QFileInfo(m).canonicalFilePath()});
         QStringList titles;
         for (const Track &t : tracks) titles << t.displayTitle();
+#ifdef Q_OS_WIN
+        for (const char *want : {"01 real song", "曲 ♪", "emoji 🎵🎧", "עברית שיר", "it's quoted & odd", "line break", "deep"})
+#else
         for (const char *want : {"01 real song", "曲 ♪", "emoji 🎵🎧", "עברית שיר", "it's \"quoted\" & <odd>", "line\nbreak", "deep"})
+#endif
             QVERIFY2(titles.contains(QString::fromUtf8(want)), want);
         QVERIFY(r.scanned >= 7);
         // A second scan is a no-op, even with the junk still there.

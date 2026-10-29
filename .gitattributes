@@ -1,3 +1,9 @@
 # Left out of release source tarballs (git archive); not needed to build.
 design/ export-ignore
 zune-teardown/ export-ignore
+
+# Scripts and templates run in MSYS2/Linux shells: never let a Windows checkout turn them into CRLF.
+*.sh text eol=lf
+*.in text eol=lf
+packaging/windows/qt.conf text eol=lf
+*.ico binary
