@@ -26,6 +26,18 @@ ApplicationWindow {
         title: "choose a video folder"
         onAccepted: hop.addVideoFolder(selectedFolder)
     }
+    // Folder picker for the videos tab: movies, shows, cartoons, anime and other videos each have their own.
+    FolderDialog {
+        id: videoCategoryFolderDialog
+        property string category: "movies"
+        title: "choose a folder"
+        onAccepted: hop.addVideoCategoryFolder(category, selectedFolder)
+    }
+    function openVideoCategoryFolderDialog(c) {
+        videoCategoryFolderDialog.category = c
+        videoCategoryFolderDialog.title = "choose a folder for " + (c === "other" ? "other videos" : c)
+        videoCategoryFolderDialog.open()
+    }
     function openSectionFolderDialog(k) {
         sectionFolderDialog.kind = k
         const noun = k.replace(/s$/, "")
@@ -124,10 +136,10 @@ ApplicationWindow {
                 NumberAnimation { target: stack; property: "opacity"; from: 0.0; to: 1.0; duration: Theme.motion; easing.type: Easing.OutCubic }
                 NumberAnimation { target: slide; property: "x"; from: 28; to: 0; duration: Theme.motion; easing.type: Easing.OutCubic }
             }
-            CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
-            SettingsView { onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            SettingsView { onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
         }
 
         MiniPlayer {

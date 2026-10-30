@@ -103,7 +103,7 @@ void GstVideoPlayer::setPaused(bool p)
 
 void GstVideoPlayer::setVolume(int percent)
 {
-    m_volume = qBound(0, percent, 100);
+    m_volume = qBound(0, percent, 150);
     if (m_pipeline) g_object_set(m_pipeline, "volume", double(m_volume) / 100.0, nullptr);
     emit volumeChanged();
 }

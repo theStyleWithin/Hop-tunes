@@ -41,10 +41,16 @@ class App : public QObject {
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
     // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
     Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
+    Q_PROPERTY(QStringList videoCategories READ videoCategories CONSTANT)   // movies, shows, cartoons, anime, other
+    Q_PROPERTY(QString videoCategory READ videoCategory WRITE setVideoCategory NOTIFY videoCategoryChanged)   // the videos tab shows this one
+    Q_PROPERTY(QVariantMap videoCategoryFolders READ videoCategoryFolders NOTIFY foldersChanged)   // category -> [paths]
     // Pictures, audiobooks, ebooks and podcasts: each has its own models and folder list.
     // The extra sections that are switched on, in tab order (single source of truth for the UI).
     Q_PROPERTY(QStringList sectionKinds READ sectionKinds CONSTANT)
     Q_PROPERTY(hop::SectionListModel *pictures READ pictures CONSTANT)
+    Q_PROPERTY(QVariantList pictureAlbums READ pictureAlbums NOTIFY pictureAlbumsChanged)   // one per folder: dir, name, count, cover
+    Q_PROPERTY(QString pictureAlbum READ pictureAlbum NOTIFY pictureAlbumChanged)   // the open album's folder, "" = the album list
+    Q_PROPERTY(hop::SectionListModel *pictureAlbumItems READ pictureAlbumItems CONSTANT)   // the pictures of the open album
     Q_PROPERTY(hop::SectionListModel *audiobooks READ audiobooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *ebooks READ ebooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *podcasts READ podcasts CONSTANT)
@@ -117,6 +123,7 @@ class App : public QObject {
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString statusNote READ statusNote WRITE setStatusNote NOTIFY statusNoteChanged)   // the profile's private status box
+    Q_PROPERTY(int videoVolume READ videoVolume WRITE setVideoVolume NOTIFY videoVolumeChanged)   // the movie volume, 0-150 %, separate from the music volume
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
     Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
     Q_PROPERTY(QVariantList myVideoComments READ myVideoComments NOTIFY myVideoCommentsChanged)   // this profile's own, for the playing video
@@ -138,8 +145,17 @@ public:
     TrackListModel *songs() { return &m_songs; }
     Player *player() { return &m_player; }
     QStringList folders() const { return m_folders; }
-    QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }
+    QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }   // the "movies" folders
+    QStringList allVideoFolders() const;   // movies + every other category's folders: what gets scanned
+    static QStringList videoCategories();
+    QString videoCategory() const { return m_videoCategory; }
+    void setVideoCategory(const QString &c);
+    QVariantMap videoCategoryFolders() const;
+    QString categoryOfVideo(const QString &path) const;   // the category whose folder is the closest parent
     SectionListModel *pictures() { return &m_sec[0]->model; }
+    QVariantList pictureAlbums() const { return m_pictureAlbums; }
+    QString pictureAlbum() const { return m_pictureAlbum; }
+    SectionListModel *pictureAlbumItems() { return &m_albumItems; }
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
     SectionListModel *podcasts() { return &m_sec[3]->model; }
@@ -213,6 +229,8 @@ public:
     void setVideoViewStyle(const QString &style);
     QString statusNote() const { return m_statusNote; }
     void setStatusNote(const QString &text);
+    int videoVolume() const { return m_videoVolume; }
+    void setVideoVolume(int percent);
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
@@ -294,6 +312,9 @@ public:
     Q_INVOKABLE void removeFolder(const QString &path);
     Q_INVOKABLE void addVideoFolder(const QUrl &folder);
     Q_INVOKABLE void removeVideoFolder(const QString &path);
+    Q_INVOKABLE void openPictureAlbum(const QString &dir);
+    Q_INVOKABLE void closePictureAlbum();
+    Q_INVOKABLE void renamePictureAlbum(const QString &dir, const QString &name);   // "" goes back to the folder's name
     Q_INVOKABLE void addSectionFolder(const QString &kind, const QUrl &folder);   // kind: pictures | audiobooks | ebooks | podcasts
     Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
     // Audiobooks and podcasts: plays the item, resuming where this profile left off.
@@ -312,6 +333,8 @@ public:
     // videos (spec §5b)
     Q_INVOKABLE void openVideoDetail(int row);
     Q_INVOKABLE void closeVideoDetail();
+    Q_INVOKABLE void addVideoCategoryFolder(const QString &category, const QUrl &folder);
+    Q_INVOKABLE void removeVideoCategoryFolder(const QString &category, const QString &path);
     // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
     Q_INVOKABLE void setVideoField(const QString &key, const QString &value);
     Q_INVOKABLE void addCastMember();
@@ -330,6 +353,9 @@ public:
 
 signals:
     void foldersChanged();
+    void pictureAlbumsChanged();
+    void pictureAlbumChanged();
+    void videoCategoryChanged();
     void sectionFoldersChanged();
     void sectionStatusChanged();
     void bookChanged();
@@ -352,6 +378,7 @@ signals:
     void videoViewStyleChanged();
     void videoChatChanged();
     void statusNoteChanged();
+    void videoVolumeChanged();
     void videoCommentsChanged();
     void myVideoCommentsChanged();
 
@@ -393,6 +420,7 @@ private:
     QString m_videoViewStyle = QStringLiteral("window");
     QString m_videoComments = QStringLiteral("off");
     QString m_statusNote;
+    int m_videoVolume = 100;
     bool m_videoChat = false;
     QString m_videoChatLook = QStringLiteral("clean");
     QString m_detailPath;                              // the video whose details page is open
@@ -427,6 +455,8 @@ private:
     QStringList m_folders;
     QStringList m_videoFolders;       // used only when m_videoFoldersOwn
     bool m_videoFoldersOwn = false;   // this profile has set its own video folders
+    QHash<QString, QStringList> m_videoCatFolders;   // shows | cartoons | anime | other -> folders
+    QString m_videoCategory = QStringLiteral("movies");
     QStringList watchedFolders() const;   // music + video folders, deduplicated
     int m_scanDone = 0;
     int m_scanTotal = 0;
@@ -441,6 +471,11 @@ private:
     int m_selAlbum = -1;
     QStringList m_mosaicArt;
 
+    QHash<QString, QString> m_albumNames;   // folder -> the name this profile gave its album
+    QVariantList m_pictureAlbums;
+    QString m_pictureAlbum;
+    SectionListModel m_albumItems{SectionKind::Pictures};
+    void rebuildPictureAlbums(const QList<SectionItem> &items);
     struct SectionState {
         SectionState(SectionKind k, SectionIndex *idx) : kind(k), model(k), scanner(k, idx) {}
         SectionKind kind;
