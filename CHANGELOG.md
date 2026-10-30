@@ -4,6 +4,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **A private status box** at the top right of the collection view, right above your profile: an empty
+  box for anything you want to see there, like a lyric, a quote or how you feel. Nobody else ever sees
+  it; it is saved in your profile (up to 300 characters) as you type and is there next time you open
+  Hop-tunes. Guests do not get one, since a guest keeps nothing.
+
 ## [1.6.0] - 2026-10-30
 
 ### Added

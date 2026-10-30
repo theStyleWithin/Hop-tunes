@@ -70,11 +70,22 @@ ApplicationWindow {
         spacing: 0
         visible: hop.profileReady
 
-        // pivots
-        RowLayout {
+        // pivots, with the private status box at the right end (in the collection view)
+        Item {
             visible: win.view !== "now playing"
             Layout.fillWidth: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 24
+            implicitHeight: pivots.implicitHeight
+            // it gives way to the pivots on a narrow window rather than overlap them
+            StatusNote {
+                readonly property real room: parent.width - 880
+                visible: win.view === "collection" && !hop.guest && room >= 200
+                width: Math.min(460, Math.max(0, room))
+                anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+            }
+        RowLayout {
+            id: pivots
+            anchors.fill: parent
             spacing: 36
             Repeater {
                 model: win.views
@@ -97,6 +108,7 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
             // who's listening (in the collection view it sits in the tab row below instead)
             ProfileChip { visible: win.view !== "collection" }
+        }
         }
 
         StackLayout {

@@ -352,10 +352,12 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
+    m_statusNote = s.value(QStringLiteral("statusNote")).toString().left(300);
     m_videoChat = s.value(QStringLiteral("videoChat")).toBool(false);
     m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
     m_loadingSettings = false;
     emit videoChatChanged();
+    emit statusNoteChanged();
     m_videoComments = [&] { const QString m = s.value(QStringLiteral("videoComments")).toString();
                             return m == QLatin1String("mine") || m == QLatin1String("populated") ? m : QStringLiteral("off"); }();
     emit videoCommentsChanged();
@@ -424,9 +426,11 @@ void App::leaveProfile()
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
+    m_statusNote.clear();
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
+    emit statusNoteChanged();
     m_videoComments = QStringLiteral("off");
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
@@ -458,6 +462,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("statusNote"), m_statusNote);
     s.insert(QStringLiteral("videoChat"), m_videoChat);
     s.insert(QStringLiteral("videoChatLook"), m_videoChatLook);
     s.insert(QStringLiteral("videoComments"), m_videoComments);
@@ -904,6 +909,15 @@ void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
     if (row < 0 || row >= m_videos.count()) return;
     saveVideoProgress(positionMs, durationMs);
     openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::setStatusNote(const QString &text)
+{
+    const QString t = text.left(300);
+    if (t == m_statusNote) return;
+    m_statusNote = t;
+    saveProfileSettings();   // a guest keeps nothing, like every other setting
+    emit statusNoteChanged();
 }
 
 void App::setVideoChat(bool on)

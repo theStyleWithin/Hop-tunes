@@ -116,6 +116,7 @@ class App : public QObject {
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
+    Q_PROPERTY(QString statusNote READ statusNote WRITE setStatusNote NOTIFY statusNoteChanged)   // the profile's private status box
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
     Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
     Q_PROPERTY(QVariantList myVideoComments READ myVideoComments NOTIFY myVideoCommentsChanged)   // this profile's own, for the playing video
@@ -210,6 +211,8 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    QString statusNote() const { return m_statusNote; }
+    void setStatusNote(const QString &text);
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
@@ -348,6 +351,7 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void videoChatChanged();
+    void statusNoteChanged();
     void videoCommentsChanged();
     void myVideoCommentsChanged();
 
@@ -388,6 +392,7 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     QString m_videoComments = QStringLiteral("off");
+    QString m_statusNote;
     bool m_videoChat = false;
     QString m_videoChatLook = QStringLiteral("clean");
     QString m_detailPath;                              // the video whose details page is open
