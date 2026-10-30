@@ -815,6 +815,60 @@ private slots:
         QVERIFY(r.property("parts").toBool());
     }
 
+    void commentsSetting()
+    {
+        QCOMPARE(m_app->videoComments(), QStringLiteral("off"));   // bloat-free by default
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("videoCommentsChoice") != nullptr);
+        QTest::qWait(150);
+        QVERIFY(click("choice_populated"));
+        QTRY_COMPARE(m_app->videoComments(), QStringLiteral("populated"));
+        m_app->setVideoComments(QStringLiteral("nonsense"));
+        QCOMPARE(m_app->videoComments(), QStringLiteral("off"));
+        m_app->setVideoComments(QStringLiteral("mine"));
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(s.value(QStringLiteral("videoComments")).toString(), QStringLiteral("mine"));
+        // Off means off: nothing can be added.
+        m_app->setVideoComments(QStringLiteral("off"));
+        m_app->addVideoComment(QStringLiteral("hello"));
+        QVERIFY(m_app->myVideoComments().isEmpty());
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // CommentGen.js: deterministic, endless, uses the movie page without inventing details.
+    void commentEngine()
+    {
+        QJSEngine js;
+        auto load = [&](const char *res, bool wrapImport) {
+            QFile f(QString::fromLatin1(res));
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QString src = QString::fromUtf8(f.readAll());
+            src.remove(QRegularExpression(QStringLiteral("^\\.pragma[^\\n]*\\n")));
+            src.remove(QRegularExpression(QStringLiteral("^\\.import[^\\n]*\\n"), QRegularExpression::MultilineOption));
+            const QJSValue ok = js.evaluate(src);
+            QVERIFY2(!ok.isError(), qPrintable(ok.toString()));
+            if (wrapImport)   // what `.import "ChatGen.js" as C` gives CommentGen.js
+                QVERIFY(!js.evaluate(QStringLiteral("var C = { rng: rng, pick: pick, viewer: viewer, movieLine: movieLine, replies: replies, context: context };")).isError());
+        };
+        load(":/qml/ChatGen.js", true);
+        load(":/qml/CommentGen.js", false);
+        QFile check(QStringLiteral(HOPTUNES_TEST_DIR "/comment_engine_check.js"));
+        QVERIFY(check.open(QIODevice::ReadOnly));
+        const QJSValue r = js.evaluate(QString::fromUtf8(check.readAll()), check.fileName());
+        QVERIFY2(!r.isError(), qPrintable(r.toString()));
+        QVERIFY(r.property("same").toBool());
+        QVERIFY(r.property("differs").toBool());
+        QVERIFY(r.property("endless").toBool());
+        QCOMPARE(r.property("bad").toInt(), 0);
+        QCOMPARE(r.property("emote").toInt(), 0);
+        QVERIFY2(r.property("movie").toInt() > 10, "some comments should use the movie page");
+        QVERIFY2(r.property("withReplies").toInt() > 40, "many comments have replies");
+        QCOMPARE(r.property("invented").toInt(), 0);
+        QVERIFY(r.property("answers").toBool());
+        QVERIFY(r.property("answerDirector").toBool());
+        QVERIFY(r.property("ago").toBool());
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()

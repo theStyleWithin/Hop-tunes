@@ -35,6 +35,12 @@ struct HistoryEntry {
 // A profile's manual edits to an album's shown title/cover (spec: per-profile, never
 // shared). Keyed the same way as an album Pin's ref: "<artist>\x1f<title>". Empty fields
 // mean "no override" for that one field.
+struct VideoComment {
+    qint64 id = 0;
+    QString text;
+    qint64 at = 0;     // ms since epoch
+};
+
 struct AlbumOverride {
     QString title;
     QString art;   // absolute path to the profile's own copy of the chosen image
@@ -92,6 +98,9 @@ public:
     bool setAlbumOverrideArt(const QString &ref, const QString &artPath);   // "" clears it
     QHash<QString, QString> videoMetas() const;   // video path -> JSON of the details the user filled in
     bool setVideoMeta(const QString &videoPath, const QString &json);   // "" clears it
+    QList<VideoComment> videoComments(const QString &videoPath) const;   // newest first
+    qint64 addVideoComment(const QString &videoPath, const QString &text, qint64 at);   // new id, 0 on failure
+    bool removeVideoComment(qint64 id);
     QSet<QString> playedItems() const;                       // finished audiobooks / podcast episodes
     bool setItemPlayed(const QString &path, bool played);
     QHash<QString, QString> videoThumbOverrides() const;   // video path -> picked image, loaded once per profile

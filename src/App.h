@@ -117,6 +117,8 @@ class App : public QObject {
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
+    Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
+    Q_PROPERTY(QVariantList myVideoComments READ myVideoComments NOTIFY myVideoCommentsChanged)   // this profile's own, for the playing video
     Q_PROPERTY(QString videoChatLook READ videoChatLook WRITE setVideoChatLook NOTIFY videoChatChanged)   // "clean" | "lively"
     Q_PROPERTY(QVariantMap videoPlayerInfo READ videoPlayerInfo NOTIFY videoPlayerChanged)   // the playing video's page (as videoDetail)
     Q_PROPERTY(bool videoPlayerOpen READ videoPlayerOpen NOTIFY videoPlayerChanged)
@@ -211,6 +213,9 @@ public:
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
+    QString videoComments() const { return m_videoComments; }
+    void setVideoComments(const QString &mode);
+    QVariantList myVideoComments() const;
     void setVideoChatLook(const QString &look);
     QString videoPlayerPath() const { return m_videoPlayerPath; }
     QString videoPlayerTitle() const;
@@ -316,6 +321,8 @@ public:
     Q_INVOKABLE void playVideo(int row);                                  // opens the player, resumes if we have a position
     Q_INVOKABLE void closeVideoPlayer(qint64 positionMs, qint64 durationMs);
     Q_INVOKABLE void switchVideo(int row, qint64 positionMs, qint64 durationMs);   // from the up-next list: saves this one, opens that  // saves resume position, closes
+    Q_INVOKABLE void addVideoComment(const QString &text);   // under the playing video
+    Q_INVOKABLE void removeVideoComment(qint64 id);
     Q_INVOKABLE void saveVideoProgress(qint64 positionMs, qint64 durationMs); // periodic save while playing
 
 signals:
@@ -341,6 +348,8 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void videoChatChanged();
+    void videoCommentsChanged();
+    void myVideoCommentsChanged();
 
 private:
     void reload();
@@ -378,6 +387,7 @@ private:
     Collection m_fullCollection;            // unfiltered, for quickplay
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
+    QString m_videoComments = QStringLiteral("off");
     bool m_videoChat = false;
     QString m_videoChatLook = QStringLiteral("clean");
     QString m_detailPath;                              // the video whose details page is open

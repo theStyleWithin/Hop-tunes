@@ -123,6 +123,32 @@ private slots:
         QVERIFY(db.videoMetas().isEmpty());
     }
 
+    void videoComments()
+    {
+        QTemporaryDir tmp;
+        const QString file = tmp.filePath(QStringLiteral("profile.sqlite"));
+        const QString v = QStringLiteral("/m/movie.mkv");
+        qint64 a = 0, b = 0;
+        {
+            ProfileDb db;
+            QVERIFY(db.open(file));
+            QVERIFY(db.videoComments(v).isEmpty());
+            a = db.addVideoComment(v, QStringLiteral("first"), 1000);
+            b = db.addVideoComment(v, QStringLiteral("second"), 2000);
+            QVERIFY(a > 0 && b > a);
+            QCOMPARE(db.addVideoComment(v, QString(), 3000), qint64(0));   // nothing to say, nothing saved
+            QVERIFY(db.addVideoComment(QStringLiteral("/m/other.mkv"), QStringLiteral("elsewhere"), 1500) > 0);
+        }
+        ProfileDb db;
+        QVERIFY(db.open(file));   // persisted
+        const QList<VideoComment> list = db.videoComments(v);
+        QCOMPARE(list.size(), 2);
+        QCOMPARE(list.first().text, QStringLiteral("second"));   // newest first
+        QVERIFY(db.removeVideoComment(a));
+        QCOMPARE(db.videoComments(v).size(), 1);
+        QCOMPARE(db.videoComments(QStringLiteral("/m/other.mkv")).size(), 1);
+    }
+
     void playedItems()
     {
         QTemporaryDir tmp;

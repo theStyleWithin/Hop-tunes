@@ -125,6 +125,17 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=7")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 7;
+    }
+    if (version < 8) {
+        // v8: the user's own comments under a video (everyone else's are generated, never stored).
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE video_comment (id INTEGER PRIMARY KEY, path TEXT NOT NULL, "
+                    "text TEXT NOT NULL, at INTEGER NOT NULL DEFAULT 0)")
+            && exec("CREATE INDEX video_comment_path ON video_comment(path)")
+            && exec("PRAGMA user_version=8")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -397,6 +408,32 @@ bool ProfileDb::setVideoMeta(const QString &videoPath, const QString &json)
     }
     Stmt s(m_db, "INSERT INTO video_meta(path, json) VALUES(?1, ?2) ON CONFLICT(path) DO UPDATE SET json = ?2");
     s.bind(1, videoPath); s.bind(2, json);
+    return s.run();
+}
+
+QList<VideoComment> ProfileDb::videoComments(const QString &videoPath) const
+{
+    QList<VideoComment> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT id, text, at FROM video_comment WHERE path = ?1 ORDER BY at DESC, id DESC");
+    s.bind(1, videoPath);
+    while (s.step() == SQLITE_ROW) out.append(VideoComment{s.i64(0), s.str(1), s.i64(2)});
+    return out;
+}
+
+qint64 ProfileDb::addVideoComment(const QString &videoPath, const QString &text, qint64 at)
+{
+    if (!m_db || videoPath.isEmpty() || text.isEmpty()) return 0;
+    Stmt s(m_db, "INSERT INTO video_comment(path, text, at) VALUES(?1, ?2, ?3)");
+    s.bind(1, videoPath); s.bind(2, text); s.bind(3, at);
+    return s.run() ? sqlite3_last_insert_rowid(m_db) : 0;
+}
+
+bool ProfileDb::removeVideoComment(qint64 id)
+{
+    if (!m_db) return false;
+    Stmt s(m_db, "DELETE FROM video_comment WHERE id = ?1");
+    s.bind(1, id);
     return s.run();
 }
 
