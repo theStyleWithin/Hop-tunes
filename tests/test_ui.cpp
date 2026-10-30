@@ -178,6 +178,21 @@ class TestUi : public QObject {
         QTest::mouseClick(window(), Qt::LeftButton, Qt::NoModifier, c.toPoint());
         return true;
     }
+    // Click `name` until `appears` is on screen. A click can land before a freshly shown page has been laid out (slow CI
+    // machines), and then nothing opens; it is only repeated while the thing has not appeared, so it cannot double up.
+    bool clickUntilShown(const char *name, const char *appears, int timeoutMs = 8000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < timeoutMs) {
+            QQuickItem *i = find(window()->contentItem(), QLatin1String(appears));
+            if (i && i->isVisible()) return true;
+            click(name);
+            QTest::qWait(400);
+        }
+        QQuickItem *i = find(window()->contentItem(), QLatin1String(appears));
+        return i && i->isVisible();
+    }
     void type(const char *name, const QString &text)
     {
         QQuickItem *i = waitItem(name);
@@ -436,7 +451,7 @@ private slots:
     void m4ManualPlaylist()
     {
         QVERIFY(click("tab_playlists"));
-        QVERIFY(click("newPlaylist"));
+        QVERIFY(clickUntilShown("newPlaylist", "namePromptField"));
         type("namePromptField", QStringLiteral("Road Trip"));
         QVERIFY(click("namePromptOk"));
         QTRY_VERIFY(m_app->selectedPlaylist().startsWith(QStringLiteral("pl:")));
@@ -465,7 +480,7 @@ private slots:
 
     void m4SmartPlaylist()
     {
-        QVERIFY(click("newSmartPlaylist"));
+        QVERIFY(clickUntilShown("newSmartPlaylist", "smartName"));
         type("smartName", QStringLiteral("Unplayed"));
         QTRY_VERIFY(item("smartPreview")->property("text").toString().contains(QStringLiteral("match")));
         shot("m4-smart-editor");
