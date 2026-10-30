@@ -694,6 +694,48 @@ private slots:
         // covers the same App-level behaviour with no QML engine involved at all.
     }
 
+    // The videos tab has movies, shows, cartoons, anime and other videos; each has its own folders,
+    // and a video lands in the category whose folder is its closest parent.
+    void videoCategoriesHaveTheirOwnFolders()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("subTab_videos"));
+        QCOMPARE(m_app->videoCategories(), (QStringList{"movies", "shows", "cartoons", "anime", "other"}));
+        QCOMPARE(m_app->videoCategory(), QStringLiteral("movies"));
+        for (const char *c : {"videoCat_movies", "videoCat_shows", "videoCat_cartoons", "videoCat_anime", "videoCat_other"})
+            QVERIFY2(waitItem(c) != nullptr, c);
+        const int movies = m_app->videos()->count();
+        QVERIFY(movies >= 1);
+
+        const QString dir = m_home.filePath(QStringLiteral("Anime"));
+        QVERIFY(QDir().mkpath(dir));
+        QVERIFY(writeTestVideo(dir + QStringLiteral("/ep1.mkv")));
+        QVERIFY(click("videoCat_anime"));
+        QTRY_COMPARE(m_app->videoCategory(), QStringLiteral("anime"));
+        QCOMPARE(m_app->videos()->count(), 0);
+        QTRY_VERIFY(item("videosChooseFolder_anime") != nullptr && item("videosChooseFolder_anime")->isVisible());   // its own button
+        shot("v-anime-empty");
+        m_app->addVideoCategoryFolder(QStringLiteral("anime"), QUrl::fromLocalFile(dir));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->videos()->count(), 1, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
+        QVERIFY(item("videoTile_0") != nullptr);
+        shot("v-anime");
+        QCOMPARE(m_app->categoryOfVideo(dir + QStringLiteral("/ep1.mkv")), QStringLiteral("anime"));
+        QCOMPARE(m_app->categoryOfVideo(m_home.filePath(QStringLiteral("Library/Alpha/clip.mkv"))), QStringLiteral("movies"));
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(s.value("videoCategoryFolders").toObject().value("anime").toArray().size(), 1);
+
+        // Movies are untouched by it.
+        QVERIFY(click("videoCat_movies"));
+        QTRY_COMPARE(m_app->videos()->count(), movies);
+
+        m_app->removeVideoCategoryFolder(QStringLiteral("anime"), m_app->videoCategoryFolders().value("anime").toStringList().first());
+        QVERIFY(m_app->videoCategoryFolders().value("anime").toStringList().isEmpty());
+        QCOMPARE(m_app->videos()->count(), movies);
+        m_app->setVideoCategory(QStringLiteral("nonsense"));   // ignored
+        QCOMPARE(m_app->videoCategory(), QStringLiteral("movies"));
+    }
+
     // Clicking a movie opens its details page (empty boxes the user fills in); nothing plays until Play.
     void videoDetailsPageIsEmptyBoxesAndPlayNeedsAClick()
     {
