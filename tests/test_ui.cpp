@@ -6,6 +6,8 @@
 #include "ui/MpvVideoItem.h"
 
 #include <QDir>
+#include <QJSEngine>
+#include <QRegularExpression>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QFont>
@@ -752,6 +754,65 @@ private slots:
         QVERIFY(click("choice_window"));
         QCOMPARE(m_app->videoViewStyle(), QStringLiteral("window"));
         window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // The pretend live chat: off by default, a separate switch from the viewing style, two looks.
+    void livestreamChatSetting()
+    {
+        QVERIFY(!m_app->videoChat());
+        QCOMPARE(m_app->videoChatLook(), QStringLiteral("clean"));
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("videoChatChoice") != nullptr);
+        QVERIFY(item("videoChatLookChoice") == nullptr || !item("videoChatLookChoice")->isVisible());   // only once it is on
+        m_app->setVideoChat(true);
+        QTRY_VERIFY(item("videoChatLookChoice") != nullptr && item("videoChatLookChoice")->isVisible());
+        QTest::qWait(150);   // the new row has just appeared: let the page lay out before clicking in it
+        QVERIFY(click("choice_lively"));
+        QTRY_COMPARE(m_app->videoChatLook(), QStringLiteral("lively"));
+        m_app->setVideoChatLook(QStringLiteral("nonsense"));
+        QCOMPARE(m_app->videoChatLook(), QStringLiteral("clean"));
+        // Independent of the viewing style, and saved in this profile.
+        m_app->setVideoViewStyle(QStringLiteral("theater"));
+        QVERIFY(m_app->videoChat());
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QVERIFY(s.value(QStringLiteral("videoChat")).toBool());
+        QCOMPARE(s.value(QStringLiteral("videoChatLook")).toString(), QStringLiteral("clean"));
+        m_app->setVideoChat(false);
+        m_app->setVideoViewStyle(QStringLiteral("window"));
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // ChatGen.js is plain JavaScript run by the QML engine, so the same file is run here and checked:
+    // the chat is a pure function of (video, second), uses the movie page, and answers sensibly.
+    void chatEngine()
+    {
+        QFile f(QStringLiteral(":/qml/ChatGen.js"));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QString src = QString::fromUtf8(f.readAll());
+        src.remove(QRegularExpression(QStringLiteral("^\\.pragma[^\\n]*\\n")));
+        QJSEngine js;
+        const QJSValue ok = js.evaluate(src);
+        QVERIFY2(!ok.isError(), qPrintable(ok.toString()));
+        // The checks themselves are plain JavaScript in tests/chat_engine_check.js, run inside the same engine.
+        QFile check(QStringLiteral(HOPTUNES_TEST_DIR "/chat_engine_check.js"));
+        QVERIFY(check.open(QIODevice::ReadOnly));
+        const QJSValue r = js.evaluate(QString::fromUtf8(check.readAll()), check.fileName());
+        QVERIFY2(!r.isError(), qPrintable(r.toString()));
+        QVERIFY(r.property("same").toBool());
+        QVERIFY(r.property("differs").toBool());
+        QVERIFY(r.property("ordered").toBool());
+        QCOMPARE(r.property("bad").toInt(), 0);
+        QVERIFY2(r.property("total").toInt() > 150, "the chat should be lively enough");
+        QVERIFY2(r.property("movie").toInt() > 15, "some lines should use the movie page");
+        QCOMPARE(r.property("invented").toInt(), 0);
+        QVERIFY(r.property("director").toBool());
+        QVERIFY(r.property("year").toBool());
+        QVERIFY(r.property("noDirector").toBool());
+        QVERIFY(r.property("mentionsUser").toBool());
+        QVERIFY(r.property("delays").toBool());
+        QVERIFY(r.property("count").toBool());
+        QVERIFY(r.property("esc").toBool());
+        QVERIFY(r.property("parts").toBool());
     }
 
     // Pictures (and the other new sections) have their own folder list and their own

@@ -352,7 +352,10 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
+    m_videoChat = s.value(QStringLiteral("videoChat")).toBool(false);
+    m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
     m_loadingSettings = false;
+    emit videoChatChanged();
     emit videoViewStyleChanged();
     emit appearanceChanged();
     const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
@@ -418,6 +421,9 @@ void App::leaveProfile()
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
+    m_videoChat = false;
+    m_videoChatLook = QStringLiteral("clean");
+    emit videoChatChanged();
     emit videoViewStyleChanged();
     emit appearanceChanged();
     m_folders.clear();
@@ -447,6 +453,8 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("videoChat"), m_videoChat);
+    s.insert(QStringLiteral("videoChatLook"), m_videoChatLook);
     m_store.saveSettings(m_profileId, s);
 }
 
@@ -890,6 +898,23 @@ void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
     if (row < 0 || row >= m_videos.count()) return;
     saveVideoProgress(positionMs, durationMs);
     openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::setVideoChat(bool on)
+{
+    if (on == m_videoChat) return;
+    m_videoChat = on;
+    saveProfileSettings();
+    emit videoChatChanged();
+}
+
+void App::setVideoChatLook(const QString &look)
+{
+    const QString l = look == QLatin1String("lively") ? look : QStringLiteral("clean");
+    if (l == m_videoChatLook) return;
+    m_videoChatLook = l;
+    saveProfileSettings();
+    emit videoChatChanged();
 }
 
 void App::setVideoViewStyle(const QString &style)

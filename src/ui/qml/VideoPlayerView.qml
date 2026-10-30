@@ -37,6 +37,10 @@ Rectangle {
                 readonly property bool wide: width >= 980            // room for the up-next list
                 readonly property int sideW: wide ? Math.min(360, Math.round(width * 0.27)) : 0
 
+                // The pretend live chat (settings › video settings): shown beside the video, or over it in fullscreen.
+                property bool chatOn: hop.videoChat
+                readonly property bool chatFits: full ? width >= 700 : sideW > 0
+
                 function setStyle(s) {
                     if (s === style) return
                     if (s === "fullscreen") styleBeforeFullscreen = style
@@ -67,7 +71,7 @@ Rectangle {
                     : Math.max(320, Math.min(width - 2 * margin - (sideW > 0 ? sideW + margin : 0),
                                               (availH - 150) * 16 / 9))
                 readonly property real frameH: full ? height
-                    : style === "theater" ? Math.min(width * 9 / 16, availH * 0.66)
+                    : style === "theater" ? Math.min(width * 9 / 16, availH * (chatOn && chatFits ? 0.55 : 0.66))
                     : frameW * 9 / 16
                 readonly property real frameX: full ? 0 : style === "theater" ? 0 : margin
                 readonly property real frameY: full ? 0 : headerH
@@ -113,6 +117,7 @@ Rectangle {
                     page.wake()
                     if (e.key === Qt.Key_F) { setStyle(full ? (styleBeforeFullscreen === "fullscreen" ? "window" : styleBeforeFullscreen) : "fullscreen"); e.accepted = true }
                     else if (e.key === Qt.Key_T) { setStyle(style === "theater" ? "window" : "theater"); e.accepted = true }
+                    else if (e.key === Qt.Key_C) { chatOn = !chatOn; e.accepted = true }
                     else if (e.key === Qt.Key_Escape) { stepBack(); e.accepted = true }
                     else if (e.key === Qt.Key_Space) { surface.togglePause(); e.accepted = true }
                     else e.accepted = false
@@ -197,6 +202,8 @@ Rectangle {
                         anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
                         onPositionChanged: page.wake(); z: 100
                     }
+                    // Clicking the picture hands the keyboard back to the player (f, t, c, space, esc).
+                    TapHandler { onTapped: page.forceActiveFocus() }
 
                     // Fullscreen only: the title and back button float over the picture.
                     RowLayout {
@@ -284,6 +291,17 @@ Rectangle {
                                     background: Rectangle { radius: 6; color: Theme.fade(0.5) }
                                     contentItem: Label { text: "CC"; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                                          font { family: Theme.font; pixelSize: 13; weight: Font.Medium } }
+                                }
+                                AbstractButton {
+                                    objectName: "videoChatToggle"
+                                    implicitWidth: 64; implicitHeight: 32
+                                    onClicked: page.chatOn = !page.chatOn
+                                    Accessible.name: "live chat"
+                                    ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: "pretend live chat (c)"
+                                    background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.chatOn ? 1 : 0; color: hop.accent } }
+                                    contentItem: Label { text: "chat"; color: page.chatOn ? hop.accent : "white"
+                                                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                                         font { family: Theme.font; pixelSize: 13 } }
                                 }
                                 AbstractButton {
                                     id: theaterBtn
@@ -416,7 +434,7 @@ Rectangle {
                 // up next: the rest of the library
                 Rectangle {
                     id: side
-                    visible: !page.full && page.sideW > 0
+                    visible: !page.full && page.sideW > 0 && !page.chatOn
                     x: page.width - page.sideW - page.margin
                     y: page.style === "theater" ? page.belowY : page.headerH
                     width: page.sideW
@@ -473,6 +491,26 @@ Rectangle {
                             }
                         }
                     }
+                }
+
+                // The pretend live chat: beside the video in window and theater, over it in fullscreen.
+                LiveChat {
+                    id: chat
+                    objectName: "liveChat"
+                    visible: page.chatOn && page.chatFits
+                    overlay: page.full
+                    onLeaveRequested: page.forceActiveFocus()
+                    look: hop.videoChatLook
+                    seed: hop.videoPlayerPath
+                    info: page.info
+                    position: page.surface.position
+                    duration: page.surface.duration
+                    x: page.full ? page.width - 360 : page.width - page.sideW - page.margin
+                    y: page.full ? 80 : (page.style === "theater" ? page.belowY : page.headerH)
+                    width: page.full ? 340 : page.sideW
+                    height: page.full ? Math.max(0, page.height - y - 130) : Math.max(0, page.height - y - page.margin)
+                    opacity: page.full && page.idle ? 0.55 : 1.0
+                    z: 50
                 }
             }
         }
