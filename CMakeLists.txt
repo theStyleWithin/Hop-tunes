@@ -22,7 +22,7 @@ endif()
 option(HOPTUNES_BUILD_APP   "Build the desktop application" ON)
 option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui Network)
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)   # EpubBook unzips the book itself
 pkg_check_modules(TAGLIB  REQUIRED IMPORTED_TARGET taglib)
@@ -51,9 +51,10 @@ add_library(hoptunes_core STATIC
     src/library/SectionListModel.h src/library/SectionListModel.cpp
     src/library/EpubBook.h    src/library/EpubBook.cpp
     src/library/ShareAuth.h   src/library/ShareAuth.cpp
+    src/library/ShareServer.h src/library/ShareServer.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
-target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
+target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent Qt6::Network PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
@@ -167,7 +168,7 @@ if(HOPTUNES_BUILD_TESTS)
     add_test(NAME playlists-search-dj COMMAND test_m4)
 
     add_executable(test_share tests/test_share.cpp)
-    target_link_libraries(test_share PRIVATE hoptunes_core Qt6::Test)
+    target_link_libraries(test_share PRIVATE hoptunes_core Qt6::Test Qt6::Network)
     add_test(NAME share COMMAND test_share)
 
     add_executable(test_player tests/test_player.cpp)

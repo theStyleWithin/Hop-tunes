@@ -142,7 +142,7 @@ bool ProfileDb::migrate()
         // v9: library sharing: the people allowed to connect, and what each may see (default: nothing).
         const bool ok = exec("BEGIN")
             && exec("CREATE TABLE share_guest (id INTEGER PRIMARY KEY, name TEXT NOT NULL, "
-                    "key_hash TEXT NOT NULL UNIQUE, created INTEGER NOT NULL DEFAULT 0)")
+                    "secret TEXT NOT NULL UNIQUE, created INTEGER NOT NULL DEFAULT 0)")
             && exec("CREATE TABLE share_grant (guest_id INTEGER NOT NULL, path TEXT NOT NULL, "
                     "PRIMARY KEY (guest_id, path))")
             && exec("PRAGMA user_version=9")
@@ -425,11 +425,11 @@ bool ProfileDb::setVideoMeta(const QString &videoPath, const QString &json)
 
 // ---- library sharing ----------------------------------------------------------------
 
-qint64 ProfileDb::addShareGuest(const QString &name, const QString &keyHash, qint64 created)
+qint64 ProfileDb::addShareGuest(const QString &name, const QString &secretHex, qint64 created)
 {
-    if (!m_db || keyHash.isEmpty()) return 0;
-    Stmt s(m_db, "INSERT INTO share_guest(name, key_hash, created) VALUES(?1, ?2, ?3)");
-    s.bind(1, name.left(60)); s.bind(2, keyHash); s.bind(3, created);
+    if (!m_db || secretHex.size() != 64) return 0;
+    Stmt s(m_db, "INSERT INTO share_guest(name, secret, created) VALUES(?1, ?2, ?3)");
+    s.bind(1, name.left(60)); s.bind(2, secretHex); s.bind(3, created);
     return s.run() ? sqlite3_last_insert_rowid(m_db) : 0;
 }
 
@@ -453,12 +453,12 @@ bool ProfileDb::removeShareGuest(qint64 id)
     return s.run();
 }
 
-qint64 ProfileDb::shareGuestByKeyHash(const QString &keyHash) const
+QByteArray ProfileDb::shareGuestSecret(qint64 id) const
 {
-    if (!m_db || keyHash.isEmpty()) return 0;
-    Stmt s(m_db, "SELECT id FROM share_guest WHERE key_hash = ?1");
-    s.bind(1, keyHash);
-    return s.step() == SQLITE_ROW ? s.i64(0) : 0;
+    if (!m_db || id <= 0) return {};
+    Stmt s(m_db, "SELECT secret FROM share_guest WHERE id = ?1");
+    s.bind(1, id);
+    return s.step() == SQLITE_ROW ? QByteArray::fromHex(s.str(0).toLatin1()) : QByteArray();
 }
 
 bool ProfileDb::setShareGrants(qint64 guestId, const QStringList &paths, bool granted)

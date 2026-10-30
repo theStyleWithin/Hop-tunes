@@ -33,47 +33,54 @@ QString ShareAuth::normalizeCode(const QString &code)
     return out;
 }
 
-QString ShareAuth::hashKey(const QString &key)
+QByteArray ShareAuth::secretFromCode(const QString &code)
 {
-    return QString::fromLatin1(QCryptographicHash::hash(key.toUtf8(), QCryptographicHash::Sha256).toHex());
+    return QCryptographicHash::hash(QByteArray("hop-tunes share invite ") + normalizeCode(code).toUtf8(),
+                                    QCryptographicHash::Sha256);
 }
 
 QString ShareAuth::createInvite(qint64 ttlSecs, qint64 now)
 {
     // forget invites that ran out, so the list cannot grow
     for (auto it = m_invites.begin(); it != m_invites.end();)
-        it = it.value() <= now ? m_invites.erase(it) : std::next(it);
+        it = it.value().expires <= now ? m_invites.erase(it) : std::next(it);
     QString code;
-    do { code = randomCode(); } while (m_invites.contains(code));
-    m_invites.insert(code, now + std::clamp(ttlSecs, kMinTtl, kMaxTtl));
-    return code;
+    do { code = randomCode(); } while (m_invites.contains(code.left(kLabelLength)));
+    m_invites.insert(code.left(kLabelLength), Invite{code, now + std::clamp(ttlSecs, kMinTtl, kMaxTtl), 0});
+    QString shown;
+    for (int i = 0; i < code.size(); i += 4) shown += (i ? QStringLiteral("-") : QString()) + code.mid(i, 4);
+    return shown;
 }
 
-QString ShareAuth::redeem(const QString &code, const QString &guestName, qint64 now)
+QByteArray ShareAuth::inviteSecret(const QString &label, qint64 now) const
 {
-    const QString c = normalizeCode(code);
-    const auto it = m_invites.constFind(c);
-    if (it == m_invites.constEnd() || it.value() <= now) {
-        if (it != m_invites.constEnd()) m_invites.remove(c);
-        if (++m_misses >= kMaxMisses) { m_invites.clear(); m_misses = 0; }   // guessing stops here
-        return {};
-    }
-    m_invites.remove(c);   // one use only
-    m_misses = 0;
+    const auto it = m_invites.constFind(label.toUpper());
+    if (it == m_invites.constEnd() || it.value().expires <= now) return {};
+    return secretFromCode(it.value().code);
+}
+
+void ShareAuth::noteInviteMiss(const QString &label)
+{
+    const auto it = m_invites.find(label.toUpper());
+    if (it == m_invites.end()) return;
+    if (++it.value().misses >= kMaxMisses) m_invites.erase(it);   // guessing stops here
+}
+
+QString ShareAuth::redeemInvite(const QString &label, const QString &guestName, qint64 now, qint64 *guestId)
+{
+    const auto it = m_invites.constFind(label.toUpper());
+    if (it == m_invites.constEnd() || it.value().expires <= now) return {};
+    m_invites.erase(it);   // one use only
     QByteArray raw(32, 0);
     for (int i = 0; i < raw.size(); ++i) raw[i] = char(QRandomGenerator::system()->bounded(256));
     const QString key = QString::fromLatin1(raw.toHex());
-    if (!m_db.addShareGuest(guestName.simplified().isEmpty() ? QStringLiteral("guest") : guestName.simplified(),
-                            hashKey(key), now))
-        return {};
-    return key;
+    const QString name = guestName.simplified().isEmpty() ? QStringLiteral("guest") : guestName.simplified();
+    const qint64 id = m_db.addShareGuest(name, key, now);
+    if (guestId) *guestId = id;
+    return id ? key : QString();
 }
 
-qint64 ShareAuth::authenticate(const QString &key) const
-{
-    if (key.size() != 64) return 0;
-    return m_db.shareGuestByKeyHash(hashKey(key));
-}
+QByteArray ShareAuth::guestSecret(qint64 guestId) const { return m_db.shareGuestSecret(guestId); }
 
 bool ShareAuth::removeGuest(qint64 guestId) { return m_db.removeShareGuest(guestId); }
 
