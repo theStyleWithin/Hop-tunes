@@ -1123,6 +1123,7 @@ private slots:
         // the steps, with this computer's real port in them
         QVERIFY(click("netHelpToggle"));
         QTRY_VERIFY(item("netHelp") != nullptr && item("netHelp")->isVisible());
+        ensureVisible(item("netHelp"));
         shot("sharing-outside");
         QVERIFY(click("choice_home"));
         QTRY_VERIFY(!m_app->sharingInternet());
