@@ -129,7 +129,7 @@ Item {
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
             Item { Layout.fillWidth: true }
-            ProfileChip { avatarSize: 36 }
+            ProfileChip { avatarSize: 30 }
             Shortcut { sequences: ["Ctrl+F", "/"]; enabled: hop.profileReady && search.visible; onActivated: { root.mode = root.mode === "playlists" ? "songs" : root.mode; search.forceActiveFocus(); search.selectAll() } }
         }
 
