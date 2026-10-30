@@ -632,6 +632,22 @@ Item {
                 }
             }
 
+            RowLayout {
+                spacing: 16
+                Label { text: "watch party"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140; Layout.topMargin: 6 }
+                Choice {
+                    objectName: "partyChoice"
+                    options: [["partyoff", "off"], ["partyon", "on"]]
+                    value: hop.partyHosting ? "partyon" : "partyoff"
+                    onPicked: function (v) { hop.partyHosting = (v === "partyon") }
+                }
+            }
+            Label {
+                text: "when on, a guest who may see the film you are playing can join and watch it in step with you: your pausing and seeking carry over. it is off again the next time sharing starts."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 13 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+
             Label { text: "invite someone"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 6  }
             RowLayout {
                 spacing: 16

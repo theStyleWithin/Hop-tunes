@@ -27,7 +27,9 @@
 #include <QSet>
 #include <QStringList>
 #include <QHash>
+#include <QElapsedTimer>
 #include <QTimer>
+#include "library/PartySync.h"
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -133,6 +135,9 @@ class App : public QObject {
     Q_PROPERTY(bool sharingInternet READ sharingInternet WRITE setSharingInternet NOTIFY sharingChanged)   // also accept connections from outside the home network (off whenever sharing starts)
     Q_PROPERTY(QString sharingPublicAddress READ sharingPublicAddress WRITE setSharingPublicAddress NOTIFY sharingChanged)   // what guests outside should use in the invite
     Q_PROPERTY(QString sharingMessage READ sharingMessage NOTIFY sharingChanged)   // why sharing did not start, or ""
+    Q_PROPERTY(bool partyHosting READ partyHosting WRITE setPartyHosting NOTIFY sharingChanged)   // guests who may see the film you play follow along
+    Q_PROPERTY(QVariantMap sharedParty READ sharedParty NOTIFY sharedPartyChanged)   // {active, item, title}: what the host is watching
+    Q_PROPERTY(bool partyFollowing READ partyFollowing NOTIFY sharedPartyChanged)
     Q_PROPERTY(int sharingPort READ sharingPort NOTIFY sharingChanged)
     Q_PROPERTY(QStringList sharingAddresses READ sharingAddresses NOTIFY sharingChanged)   // this computer's home-network addresses
     // "Sharing mode" in the collection: tick what one guest may see. It exists only while sharing is on and there is a guest.
@@ -260,6 +265,11 @@ public:
     bool sharing() const { return bool(m_share); }
     void setSharing(bool on);
     static bool sharingAvailable() { return ShareServer::encryptionAvailable(); }
+    bool partyHosting() const { return m_share && m_partyHosting; }
+    void setPartyHosting(bool on);
+    PartyInfo partyNow() const;
+    QVariantMap sharedParty() const { return m_sharedParty; }
+    bool partyFollowing() const { return m_partyFollowing; }
     bool sharingInternet() const { return m_share && m_share->server.allowInternet(); }
     void setSharingInternet(bool on);
     QString sharingPublicAddress() const { return m_sharePublicAddress; }
@@ -387,6 +397,11 @@ public:
     // A one-time invite code for a new guest, valid for `hours` (between 10 minutes and a day): {code, link, hours}.
     Q_INVOKABLE QVariantMap makeShareInvite(double hours);
     Q_INVOKABLE void removeShareGuest(qint64 id);
+    // Party Watch. The host's player reports where it is about once a second; a guest's player asks what to do to stay with it.
+    Q_INVOKABLE void reportPlayback(qint64 positionMs, bool paused);
+    Q_INVOKABLE void setSharedWatching(bool on);   // the shared tab is on screen: look for a party now and then
+    Q_INVOKABLE void joinParty();
+    Q_INVOKABLE QVariantMap partyAdviceFor(qint64 localMs, bool localPaused) const;
     // The guest's side: join with an invite link (hop://address:port/CODE), browse a host, play what it approved.
     Q_INVOKABLE void joinShare(const QString &link);
     Q_INVOKABLE void openSharedHost(qint64 id);
@@ -394,7 +409,7 @@ public:
     Q_INVOKABLE QString setSharedHostAddress(qint64 id, const QString &text);   // "address:port"; "" when it was taken, else why not
     Q_INVOKABLE void playShared(const QString &itemId);
     Q_INVOKABLE QString sharedStreamUrl(const QString &itemId);   // the local address a player can read this item from ("" if not possible)
-    void openRemoteVideo(const QString &key, const QString &url, const QString &title);
+    void openRemoteVideo(const QString &key, const QString &url, const QString &title, qint64 startMs = -1);
     // For the chosen guest: 0 none of these files approved, 1 some, 2 all. Toggle approves all of them, or (when all are) takes them back.
     Q_INVOKABLE int shareState(const QStringList &paths) const;
     Q_INVOKABLE void toggleShare(const QStringList &paths);
@@ -446,6 +461,7 @@ signals:
     void shareGuestsChanged();
     void sharedHostsChanged();
     void sharedLibraryChanged();
+    void sharedPartyChanged();
     void shareJoinChanged();
     void shareModeChanged();
     void shareRevisionChanged();
@@ -504,6 +520,21 @@ private:
     QString m_sharedStatus;
     QString m_shareJoinMessage;
     bool m_shareJoining = false;
+    bool m_partyHosting = false;
+    qint64 m_partyPos = 0;
+    bool m_partyPaused = false;
+    QString m_partyPath;
+    QElapsedTimer m_partyClock;
+    QVariantMap m_sharedParty;
+    bool m_partyFollowing = false, m_sharedWatching = false;
+    qint64 m_partyTargetMs = 0;
+    bool m_partyTargetPaused = false;
+    QElapsedTimer m_partyTargetClock;
+    QString m_partyItem;
+    int m_partyMisses = 0;
+    QTimer m_partyTimer;
+    void pollParty();
+    void updatePartyTimer();
     int m_shareGen = 0;   // bumped when the profile closes, so a late reply from a host is ignored
     QString m_sharePublicAddress;   // saved per profile (a name or number only the host knows)
     QString m_sharingMessage;

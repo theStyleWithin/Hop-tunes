@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Library sharing (docs/design-sharing.md): invites, guest keys, approvals, and the encrypted server.
 #include "library/ProfileDb.h"
+#include "library/PartySync.h"
 #include "library/ShareAuth.h"
 #include "library/ShareClient.h"
 #include "library/ShareServer.h"
@@ -335,6 +336,58 @@ private slots:
         QVERIFY(server.acceptsPeer(world) && server.acceptsPeer(world6) && server.acceptsPeer(home));
         server.setAllowInternet(false);
         QVERIFY(!server.acceptsPeer(world));
+    }
+
+    // ---- Party Watch ----
+    void aGuestFollowsTheHostWithoutStutter()
+    {
+        // close enough: leave it alone; far off: one jump; the host's pause or play is copied
+        PartyAdvice a = partyAdvice(10000, false, 10800, false);
+        QCOMPARE(a.seekTo, qint64(-1)); QCOMPARE(a.pause, -1);
+        a = partyAdvice(10000, false, 14000, false);
+        QCOMPARE(a.seekTo, qint64(14000));                         // behind: catch up
+        a = partyAdvice(20000, false, 14000, false);
+        QCOMPARE(a.seekTo, qint64(14000));                         // ahead: come back
+        a = partyAdvice(10000, false, 10000, true);
+        QCOMPARE(a.pause, 1); QCOMPARE(a.seekTo, qint64(-1));      // the host paused
+        a = partyAdvice(10000, true, 10000, false);
+        QCOMPARE(a.pause, 0);                                      // the host pressed play
+        a = partyAdvice(10600, true, 10000, true);
+        QCOMPARE(a.seekTo, qint64(10000));                         // both paused: land on the same frame
+        QCOMPARE(a.pause, -1);
+    }
+
+    void thePartyRouteOnlyNamesWhatAGuestMaySee()
+    {
+        if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
+        Rig r;
+        QVERIFY(r.ok());
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
+        const QByteArray gid = "guest:" + QByteArray::number(id);
+        const QString film = r.file(QStringLiteral("Secret Film.mkv"), QByteArray(100, 'x'));
+        PartyInfo info;
+        r.server.setPartyProvider([&] { return info; });
+        auto party = [&] { return ask(r.server.port(), gid, hex(key), get("/v1/party")); };
+
+        QCOMPARE(party().status, 200);
+        QVERIFY(!party().json().value("active").toBool());          // nobody is watching
+        info = PartyInfo{true, film, QStringLiteral("Secret Film"), 42000, false};
+        Reply p = party();
+        QVERIFY(p.json().value("active").toBool());
+        QCOMPARE(p.json().value("item").toString(), QString());     // active, but not for this guest: no name, no kind
+        QVERIFY(!p.body.contains("Secret"));
+        QVERIFY(r.db.setShareGrants(id, {film}, true));
+        p = party();
+        QCOMPARE(p.json().value("title").toString(), QStringLiteral("Secret Film"));
+        QCOMPARE(p.json().value("kind").toString(), QStringLiteral("video"));
+        QCOMPARE(p.json().value("position").toDouble(), 42000.0);
+        QVERIFY(!p.json().value("paused").toBool());
+        const QString item = p.json().value("item").toString();
+        QVERIFY(!item.isEmpty());
+        QVERIFY(!p.body.contains(r.dir.path().toUtf8()));           // never a path
+        QCOMPARE(ask(r.server.port(), gid, hex(key), get("/v1/stream/" + item.toLatin1(), "Range: bytes=0-4\r\n")).status, 206);   // and it is the same id the guest can stream
+        info.paused = true;
+        QVERIFY(party().json().value("paused").toBool());
     }
 
     void localAddresses()

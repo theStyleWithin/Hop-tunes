@@ -40,6 +40,7 @@ static const QChar kRefSep(0x1f);
 
 App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 {
+    connect(&m_partyTimer, &QTimer::timeout, this, &App::pollParty);
     m_scanner.setArtCacheDir(Paths::artCacheDir());
     connect(&m_scanner, &Scanner::started, this, &App::scanningChanged);
     connect(&m_scanner, &Scanner::progress, this, [this](int done, int total) {
@@ -425,6 +426,7 @@ void App::leaveProfile()
     ++m_shareGen;
     m_shareProxy.forgetAll();
     m_sharedHost = 0; m_sharedItems.clear(); m_sharedStatus.clear(); m_shareJoinMessage.clear(); m_shareJoining = false;
+    m_partyFollowing = false; m_sharedWatching = false; m_sharedParty = {}; m_partyTimer.stop();
     emit sharedHostsChanged(); emit sharedLibraryChanged(); emit shareJoinChanged();
     m_scanner.cancel();
     m_videoScanner.cancel();
@@ -1106,6 +1108,111 @@ void App::setVideoVolume(int percent)
     emit videoVolumeChanged();
 }
 
+static bool findHost(const ProfileDb &db, qint64 id, ShareHost *out);
+static ShareEndpoint endpointOf(const ShareHost &h);
+
+void App::setPartyHosting(bool on)
+{
+    if (!m_share || on == m_partyHosting) return;
+    m_partyHosting = on;
+    emit sharingChanged();
+}
+
+void App::reportPlayback(qint64 positionMs, bool paused)
+{
+    if (!m_partyHosting || m_videoPlayerPath.isEmpty() || m_videoPlayerPath.startsWith(QLatin1String("share:"))) return;
+    m_partyPos = positionMs; m_partyPaused = paused; m_partyPath = m_videoPlayerPath;
+    m_partyClock.restart();
+}
+
+PartyInfo App::partyNow() const
+{
+    PartyInfo p;
+    if (!m_partyHosting || !m_videoPlayerOpen || m_partyPath.isEmpty() || m_partyPath != m_videoPlayerPath || !m_partyClock.isValid()) return p;
+    p.active = true;
+    p.path = m_partyPath;
+    p.paused = m_partyPaused;
+    p.positionMs = m_partyPos + (m_partyPaused ? 0 : m_partyClock.elapsed());
+    p.title = videoPlayerTitle();
+    return p;
+}
+
+// ---- the guest's side of a party: look now and then, and follow when asked ----
+
+void App::setSharedWatching(bool on) { m_sharedWatching = on; updatePartyTimer(); if (on) pollParty(); }
+
+void App::updatePartyTimer()
+{
+    const bool run = m_sharedHost != 0 && (m_sharedWatching || m_partyFollowing);
+    m_partyTimer.setInterval(m_partyFollowing ? 1000 : 3000);
+    if (run && !m_partyTimer.isActive()) m_partyTimer.start();
+    else if (!run) m_partyTimer.stop();
+}
+
+void App::pollParty()
+{
+    ShareHost h;
+    if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h)) return;
+    const int gen = m_shareGen;
+    const qint64 id = h.id;
+    ShareClient::fetchJson(endpointOf(h), "GET", "/v1/party", {}, this, [this, gen, id, h](int status, const QJsonObject &o, const QString &) {
+        if (gen != m_shareGen || m_sharedHost != id) return;
+        if (status != 200) {
+            if (m_partyFollowing && ++m_partyMisses >= 4) { m_partyFollowing = false; updatePartyTimer(); }   // the host is gone
+            m_sharedParty = {};
+            emit sharedPartyChanged();
+            return;
+        }
+        m_partyMisses = 0;
+        const bool active = o.value("active").toBool();
+        const QString item = o.value("item").toString();
+        m_sharedParty = QVariantMap{{QStringLiteral("active"), active}, {QStringLiteral("item"), item}, {QStringLiteral("title"), o.value("title").toString()},
+                                    {QStringLiteral("host"), h.name}, {QStringLiteral("kind"), o.value("kind").toString()}};
+        if (m_partyFollowing) {
+            if (!active) { m_partyFollowing = false; updatePartyTimer(); }
+            else {
+                m_partyTargetMs = qint64(o.value("position").toDouble());
+                m_partyTargetPaused = o.value("paused").toBool();
+                m_partyTargetClock.restart();
+                if (!item.isEmpty() && item != m_partyItem && o.value("kind").toString() == QLatin1String("video")) {   // the host moved on to another film
+                    m_partyItem = item;
+                    openRemoteVideo(QStringLiteral("share:%1:%2").arg(id).arg(item), sharedStreamUrl(item), o.value("title").toString(), m_partyTargetMs);
+                }
+            }
+        }
+        emit sharedPartyChanged();
+    });
+}
+
+void App::joinParty()
+{
+    const QString item = m_sharedParty.value(QStringLiteral("item")).toString();
+    if (item.isEmpty() || m_sharedParty.value(QStringLiteral("kind")).toString() != QLatin1String("video")) return;
+    ShareHost h;
+    if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h)) return;
+    const int gen = m_shareGen;
+    ShareClient::fetchJson(endpointOf(h), "GET", "/v1/party", {}, this, [this, gen, h](int status, const QJsonObject &o, const QString &) {
+        if (gen != m_shareGen || status != 200 || !o.value("active").toBool() || o.value("item").toString().isEmpty()) return;
+        m_partyItem = o.value("item").toString();
+        m_partyTargetMs = qint64(o.value("position").toDouble());
+        m_partyTargetPaused = o.value("paused").toBool();
+        m_partyTargetClock.restart();
+        m_partyMisses = 0;
+        m_partyFollowing = true;
+        updatePartyTimer();
+        openRemoteVideo(QStringLiteral("share:%1:%2").arg(h.id).arg(m_partyItem), sharedStreamUrl(m_partyItem), o.value("title").toString(), m_partyTargetMs);
+        emit sharedPartyChanged();
+    });
+}
+
+QVariantMap App::partyAdviceFor(qint64 localMs, bool localPaused) const
+{
+    if (!m_partyFollowing) return {{QStringLiteral("seek"), -1}, {QStringLiteral("pause"), -1}};
+    const qint64 now = m_partyTargetMs + (m_partyTargetPaused ? 0 : m_partyTargetClock.elapsed());
+    const PartyAdvice a = partyAdvice(localMs, localPaused, now, m_partyTargetPaused);
+    return {{QStringLiteral("seek"), a.seekTo}, {QStringLiteral("pause"), a.pause}};
+}
+
 void App::setSharingInternet(bool on)
 {
     if (!m_share || on == m_share->server.allowInternet()) return;
@@ -1129,6 +1236,7 @@ void App::setSharing(bool on)
 {
     if (on == bool(m_share)) return;
     if (!on) {
+        m_partyHosting = false;
         m_share.reset();
         keepShareModeValid();
         emit sharingChanged();
@@ -1138,6 +1246,8 @@ void App::setSharing(bool on)
     if (m_guest || m_profileId.isEmpty() || !m_db.isOpen() || !sharingAvailable()) return;   // a guest keeps nothing, so shares nothing
     auto share = std::make_unique<Share>(m_db, profile().value(QStringLiteral("name")).toString());
     // tell the guest a song's title, artist, album and length, and a film's own title (what the host gave it)
+    share->server.setPartyProvider([this] { return partyNow(); });
+    m_partyHosting = false;   // every time sharing starts, nobody is following until the host says so
     share->lib.setDescriber([this](const QString &path, ShareItem &it) {
         const int row = m_libraryIndex.value(path, -1);
         if (row >= 0 && row < m_library.size()) {
@@ -1432,12 +1542,12 @@ void App::playShared(const QString &itemId)
     openRemoteVideo(QStringLiteral("share:%1:%2").arg(m_sharedHost).arg(itemId), url, title);
 }
 
-void App::openRemoteVideo(const QString &key, const QString &url, const QString &title)
+void App::openRemoteVideo(const QString &key, const QString &url, const QString &title, qint64 startMs)
 {
     m_videoPlayerPath = key;
     m_videoPlayerSource = url;
     m_videoPlayerRemoteTitle = title;
-    m_videoPlayerResumeMs = m_db.isOpen() ? m_db.videoProgress(key).positionMs : 0;
+    m_videoPlayerResumeMs = startMs >= 0 ? startMs : (m_db.isOpen() ? m_db.videoProgress(key).positionMs : 0);
     m_videoPlayerOpen = true;
     emit videoPlayerChanged(); emit myVideoCommentsChanged();
 }
@@ -1511,6 +1621,7 @@ void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)
 {
     saveVideoProgress(positionMs, durationMs);
     m_videoPlayerOpen = false;
+    if (m_partyFollowing) { m_partyFollowing = false; updatePartyTimer(); emit sharedPartyChanged(); }   // closing the player leaves the party
     m_videoPlayerPath.clear();
     m_videoPlayerSource.clear();
     m_videoPlayerRemoteTitle.clear();

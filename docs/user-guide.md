@@ -113,7 +113,8 @@ The **videos** tab has five sub sections: **movies, shows, cartoons** (western a
 * **Choose what they see:** once you have a guest, a **share** button appears in the collection. Turn it on, pick the guest at the top, and tick videos, albums or songs. Ticks are remembered. A guest sees only what is ticked; the rest does not exist for them.
 * **As a guest:** Settings › sharing › *join someone's library*: paste the link. A **shared** tab appears in the collection with what the host chose. Films, shows and songs play straight from the host.
 * **Away from home:** see [connecting from outside your home](party-watch-internet.md) for port forwarding and firewall steps.
-* **Not there yet (beta):** pictures, books and podcasts for guests, watching together in sync.
+* **Watch party:** switch *watch party* on in Settings › sharing, then play a film. A guest who may see it gets "[you] is watching …" with a *join the party* button and stays in step with your pausing and seeking.
+* **Not there yet (beta):** pictures, books and podcasts for guests, and a watch party for music.
 
 ## Comments under videos
 

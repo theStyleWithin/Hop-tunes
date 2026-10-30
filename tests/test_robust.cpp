@@ -363,6 +363,70 @@ private slots:
         app.closeVideoPlayer(0, 0);
         app.player()->setQueue({}, 0);
     }
+
+    // Party Watch from both ends (one app is host and guest of itself): the host reports where it is, an approved guest
+    // sees the party and may join it, and what the host does is passed on as advice to the guest's player.
+    void aWatchPartyIsFollowedInStep()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library");
+        App app;
+        QVERIFY(app.init());
+        if (!app.profileReady()) QCOMPARE(app.createProfile(QStringLiteral("Vid"), QStringLiteral("#7cc4ff"), {}, {}), QString());
+        const QString clip = m_home.filePath(QStringLiteral("party.mkv"));
+        QVERIFY(writeTestVideo(clip));
+        app.setSharing(true);
+        QVERIFY(app.sharing());
+        QVERIFY(!app.partyHosting());                                           // off whenever sharing starts
+
+        const QString link = QStringLiteral("hop://127.0.0.1:%1/%2").arg(app.sharingPort()).arg(app.makeShareInvite(1).value("code").toString());
+        app.joinShare(link);
+        QTRY_COMPARE_WITH_TIMEOUT(app.sharedHosts().size(), 1, 8000);
+
+        app.openFiles({clip});                                                  // the host plays a film
+        QVERIFY(app.videoPlayerOpen());
+        app.reportPlayback(5000, false);
+        QVERIFY(app.partyNow().positionMs == 0 && !app.partyNow().active);      // not hosting yet: nothing is reported
+        app.setPartyHosting(true);
+        app.reportPlayback(5000, false);
+        QVERIFY(app.partyNow().active);
+        QVERIFY(app.partyNow().positionMs >= 5000);
+        QTest::qWait(300);
+        QVERIFY(app.partyNow().positionMs >= 5250);                             // it keeps moving while playing
+        app.reportPlayback(8000, true);
+        QTest::qWait(200);
+        QCOMPARE(app.partyNow().positionMs, qint64(8000));                      // and stands still when paused
+
+        // the guest sees the party, but is not told what it is until approved
+        app.setSharedWatching(true);
+        QTRY_VERIFY_WITH_TIMEOUT(app.sharedParty().value("active").toBool(), 8000);
+        QVERIFY(app.sharedParty().value("item").toString().isEmpty());
+        app.setShareMode(true);
+        app.toggleShare({clip});
+        app.setShareMode(false);
+        QTRY_VERIFY_WITH_TIMEOUT(!app.sharedParty().value("item").toString().isEmpty(), 8000);
+        QCOMPARE(app.sharedParty().value("kind").toString(), QStringLiteral("video"));
+        QVERIFY(!app.partyFollowing());
+
+        // joining opens the film at the host's place and follows from then on
+        app.joinParty();
+        QTRY_VERIFY_WITH_TIMEOUT(app.partyFollowing(), 8000);
+        QVERIFY(app.videoPlayerPath().startsWith(QStringLiteral("share:")));
+        QVERIFY(app.videoPlayerSource().startsWith(QStringLiteral("http://127.0.0.1:")));
+        QCOMPARE(app.videoPlayerResumeMs(), qint64(8000));
+        QVariantMap adv = app.partyAdviceFor(0, false);                         // a guest at the start, playing; the host is paused at 8 s
+        QCOMPARE(adv.value("seek").toLongLong(), qint64(8000));
+        QCOMPARE(adv.value("pause").toInt(), 1);
+        adv = app.partyAdviceFor(8000, true);
+        QCOMPARE(adv.value("seek").toLongLong(), qint64(-1));                   // already there and paused: nothing to do
+        QCOMPARE(adv.value("pause").toInt(), -1);
+        app.closeVideoPlayer(0, 0);                                             // closing the player leaves the party
+        QVERIFY(!app.partyFollowing());
+        QCOMPARE(app.partyAdviceFor(0, false).value("seek").toLongLong(), qint64(-1));
+
+        app.setSharing(false);
+        QVERIFY(!app.partyHosting());
+        app.player()->setQueue({}, 0);
+    }
 };
 
 int main(int argc, char **argv)

@@ -73,6 +73,11 @@ QList<ShareItem> GrantLibrary::items(qint64 guestId) const
     return out;
 }
 
+QString GrantLibrary::idForPath(qint64 guestId, const QString &path) const
+{
+    return m_db.isShared(guestId, path) ? idFor(guestId, path) : QString();
+}
+
 QString GrantLibrary::pathFor(qint64 guestId, const QString &itemId) const
 {
     if (itemId.size() != 32) return {};
@@ -191,6 +196,17 @@ private:
                 items.append(QJsonObject{{"id", it.id}, {"title", it.title}, {"kind", it.kind}, {"size", double(it.size)},
                                          {"artist", it.artist}, {"album", it.album}, {"duration", double(it.durationMs)}, {"trackNo", it.trackNo}});
             json(200, QJsonObject{{"items", items}});
+        } else if (path == QLatin1String("/v1/party")) {
+            const PartyInfo p = m_server->m_party ? m_server->m_party() : PartyInfo{};
+            QJsonObject o{{"active", p.active}};
+            const QString item = p.active ? m_server->m_lib.idForPath(m_guestId, p.path) : QString();
+            if (p.active) {   // what the host is watching is only named to a guest who may see it
+                o.insert("item", item);
+                if (!item.isEmpty()) { o.insert("title", p.title); o.insert("kind", GrantLibrary::kindOf(p.path)); }
+                o.insert("position", double(p.positionMs));
+                o.insert("paused", p.paused);
+            }
+            json(200, o);
         } else if (path.startsWith(QLatin1String("/v1/stream/"))) {
             stream(path.mid(11), headers.value("range"), head);
         } else {

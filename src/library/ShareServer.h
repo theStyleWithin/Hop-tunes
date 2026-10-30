@@ -30,6 +30,15 @@ struct ShareItem {
     int trackNo = 0;
 };
 
+// What the host is watching right now, for guests who follow along (Party Watch).
+struct PartyInfo {
+    bool active = false;
+    QString path;          // the host's own file; a guest only ever hears about it if it is approved for them
+    QString title;
+    qint64 positionMs = 0;
+    bool paused = false;
+};
+
 // Where the server gets its library from. Only items the host approved for this guest are ever returned.
 class ShareLibrary {
 public:
@@ -37,6 +46,7 @@ public:
     virtual QString hostName() const = 0;
     virtual QList<ShareItem> items(qint64 guestId) const = 0;
     virtual QString pathFor(qint64 guestId, const QString &itemId) const = 0;   // empty when not approved / unknown
+    virtual QString idForPath(qint64, const QString &) const { return {}; }      // this guest's id for an approved file, else empty
 };
 
 // The simplest library: exactly the paths the host approved for the guest (the share_grant table), titled by file name.
@@ -46,6 +56,7 @@ public:
     QString hostName() const override { return m_host; }
     QList<ShareItem> items(qint64 guestId) const override;
     QString pathFor(qint64 guestId, const QString &itemId) const override;
+    QString idForPath(qint64 guestId, const QString &path) const override;
     static QString kindOf(const QString &path);
     // Lets the app say more about a file than its name (tags for music, the title the host gave a film).
     void setDescriber(std::function<void(const QString &path, ShareItem &item)> f) { m_describe = std::move(f); }
@@ -79,6 +90,7 @@ public:
     // False when encryption is not available on this machine (no TLS library) or the port is taken.
     bool start(quint16 port = 0, bool allowInternet = false);
     void stop();
+    void setPartyProvider(std::function<PartyInfo()> f) { m_party = std::move(f); }
     void setAllowInternet(bool on) { m_allowInternet = on; }   // otherwise only home-network addresses may connect
     bool allowInternet() const { return m_allowInternet; }
     bool isListening() const;
@@ -113,6 +125,7 @@ private:
     bool m_allowInternet = false;
     QHash<QSslSocket *, QString> m_identities;   // handshake identity per socket, to count failed invite attempts
     QList<ShareConnection *> m_conns;
+    std::function<PartyInfo()> m_party;
 };
 
 } // namespace hop

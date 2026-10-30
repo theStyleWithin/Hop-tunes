@@ -1083,6 +1083,27 @@ private slots:
         window()->setProperty("view", QStringLiteral("collection"));
     }
 
+    // The host's "watch party" switch: off to begin with, and off again whenever sharing starts.
+    void watchPartySwitch()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
+        m_app->setSharing(true);
+        QVERIFY(!m_app->partyHosting());
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("partyChoice") != nullptr);
+        QTest::qWait(150);
+        QVERIFY(click("choice_partyon"));
+        QTRY_VERIFY(m_app->partyHosting());
+        QVERIFY(click("choice_partyoff"));
+        QTRY_VERIFY(!m_app->partyHosting());
+        m_app->setPartyHosting(true);
+        m_app->setSharing(false);
+        m_app->setSharing(true);
+        QVERIFY(!m_app->partyHosting());
+        m_app->setSharing(false);
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
     // "Also from outside": off to begin with, the invite then carries the public address the host typed, and the steps
     // are there to read. (The address is cleaned so it can only ever be an address.)
     void sharingFromOutside()

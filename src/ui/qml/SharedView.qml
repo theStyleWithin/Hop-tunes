@@ -15,6 +15,7 @@ Item {
     }
     property string addressMsg: ""
 
+    onVisibleChanged: hop.setSharedWatching(visible)
     Component.onCompleted: if (hop.sharedHost === 0 && hop.sharedHosts.length > 0) hop.openSharedHost(hop.sharedHosts[0].id)
 
     RowLayout {
@@ -107,6 +108,25 @@ Item {
                     onClicked: hop.leaveSharedHost(hop.sharedHost)
                     contentItem: Label { text: "leave"; color: leaveBtn.hovered ? Theme.danger : Theme.muted; font { family: Theme.font; pixelSize: 14; underline: leaveBtn.hovered } }
                     background: Item {}
+                }
+            }
+            RowLayout {
+                objectName: "partyBanner"
+                visible: !!hop.sharedParty.active
+                spacing: 14
+                Label {
+                    text: (hop.sharedParty.host || "the host") + (hop.sharedParty.item ? " is watching " + hop.sharedParty.title : " is watching something that is not shared with you")
+                    color: Theme.text2; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.maximumWidth: 560
+                }
+                AbstractButton {
+                    id: joinParty
+                    objectName: "joinParty"
+                    visible: !!hop.sharedParty.item && !hop.partyFollowing
+                    hoverEnabled: true
+                    onClicked: hop.joinParty()
+                    contentItem: Label { text: "join the party"; color: joinParty.hovered ? Theme.ink : hop.accent; font { family: Theme.font; pixelSize: 15 }
+                                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { implicitHeight: 30; implicitWidth: 130; color: joinParty.hovered ? hop.accent : "transparent"; border { width: 1; color: hop.accent } }
                 }
             }
             Label { visible: root.addressMsg !== ""; text: root.addressMsg; color: Theme.danger; font { family: Theme.font; pixelSize: 14 } }

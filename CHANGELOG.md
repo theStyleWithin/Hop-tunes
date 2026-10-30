@@ -16,8 +16,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   (a key shared with each guest, no certificates and no accounts) and works on a home network.
   Connecting from outside your home is a switch ("also from outside", off by default) with a step-by-step guide
   (port forwarding and firewall) in the app and in `docs/party-watch-internet.md`.
-  *Beta: not yet there: pictures, books and podcasts for guests, watching together in sync, and connecting over
-  the internet.*
+  **Watch party:** switch *watch party* on (Settings › sharing) and a guest who may see the film you are playing sees
+  "[you] is watching …" in their shared tab with a *join the party* button. They get the film at your place, and
+  your pausing, playing and seeking carry over (a small drift is left alone; a bigger one is fixed with one jump).
+  If you move on to another film they follow; closing their player leaves the party. It is off every time sharing
+  starts, and a guest who may not see your film is never told what it is.
+  *Beta: not yet there: pictures, books and podcasts for guests, and a watch party for music.*
 
 ## [1.7.0] - 2026-10-30
 

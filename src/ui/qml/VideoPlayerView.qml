@@ -119,6 +119,21 @@ Rectangle {
                 readonly property var meta: info.meta || ({})
                 readonly property string shownTitle: (meta.title || "") !== "" ? meta.title : (info.fileName || hop.videoPlayerTitle)
 
+                // Party Watch: when hosting, tell the guests where we are; when following a host, stay with them
+                Timer {
+                    interval: 1000; repeat: true; running: hop.partyHosting && hop.videoPlayerOpen
+                    onTriggered: hop.reportPlayback(page.surface.position, page.surface.paused)
+                }
+                Connections { target: page.surface; ignoreUnknownSignals: true; function onPausedChanged() { if (hop.partyHosting) hop.reportPlayback(page.surface.position, page.surface.paused) } }
+                Timer {
+                    interval: 1000; repeat: true; running: hop.partyFollowing && hop.videoPlayerOpen
+                    onTriggered: {
+                        const a = hop.partyAdviceFor(page.surface.position, page.surface.paused)
+                        if (a.seek >= 0) page.surface.seek(a.seek)
+                        if (a.pause === 1 && !page.surface.paused) page.surface.pause()
+                        else if (a.pause === 0 && page.surface.paused) page.surface.play()
+                    }
+                }
                 Timer { id: idleTimer; interval: 3500; running: !page.surface.paused; onTriggered: page.idle = true }
                 Timer {
                     interval: 5000; running: !page.surface.paused; repeat: true
