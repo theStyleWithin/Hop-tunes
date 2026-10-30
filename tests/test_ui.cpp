@@ -735,6 +735,25 @@ private slots:
         QVERIFY(click("subTab_music"));
     }
 
+    // Settings › video settings: the default viewing style is per profile, validated, and chosen with a click.
+    void videoViewStyleSetting()
+    {
+        QCOMPARE(m_app->videoViewStyle(), QStringLiteral("window"));        // fullscreen is no longer the default
+        m_app->setVideoViewStyle(QStringLiteral("nonsense"));
+        QCOMPARE(m_app->videoViewStyle(), QStringLiteral("window"));
+        window()->setProperty("view", QStringLiteral("settings"));
+        QVERIFY(click("choice_theater"));
+        QCOMPARE(m_app->videoViewStyle(), QStringLiteral("theater"));
+        QVERIFY(click("choice_fullscreen"));
+        QCOMPARE(m_app->videoViewStyle(), QStringLiteral("fullscreen"));
+        // It is saved in this profile's settings.
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(s.value(QStringLiteral("videoViewStyle")).toString(), QStringLiteral("fullscreen"));
+        QVERIFY(click("choice_window"));
+        QCOMPARE(m_app->videoViewStyle(), QStringLiteral("window"));
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()

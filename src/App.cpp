@@ -350,7 +350,10 @@ void App::activate(const QString &id, bool guest)
     m_player.setShuffle(s.value(QStringLiteral("shuffle")).toBool(false));
     m_theme = s.value(QStringLiteral("theme")).toString(QStringLiteral("dark"));
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
+    m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
+    if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_loadingSettings = false;
+    emit videoViewStyleChanged();
     emit appearanceChanged();
     const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
     if (!m_db.open(dbPath) && !guest) {
@@ -414,6 +417,8 @@ void App::leaveProfile()
     m_guest = false;
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
+    m_videoViewStyle = QStringLiteral("window");
+    emit videoViewStyleChanged();
     emit appearanceChanged();
     m_folders.clear();
     m_videoFolders.clear();
@@ -441,6 +446,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("shuffle"), m_player.shuffle());
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
+    s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     m_store.saveSettings(m_profileId, s);
 }
 
@@ -879,6 +885,22 @@ void App::openVideoFile(const QString &path)
     emit videoPlayerChanged();
 }
 
+void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
+{
+    if (row < 0 || row >= m_videos.count()) return;
+    saveVideoProgress(positionMs, durationMs);
+    openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::setVideoViewStyle(const QString &style)
+{
+    const QString s = (style == QLatin1String("theater") || style == QLatin1String("fullscreen")) ? style : QStringLiteral("window");
+    if (s == m_videoViewStyle) return;
+    m_videoViewStyle = s;
+    saveProfileSettings();
+    emit videoViewStyleChanged();
+}
+
 void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)
 {
     saveVideoProgress(positionMs, durationMs);
@@ -926,30 +948,32 @@ int App::videoDetailRow() const
     return -1;
 }
 
-QVariantMap App::videoDetail() const
+QVariantMap App::buildVideoDetail(const QString &path) const
 {
     QVariantMap d;
-    const int row = videoDetailRow();
-    if (row < 0) return d;
-    const Video &v = m_videos.videos()[row];
+    if (path.isEmpty()) return d;
+    const QList<Video> &vs = m_videos.videos();
+    int row = -1;
+    for (int i = 0; i < vs.size(); ++i) if (vs[i].path == path) { row = i; break; }
+    const Video *v = row >= 0 ? &vs[row] : nullptr;   // a file opened from outside the library has no row
     d[QStringLiteral("row")] = row;
-    d[QStringLiteral("path")] = v.path;
-    d[QStringLiteral("fileName")] = v.displayTitle();
-    d[QStringLiteral("thumb")] = v.thumb.isEmpty() ? QString() : QUrl::fromLocalFile(v.thumb).toString();
-    d[QStringLiteral("customThumb")] = v.customThumb;
-    d[QStringLiteral("resolution")] = VideoListModel::resolutionBadge(v.width, v.height);
-    d[QStringLiteral("width")] = v.width;
-    d[QStringLiteral("height")] = v.height;
-    d[QStringLiteral("codec")] = v.codec.toUpper();
-    d[QStringLiteral("hdr")] = v.hdr;
-    d[QStringLiteral("container")] = v.container.toUpper();
-    d[QStringLiteral("length")] = v.durationMs > 0 ? hoursMinutes(v.durationMs) : QString();
-    d[QStringLiteral("size")] = SectionListModel::formatSize(v.size);
-    const VideoProgress p = m_db.isOpen() ? m_db.videoProgress(v.path) : VideoProgress{};
+    d[QStringLiteral("path")] = path;
+    d[QStringLiteral("fileName")] = v ? v->displayTitle() : QFileInfo(path).completeBaseName();
+    d[QStringLiteral("thumb")] = v && !v->thumb.isEmpty() ? QUrl::fromLocalFile(v->thumb).toString() : QString();
+    d[QStringLiteral("customThumb")] = v && v->customThumb;
+    d[QStringLiteral("resolution")] = v ? VideoListModel::resolutionBadge(v->width, v->height) : QString();
+    d[QStringLiteral("width")] = v ? v->width : 0;
+    d[QStringLiteral("height")] = v ? v->height : 0;
+    d[QStringLiteral("codec")] = v ? v->codec.toUpper() : QString();
+    d[QStringLiteral("hdr")] = v && v->hdr;
+    d[QStringLiteral("container")] = v ? v->container.toUpper() : QString();
+    d[QStringLiteral("length")] = v && v->durationMs > 0 ? hoursMinutes(v->durationMs) : QString();
+    d[QStringLiteral("size")] = v ? SectionListModel::formatSize(v->size) : QString();
+    const VideoProgress p = m_db.isOpen() ? m_db.videoProgress(path) : VideoProgress{};
     d[QStringLiteral("resumeText")] = p.positionMs > 0 ? TrackListModel::formatDuration(p.positionMs) : QString();
-    d[QStringLiteral("played")] = m_played.contains(v.path);
+    d[QStringLiteral("played")] = m_played.contains(path);
 
-    const QJsonObject mo = m_videoMeta.value(v.path);
+    const QJsonObject mo = m_videoMeta.value(path);
     QVariantMap meta;
     for (const QString &k : kVideoFields) meta[k] = mo.value(k).toString();
     d[QStringLiteral("meta")] = meta;
@@ -992,6 +1016,7 @@ void App::saveVideoMeta(const QString &path)
         m_db.setVideoMeta(path, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
     }
     emit videoDetailChanged();
+    if (path == m_videoPlayerPath) emit videoPlayerChanged();   // the player shows these details too
 }
 
 void App::setVideoField(const QString &key, const QString &value)

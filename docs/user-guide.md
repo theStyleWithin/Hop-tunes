@@ -84,6 +84,10 @@ media folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, 
 
 Click a movie in `collection → videos` to open its page; **nothing plays until you press play** (or "resume"). The page is a set of empty boxes for you to fill in (title, year, rating, score, tagline, description, genre, director, writers, studio, tags, and cast & crew with an optional photo each) plus "change poster" and "mark watched". Hop-tunes never looks anything up online; the only things it fills in itself are facts from the file (length, resolution, codec, size). It is saved in your profile.
 
+## Watching: window, theater, fullscreen
+
+Pick how video opens in **settings → video settings → viewing style**. **Window** (the default) shows the video with a list of your other videos beside it and the movie's details underneath; **theater** stretches the video across the window with the details below; **fullscreen** fills the screen. While watching, the "theater" and "fullscreen" buttons (or `t` and `f`) switch for the moment, `esc` steps back out of fullscreen, and `space` pauses. Clicking another video in the list switches to it and remembers where you were in the first.
+
 ## Videos have their own folders
 
 `collection → videos` can have its own folders, separate from your music. Until you add one,

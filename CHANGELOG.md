@@ -13,6 +13,13 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   Nothing is looked up or detected for you; only facts from the file itself are shown (length,
   resolution, codec, size). A title you type replaces the file name in the grid and the player.
   Everything is saved per profile and private to it. Finishing a movie marks it watched.
+- **Three ways to watch: window, theater and fullscreen**, and fullscreen is no longer the default.
+  *Window* shows the video with your other videos in an "up next" list beside it and the movie's
+  details (what you filled in on its page) underneath; *theater* stretches the video across the
+  window with the details and the list below it; *fullscreen* fills the screen. Switch while watching with
+  the "theater" and "fullscreen" buttons or the `t` and `f` keys (`esc` steps back, and `space` pauses).
+  Choose the one you start in under **settings › video settings › viewing style**; it is saved per
+  profile. Picking another video from the list switches to it, keeping your place in the first.
 
 ## [1.5.0] - 2026-10-30
 

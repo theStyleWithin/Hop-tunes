@@ -112,6 +112,10 @@ class App : public QObject {
     // The details page of one video (opened by clicking a tile; nothing plays until Play is pressed).
     Q_PROPERTY(int videoDetailRow READ videoDetailRow NOTIFY videoDetailChanged)       // -1 = not open
     Q_PROPERTY(QVariantMap videoDetail READ videoDetail NOTIFY videoDetailChanged)
+    // How video is shown: "window" (video with the movie's details and an up-next list), "theater" (a wide video
+    // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
+    Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
+    Q_PROPERTY(QVariantMap videoPlayerInfo READ videoPlayerInfo NOTIFY videoPlayerChanged)   // the playing video's page (as videoDetail)
     Q_PROPERTY(bool videoPlayerOpen READ videoPlayerOpen NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerPath READ videoPlayerPath NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerTitle READ videoPlayerTitle NOTIFY videoPlayerChanged)
@@ -197,7 +201,10 @@ public:
     int videoScanTotal() const { return m_videoScanTotal; }
     bool videoPlayerOpen() const { return m_videoPlayerOpen; }
     int videoDetailRow() const;
-    QVariantMap videoDetail() const;
+    QVariantMap videoDetail() const { return buildVideoDetail(m_detailPath); }
+    QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
+    QString videoViewStyle() const { return m_videoViewStyle; }
+    void setVideoViewStyle(const QString &style);
     QString videoPlayerPath() const { return m_videoPlayerPath; }
     QString videoPlayerTitle() const;
     qint64 videoPlayerResumeMs() const { return m_videoPlayerResumeMs; }
@@ -300,7 +307,8 @@ public:
     Q_INVOKABLE QString setVideoThumb(int row, const QUrl &image);   // "" ok, else a message
     Q_INVOKABLE void clearVideoThumb(int row);                       // back to the detected frame
     Q_INVOKABLE void playVideo(int row);                                  // opens the player, resumes if we have a position
-    Q_INVOKABLE void closeVideoPlayer(qint64 positionMs, qint64 durationMs);  // saves resume position, closes
+    Q_INVOKABLE void closeVideoPlayer(qint64 positionMs, qint64 durationMs);
+    Q_INVOKABLE void switchVideo(int row, qint64 positionMs, qint64 durationMs);   // from the up-next list: saves this one, opens that  // saves resume position, closes
     Q_INVOKABLE void saveVideoProgress(qint64 positionMs, qint64 durationMs); // periodic save while playing
 
 signals:
@@ -324,6 +332,7 @@ signals:
     void videoScanProgressChanged();
     void videoPlayerChanged();
     void videoDetailChanged();
+    void videoViewStyleChanged();
 
 private:
     void reload();
@@ -359,6 +368,8 @@ private:
     QList<Track> m_library;                 // everything under the profile's folders
     QHash<QString, int> m_libraryIndex;     // path -> row in m_library
     Collection m_fullCollection;            // unfiltered, for quickplay
+    QVariantMap buildVideoDetail(const QString &path) const;
+    QString m_videoViewStyle = QStringLiteral("window");
     QString m_detailPath;                              // the video whose details page is open
     QHash<QString, QJsonObject> m_videoMeta;           // what this profile filled in per video, by path
     void saveVideoMeta(const QString &path);
