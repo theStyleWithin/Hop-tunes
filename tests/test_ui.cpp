@@ -1018,7 +1018,7 @@ private slots:
         const QByteArray label = ShareAuth::normalizeCode(code).left(4).toLatin1();
         GuestLink first(quint16(m_app->sharingPort()), "invite:" + label, ShareAuth::secretFromCode(code));
         QVERIFY(first.ok());
-        const QByteArray body = "{\"name\":\"Dad\"}";
+        const QByteArray body = "{\"name\":\"Guest A\"}";
         const QByteArray reply = first.request("POST /v1/redeem HTTP/1.1\r\nContent-Length: " + QByteArray::number(body.size()) + "\r\n\r\n" + body);
         const QString key = QString::fromLatin1(reply).section(QStringLiteral("\"key\":\""), 1).section(QLatin1Char('"'), 0, 0);
         const QString gid = QString::fromLatin1(reply).section(QStringLiteral("\"guest\":"), 1).section(QRegularExpression(QStringLiteral("[,}]")), 0, 0);
@@ -1037,29 +1037,34 @@ private slots:
         }
         QTRY_VERIFY(!item("shareGuestDot_0")->property("connected").toBool());
 
-        // choosing what the guest may see: nothing at first; a tick shows the movie to them, a second tick takes it back
+        // choosing what the guest may see happens in the collection, and only once there is a guest
         {
+            QVERIFY(m_app->canChooseShares());
+            window()->setProperty("view", QStringLiteral("collection"));
+            QVERIFY(click("subTab_videos"));
+            QTRY_VERIFY(item("shareModeToggle") != nullptr && item("shareModeToggle")->isVisible());
+            QVERIFY(!m_app->shareMode());
+            QVERIFY(item("shareBar") == nullptr || !item("shareBar")->isVisible());
             GuestLink peek(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
             QVERIFY(peek.ok());
             QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"items\":[]"));   // the waiting room
-            QTest::qWait(150);
-            QVERIFY(click("chooseFor_0"));
-            QTRY_VERIFY(item("shareChoice_0") != nullptr && item("shareChoice_0")->isVisible());
-            QVERIFY(m_app->shareChoices()->count() >= 1);
-            QCOMPARE(m_app->shareChoices()->approvedCount(), 0);
-            shot("sharing-choose");
-            QVERIFY(click("shareChoice_0"));
-            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), 1);
-            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"title\""));  // now it is there
-            QVERIFY(click("shareChoice_0"));
-            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), 0);
+
+            QVERIFY(click("shareModeToggle"));
+            QTRY_VERIFY(m_app->shareMode());
+            QTRY_VERIFY(item("shareBar") != nullptr && item("shareBar")->isVisible());
+            QCOMPARE(m_app->shareTargetName(), QStringLiteral("Guest A"));
+            QTRY_VERIFY(item("shareTick") != nullptr && item("shareTick")->isVisible());   // a tick on the video tile
+            shot("sharing-mode");
+            QVERIFY(click("shareTick"));                                              // a tick shows it to the guest
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"title\""));
+            QVERIFY(click("shareTick"));                                              // a second tick takes it back
             QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"items\":[]"));
-            QVERIFY(click("approveShown"));
-            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), m_app->shareChoices()->count());
-            QVERIFY(click("hideShown"));
-            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), 0);
-            QVERIFY(click("closeChoices"));
-            QTRY_VERIFY(item("shareChoiceList") == nullptr || !item("shareChoiceList")->isVisible());
+
+            QVERIFY(click("shareDone"));
+            QTRY_VERIFY(!m_app->shareMode());
+            QTRY_VERIFY(item("shareTick") == nullptr || !item("shareTick")->isVisible());   // nothing changes when it is off
+            window()->setProperty("view", QStringLiteral("settings"));
+            QTRY_VERIFY(item("removeGuest_0") != nullptr && item("removeGuest_0")->isVisible());
         }
 
         QVERIFY(click("removeGuest_0"));

@@ -2,7 +2,6 @@
 // Library sharing (docs/design-sharing.md): invites, guest keys, approvals, and the encrypted server.
 #include "library/ProfileDb.h"
 #include "library/ShareAuth.h"
-#include "library/ShareChoiceModel.h"
 #include "library/ShareServer.h"
 
 #include <QHostAddress>
@@ -130,10 +129,10 @@ private slots:
         QCOMPARE(auth.inviteSecret(label.toLower(), 1100), ShareAuth::secretFromCode(code.toLower().remove(QLatin1Char('-'))));
         QVERIFY(auth.inviteSecret(label, 1000 + 3600).isEmpty());          // expired
         qint64 id = 0;
-        const QString key = auth.redeemInvite(label, QStringLiteral("  Dad  "), 1100, &id);
+        const QString key = auth.redeemInvite(label, QStringLiteral("  Guest A  "), 1100, &id);
         QCOMPARE(key.size(), 64);
         QVERIFY(id > 0);
-        QCOMPARE(db.shareGuests().first().name, QStringLiteral("Dad"));
+        QCOMPARE(db.shareGuests().first().name, QStringLiteral("Guest A"));
         QCOMPARE(auth.guestSecret(id), hex(key));
         QVERIFY(auth.inviteSecret(label, 1100).isEmpty());                  // used up
         QVERIFY(auth.redeemInvite(label, QStringLiteral("again"), 1200).isEmpty());
@@ -160,79 +159,32 @@ private slots:
     {
         QTemporaryDir dir;
         const QString file = dir.filePath(QStringLiteral("p.sqlite"));
-        qint64 dad = 0, mum = 0;
+        qint64 guestA = 0, guestB = 0;
         {
             ProfileDb db;
             QVERIFY(db.open(file));
             ShareAuth auth(db);
-            const QString dk = auth.redeemInvite(ShareAuth::normalizeCode(auth.createInvite(3600, 0)).left(4), QStringLiteral("Dad"), 1, &dad);
-            const QString mk = auth.redeemInvite(ShareAuth::normalizeCode(auth.createInvite(3600, 0)).left(4), QStringLiteral("Mum"), 2, &mum);
-            QVERIFY(!dk.isEmpty() && !mk.isEmpty() && dad != mum);
+            const QString keyA = auth.redeemInvite(ShareAuth::normalizeCode(auth.createInvite(3600, 0)).left(4), QStringLiteral("Guest A"), 1, &guestA);
+            const QString keyB = auth.redeemInvite(ShareAuth::normalizeCode(auth.createInvite(3600, 0)).left(4), QStringLiteral("Guest B"), 2, &guestB);
+            QVERIFY(!keyA.isEmpty() && !keyB.isEmpty() && guestA != guestB);
             const QString movie = QStringLiteral("/m/movie.mkv"), song = QStringLiteral("/m/song.mp3");
-            QVERIFY(!db.isShared(dad, movie) && db.shareGrants(dad).isEmpty());        // default: nothing
-            QVERIFY(db.setShareGrants(dad, {movie, song}, true));
-            QVERIFY(db.setShareGrants(dad, {movie}, true));                             // twice is harmless
-            QVERIFY(db.isShared(dad, movie) && db.isShared(dad, song) && !db.isShared(mum, movie));   // per guest
-            QVERIFY(db.setShareGrants(dad, {song}, false));
-            QVERIFY(!db.isShared(dad, song) && db.isShared(dad, movie));
+            QVERIFY(!db.isShared(guestA, movie) && db.shareGrants(guestA).isEmpty());        // default: nothing
+            QVERIFY(db.setShareGrants(guestA, {movie, song}, true));
+            QVERIFY(db.setShareGrants(guestA, {movie}, true));                             // twice is harmless
+            QVERIFY(db.isShared(guestA, movie) && db.isShared(guestA, song) && !db.isShared(guestB, movie));   // per guest
+            QVERIFY(db.setShareGrants(guestA, {song}, false));
+            QVERIFY(!db.isShared(guestA, song) && db.isShared(guestA, movie));
             QVERIFY(!db.isShared(0, movie));
         }
         ProfileDb db;
         QVERIFY(db.open(file));                                                         // remembered for the next visit
         ShareAuth auth(db);
-        QVERIFY(db.isShared(dad, QStringLiteral("/m/movie.mkv")));
-        QVERIFY(!auth.guestSecret(dad).isEmpty());
-        QVERIFY(auth.removeGuest(dad));
-        QVERIFY(auth.guestSecret(dad).isEmpty());                                       // the key stops working
-        QVERIFY(db.shareGrants(dad).isEmpty());                                         // and the approvals are gone
+        QVERIFY(db.isShared(guestA, QStringLiteral("/m/movie.mkv")));
+        QVERIFY(!auth.guestSecret(guestA).isEmpty());
+        QVERIFY(auth.removeGuest(guestA));
+        QVERIFY(auth.guestSecret(guestA).isEmpty());                                       // the key stops working
+        QVERIFY(db.shareGrants(guestA).isEmpty());                                         // and the approvals are gone
         QCOMPARE(db.shareGuests().size(), 1);
-    }
-
-    void choosingWhatAGuestMaySee()
-    {
-        QTemporaryDir dir;
-        ProfileDb db;
-        QVERIFY(db.open(dir.filePath(QStringLiteral("p.sqlite"))));
-        ShareAuth auth(db);
-        qint64 dad = 0;
-        QVERIFY(!auth.redeemInvite(ShareAuth::normalizeCode(auth.createInvite(3600, 0)).left(4), QStringLiteral("Dad"), 1, &dad).isEmpty());
-        ShareChoiceModel m(db);
-        const QList<ShareChoice> all{
-            {QStringLiteral("Alpha"), QString(), {QStringLiteral("/m/a.mkv")}},
-            {QStringLiteral("Beta"), QString(), {QStringLiteral("/m/b.mkv")}},
-            {QStringLiteral("Some Album"), QStringLiteral("An Artist · 3 songs"),
-             {QStringLiteral("/s/1.mp3"), QStringLiteral("/s/2.mp3"), QStringLiteral("/s/3.mp3")}}};
-        m.setChoices(dad, all);
-        QCOMPARE(m.count(), 3);
-        QCOMPARE(m.approvedCount(), 0);                                      // nothing approved to begin with
-        for (int i = 0; i < 3; ++i) QCOMPARE(m.index(i).data(ShareChoiceModel::StateRole).toInt(), 0);
-
-        m.toggle(2);                                                          // an album: all its songs at once
-        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 2);
-        QVERIFY(db.isShared(dad, QStringLiteral("/s/2.mp3")));
-        QVERIFY(db.setShareGrants(dad, {QStringLiteral("/s/2.mp3")}, false));   // one song taken back elsewhere
-        m.setChoices(dad, all);                                               // reload: shows as "partly"
-        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 1);
-        m.toggle(2);                                                          // partly -> everything
-        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 2);
-        m.toggle(2);                                                          // everything -> nothing
-        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 0);
-        QVERIFY(db.shareGrants(dad).isEmpty());
-
-        m.setFilter(QStringLiteral("alp"));                                   // the filter narrows what "all shown" means
-        QCOMPARE(m.count(), 1);
-        m.setShown(true);
-        QCOMPARE(db.shareGrants(dad), QSet<QString>{QStringLiteral("/m/a.mkv")});
-        m.setFilter(QString());
-        QCOMPARE(m.count(), 3);
-        QCOMPARE(m.approvedCount(), 1);
-        m.setShown(false);
-        QVERIFY(db.shareGrants(dad).isEmpty());
-
-        m.setChoices(0, all);                                                 // no guest: nothing can be approved
-        m.toggle(0);
-        m.setShown(true);
-        QVERIFY(db.shareGrants(dad).isEmpty());
     }
 
     void localAddresses()
@@ -261,7 +213,7 @@ private slots:
 
         const QString code2 = r.auth.createInvite(3600, QDateTime::currentSecsSinceEpoch());
         const QByteArray label2 = ShareAuth::normalizeCode(code2).left(4).toLatin1();
-        const QByteArray body = "{\"name\":\"Dad\"}";
+        const QByteArray body = "{\"name\":\"Guest A\"}";
         const Reply red = ask(r.server.port(), "invite:" + label2, ShareAuth::secretFromCode(code2),
                               "POST /v1/redeem HTTP/1.1\r\nContent-Length: " + QByteArray::number(body.size()) + "\r\n\r\n" + body);
         QCOMPARE(red.status, 200);
@@ -269,7 +221,7 @@ private slots:
         const QString key = red.json().value("key").toString();
         const qint64 id = qint64(red.json().value("guest").toDouble());
         QCOMPARE(key.size(), 64);
-        QCOMPARE(r.db.shareGuests().first().name, QStringLiteral("Dad"));
+        QCOMPARE(r.db.shareGuests().first().name, QStringLiteral("Guest A"));
 
         // the invite is used up
         QVERIFY(!ask(r.server.port(), "invite:" + label2, ShareAuth::secretFromCode(code2), get("/v1/hello")).connected);
@@ -286,7 +238,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         QVERIFY(id > 0);
         const QByteArray gid = "guest:" + QByteArray::number(id);
         QByteArray wrong = hex(key); wrong[0] = char(wrong[0] ^ 0x55);
@@ -316,8 +268,8 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
-        const auto [id2, key2] = r.join(QStringLiteral("Mum"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
+        const auto [id2, key2] = r.join(QStringLiteral("Guest B"));
         const QByteArray gid = "guest:" + QByteArray::number(id), gid2 = "guest:" + QByteArray::number(id2);
         const QString movie = r.file(QStringLiteral("Secret Movie.mkv"), QByteArray(1000, 'm'));
         const QString song = r.file(QStringLiteral("A Song.mp3"), QByteArray(500, 's'));
@@ -339,9 +291,9 @@ private slots:
         QVERIFY(ask(r.server.port(), gid2, hex(key2), get("/v1/library")).json().value("items").toArray().isEmpty());
         QVERIFY(r.db.setShareGrants(id2, {movie}, true));
         const QString id1 = items.first().toObject().value("id").toString();
-        const QString idOfMum = ask(r.server.port(), gid2, hex(key2), get("/v1/library")).json().value("items").toArray().first().toObject().value("id").toString();
-        QVERIFY(!idOfMum.isEmpty() && idOfMum != id1);
-        QCOMPARE(ask(r.server.port(), gid2, hex(key2), get("/v1/stream/" + id1.toLatin1())).status, 404);   // dad's id means nothing to mum
+        const QString idOfB = ask(r.server.port(), gid2, hex(key2), get("/v1/library")).json().value("items").toArray().first().toObject().value("id").toString();
+        QVERIFY(!idOfB.isEmpty() && idOfB != id1);
+        QCOMPARE(ask(r.server.port(), gid2, hex(key2), get("/v1/stream/" + id1.toLatin1())).status, 404);   // one guest's id means nothing to another
         // an unapproved file cannot be reached even by guessing: there are no paths, only ids
         QCOMPARE(ask(r.server.port(), gid, hex(key), get("/v1/stream/" + QByteArray(32, '0'))).status, 404);
         Q_UNUSED(song);
@@ -352,7 +304,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         const QByteArray gid = "guest:" + QByteArray::number(id);
         QByteArray data(300000, 0);
         for (int i = 0; i < data.size(); ++i) data[i] = char(i * 7);
@@ -389,7 +341,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         const QByteArray gid = "guest:" + QByteArray::number(id);
         const QString movie = r.file(QStringLiteral("m.mkv"), QByteArray(5000000, 'x'));
         QVERIFY(r.db.setShareGrants(id, {movie}, true));
@@ -410,7 +362,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         const QString movie = r.file(QStringLiteral("big.mkv"), QByteArray(40 * 1024 * 1024, 'x'));
         QVERIFY(r.db.setShareGrants(id, {movie}, true));
         const QByteArray gid = "guest:" + QByteArray::number(id);
@@ -443,7 +395,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         QVERIFY(r.server.connectedGuests().isEmpty());
         QSslConfiguration conf = QSslConfiguration::defaultConfiguration();
         conf.setProtocol(QSsl::TlsV1_2);
@@ -465,7 +417,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         const QByteArray gid = "guest:" + QByteArray::number(id);
         QCOMPARE(ask(r.server.port(), gid, hex(key), "GET /v1/hello HTTP/1.1\r\nX: " + QByteArray(40000, 'a') + "\r\n\r\n").status, 431);
         QCOMPARE(ask(r.server.port(), gid, hex(key), "POST /v1/hello HTTP/1.1\r\nContent-Length: 999999\r\n\r\n").status, 413);
@@ -477,7 +429,7 @@ private slots:
         if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
         Rig r;
         QVERIFY(r.ok());
-        const auto [id, key] = r.join(QStringLiteral("Dad"));
+        const auto [id, key] = r.join(QStringLiteral("Guest A"));
         const quint16 port = r.server.port();
         r.server.stop();
         QVERIFY(!r.server.isListening());

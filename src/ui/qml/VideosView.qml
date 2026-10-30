@@ -133,6 +133,7 @@ Item {
                 hoverEnabled: true
                 onClicked: hop.openVideoDetail(tile.index)
                 Accessible.name: title
+                ShareTick { x: 6; y: 6; paths: [tile.path] }
                 background: Item {}
                 contentItem: ColumnLayout {
                     spacing: 4

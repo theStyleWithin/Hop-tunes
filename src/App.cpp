@@ -1100,6 +1100,7 @@ void App::setSharing(bool on)
     if (on == bool(m_share)) return;
     if (!on) {
         m_share.reset();
+        keepShareModeValid();
         emit sharingChanged();
         emit shareGuestsChanged();
         return;
@@ -1109,7 +1110,7 @@ void App::setSharing(bool on)
     // a fixed port first, so a router's port forwarding can point at it later; any free one if that is taken
     if (!share->server.start(47800) && !share->server.start(0)) return;
     connect(&share->server, &ShareServer::connectedGuestsChanged, this, &App::shareGuestsChanged);
-    connect(&share->server, &ShareServer::inviteRedeemed, this, &App::shareGuestsChanged);
+    connect(&share->server, &ShareServer::inviteRedeemed, this, [this] { keepShareModeValid(); emit shareGuestsChanged(); });
     m_share = std::move(share);
     emit sharingChanged();
     emit shareGuestsChanged();
@@ -1149,30 +1150,62 @@ QVariantMap App::makeShareInvite(double hours)
             {QStringLiteral("hours"), hours}};
 }
 
-void App::openShareChoices(qint64 guestId, const QString &section)
+bool App::canChooseShares() const
 {
-    QList<ShareChoice> all;
-    if (m_share && !m_guest && m_db.isOpen() && guestId > 0) {
-        if (section == QLatin1String("music")) {
-            for (const Album &a : m_fullCollection.albums()) {
-                ShareChoice c;
-                c.title = a.title.isEmpty() ? tr("unknown album") : a.title;
-                c.subtitle = a.artist + QStringLiteral(" · ") + QString::number(a.trackRows.size())
-                           + (a.trackRows.size() == 1 ? QStringLiteral(" song") : QStringLiteral(" songs"));
-                for (int r : a.trackRows) if (r >= 0 && r < m_library.size()) c.paths << m_library[r].path;
-                if (!c.paths.isEmpty()) all << c;
-            }
-        } else if (videoCategories().contains(section)) {
-            for (const Video &v : m_videoIndex.videosUnder(allVideoFolders())) {
-                if (categoryOfVideo(v.path) != section) continue;
-                const QString mine = m_videoMeta.value(v.path).value(QStringLiteral("title")).toString();
-                all << ShareChoice{mine.isEmpty() ? v.displayTitle() : mine, QString(), {v.path}};
-            }
-            std::sort(all.begin(), all.end(), [](const ShareChoice &a, const ShareChoice &b) { return a.title.compare(b.title, Qt::CaseInsensitive) < 0; });
-        }
+    return m_share && !m_guest && m_db.isOpen() && !m_db.shareGuests().isEmpty();
+}
+
+void App::keepShareModeValid()
+{
+    const bool was = m_shareMode;
+    const qint64 oldTarget = m_shareTarget;
+    if (!canChooseShares()) { m_shareMode = false; m_shareTarget = 0; }
+    else {
+        bool found = false;
+        for (const ShareGuest &g : m_db.shareGuests()) if (g.id == m_shareTarget) found = true;
+        if (!found) m_shareTarget = m_db.shareGuests().first().id;
     }
-    m_shareChoices.setFilter(QString());
-    m_shareChoices.setChoices(m_share && !m_guest ? guestId : 0, all);
+    if (was != m_shareMode || oldTarget != m_shareTarget) emit shareModeChanged();
+}
+
+void App::setShareMode(bool on)
+{
+    if (on && !canChooseShares()) on = false;
+    if (on == m_shareMode) return;
+    m_shareMode = on;
+    if (on) keepShareModeValid();
+    emit shareModeChanged();
+}
+
+void App::setShareTarget(qint64 id)
+{
+    if (!canChooseShares() || id == m_shareTarget) return;
+    for (const ShareGuest &g : m_db.shareGuests())
+        if (g.id == id) { m_shareTarget = id; emit shareModeChanged(); emit shareRevisionChanged(); return; }
+}
+
+QString App::shareTargetName() const
+{
+    for (const ShareGuest &g : m_db.shareGuests()) if (g.id == m_shareTarget) return g.name;
+    return {};
+}
+
+int App::shareState(const QStringList &paths) const
+{
+    if (m_shareTarget <= 0 || paths.isEmpty() || !m_db.isOpen()) return 0;
+    const QSet<QString> have = m_db.shareGrants(m_shareTarget);
+    int in = 0;
+    for (const QString &p : paths) if (have.contains(p)) ++in;
+    return in == 0 ? 0 : in == paths.size() ? 2 : 1;
+}
+
+void App::toggleShare(const QStringList &paths)
+{
+    if (!m_shareMode || m_shareTarget <= 0 || paths.isEmpty()) return;
+    const bool approve = shareState(paths) != 2;
+    if (!m_db.setShareGrants(m_shareTarget, paths, approve)) return;
+    ++m_shareRevision;
+    emit shareRevisionChanged();
 }
 
 void App::removeShareGuest(qint64 id)
@@ -1180,6 +1213,7 @@ void App::removeShareGuest(qint64 id)
     if (!m_share) return;
     m_share->auth.removeGuest(id);
     m_share->server.kick(id);
+    keepShareModeValid();
     emit shareGuestsChanged();
 }
 

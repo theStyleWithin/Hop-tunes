@@ -9,7 +9,6 @@
 #include "library/SectionIndex.h"
 #include "library/SectionListModel.h"
 #include "library/ShareAuth.h"
-#include "library/ShareChoiceModel.h"
 #include "library/ShareServer.h"
 #include "library/SectionScanner.h"
 #include "library/Scanner.h"
@@ -132,7 +131,12 @@ class App : public QObject {
     Q_PROPERTY(bool sharingAvailable READ sharingAvailable CONSTANT)   // false when this computer has no TLS library
     Q_PROPERTY(int sharingPort READ sharingPort NOTIFY sharingChanged)
     Q_PROPERTY(QStringList sharingAddresses READ sharingAddresses NOTIFY sharingChanged)   // this computer's home-network addresses
-    Q_PROPERTY(hop::ShareChoiceModel *shareChoices READ shareChoices CONSTANT)   // what one guest may see: pick from it
+    // "Sharing mode" in the collection: tick what one guest may see. It exists only while sharing is on and there is a guest.
+    Q_PROPERTY(bool canChooseShares READ canChooseShares NOTIFY shareGuestsChanged)
+    Q_PROPERTY(bool shareMode READ shareMode WRITE setShareMode NOTIFY shareModeChanged)
+    Q_PROPERTY(qint64 shareTarget READ shareTarget WRITE setShareTarget NOTIFY shareModeChanged)   // the guest being chosen for
+    Q_PROPERTY(QString shareTargetName READ shareTargetName NOTIFY shareModeChanged)
+    Q_PROPERTY(int shareRevision READ shareRevision NOTIFY shareRevisionChanged)   // changes whenever a tick changes
     Q_PROPERTY(QVariantList shareGuests READ shareGuests NOTIFY shareGuestsChanged)   // [{id, name, connected}]
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
     Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
@@ -247,7 +251,13 @@ public:
     int sharingPort() const { return m_share ? m_share->server.port() : 0; }
     QStringList sharingAddresses() const;
     QVariantList shareGuests() const;
-    ShareChoiceModel *shareChoices() { return &m_shareChoices; }
+    bool canChooseShares() const;
+    bool shareMode() const { return m_shareMode; }
+    void setShareMode(bool on);
+    qint64 shareTarget() const { return m_shareTarget; }
+    void setShareTarget(qint64 id);
+    QString shareTargetName() const;
+    int shareRevision() const { return m_shareRevision; }
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
@@ -353,8 +363,9 @@ public:
     // A one-time invite code for a new guest, valid for `hours` (between 10 minutes and a day): {code, link, hours}.
     Q_INVOKABLE QVariantMap makeShareInvite(double hours);
     Q_INVOKABLE void removeShareGuest(qint64 id);
-    // Fill the choosing list for one guest and one section: "movies", "shows", "cartoons", "anime", "other" or "music".
-    Q_INVOKABLE void openShareChoices(qint64 guestId, const QString &section);
+    // For the chosen guest: 0 none of these files approved, 1 some, 2 all. Toggle approves all of them, or (when all are) takes them back.
+    Q_INVOKABLE int shareState(const QStringList &paths) const;
+    Q_INVOKABLE void toggleShare(const QStringList &paths);
     Q_INVOKABLE void addVideoCategoryFolder(const QString &category, const QUrl &folder);
     Q_INVOKABLE void removeVideoCategoryFolder(const QString &category, const QString &path);
     // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
@@ -401,6 +412,8 @@ signals:
     void videoChatChanged();
     void sharingChanged();
     void shareGuestsChanged();
+    void shareModeChanged();
+    void shareRevisionChanged();
     void statusNoteChanged();
     void videoVolumeChanged();
     void videoCommentsChanged();
@@ -451,7 +464,10 @@ private:
         ShareServer server;
     };
     std::unique_ptr<Share> m_share;
-    ShareChoiceModel m_shareChoices{m_db};
+    bool m_shareMode = false;
+    qint64 m_shareTarget = 0;
+    int m_shareRevision = 0;
+    void keepShareModeValid();   // sharing off or no guests: leave the mode; the chosen guest is removed: pick another
     QString m_statusNote;
     int m_videoVolume = 100;
     bool m_videoChat = false;
