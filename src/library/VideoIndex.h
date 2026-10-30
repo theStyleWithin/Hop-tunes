@@ -28,7 +28,7 @@ public:
     bool isOpen() const;
     QString lastError() const;
 
-    struct FileStamp { qint64 id; qint64 mtime; qint64 size; };
+    struct FileStamp { qint64 id; qint64 mtime; qint64 size; bool hasThumb; };
     QHash<QString, FileStamp> stampsUnder(const QString &folder) const;
     bool upsert(const QList<Video> &videos);   // one transaction
     bool removePaths(const QStringList &paths);

@@ -38,12 +38,16 @@ export QML_SOURCES_PATHS="$ROOT/src/ui/qml"
 export EXTRA_PLATFORM_PLUGINS="libqoffscreen.so;libqwayland-egl.so;libqwayland-generic.so"
 export EXTRA_QT_MODULES="waylandclient"
 
-# ---- GStreamer: bundle ONLY the audio plugins Hop-tunes uses (+ scanner) -----------------
+# ---- GStreamer: bundle ONLY the plugins Hop-tunes uses (+ scanner) -----------------------
 # Fewer plugins = smaller AppImage, fewer dependencies, fewer ways to break on odd systems.
+# The video* / avi / mpeg* entries at the end feed the video thumbnail grab
+# (VideoThumbnail.cpp: uridecodebin ! videoconvert ! videoscale ! appsink). Without them
+# gst_parse_launch fails and every tile is a blank placeholder.
 GST_PLUGINS="coreelements playback typefindfunctions audioconvert audioresample volume
   autodetect pulseaudio alsa app wavparse flac audioparsers id3demux apetag ogg vorbis opus
   isomp4 libav mpg123 wavpack asf matroska aiff equalizer replaygain spectrum level audiorate
-  audiofx scaletempo interleave"
+  audiofx scaletempo interleave
+  videoconvertscale videoconvert videoscale videoparsersbad avi mpegtsdemux mpegpsdemux"
 GST_CURATED=$(mktemp -d)
 for p in $GST_PLUGINS; do
   if [ -e "$ARCH_LIB/gstreamer-1.0/libgst$p.so" ]; then ln -s "$ARCH_LIB/gstreamer-1.0/libgst$p.so" "$GST_CURATED/"
