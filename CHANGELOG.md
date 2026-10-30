@@ -20,6 +20,22 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   the "theater" and "fullscreen" buttons or the `t` and `f` keys (`esc` steps back, and `space` pauses).
   Choose the one you start in under **settings › video settings › viewing style**; it is saved per
   profile. Picking another video from the list switches to it, keeping your place in the first.
+- **Livestream chat: a pretend live chat beside the video** (settings › video settings › livestream chat, off by
+  default; a separate switch from the viewing style, so it works with window, theater and fullscreen). Nothing is
+  streamed and nobody in it is real: the chatters are generated on your computer from the video and the second you
+  are at, so it is the same every time and seeking just recalculates it. They react to the details you filled in on the
+  movie's page (title, year, genre, director, cast and roles, studio, tagline, tags) and answer when you type: ask who
+  directed it and they tell you if the page says. They are friendly and generic ("sane mode"). Two looks, **clean**
+  (round avatars, plain text) and **lively** (colours, badges, emote chips). Toggle it while watching with the "chat"
+  button or `c`. Nothing is saved; the chat is marked as pretend.
+- **Livestream chat: a pretend live chat beside the video** (settings › video settings › livestream chat, off by
+  default; a separate switch from the viewing style, so it works with window, theater and fullscreen). Nothing is
+  streamed and nobody in it is real: the chatters are generated on your computer from the video and the second you
+  are at, so it is the same every time and seeking just recalculates it. They react to the details you filled in on the
+  movie's page (title, year, genre, director, cast and roles, studio, tagline, tags) and answer when you type: ask who
+  directed it and they tell you if the page says. They are friendly and generic ("sane mode"). Two looks, **clean**
+  (round avatars, plain text) and **lively** (colours, badges, emote chips). Toggle it while watching with the "chat"
+  button or `c`. Nothing is saved; the chat is marked as pretend.
 
 ## [1.5.0] - 2026-10-30
 

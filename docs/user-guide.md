@@ -88,6 +88,14 @@ Click a movie in `collection → videos` to open its page; **nothing plays until
 
 Pick how video opens in **settings → video settings → viewing style**. **Window** (the default) shows the video with a list of your other videos beside it and the movie's details underneath; **theater** stretches the video across the window with the details below; **fullscreen** fills the screen. While watching, the "theater" and "fullscreen" buttons (or `t` and `f`) switch for the moment, `esc` steps back out of fullscreen, and `space` pauses. Clicking another video in the list switches to it and remembers where you were in the first.
 
+## Livestream chat (a pretend live chat)
+
+Turn on **settings → video settings → livestream chat** for a chat beside the video, as if you were watching a stream. **Nothing is streamed and nobody in it is real**: the chatters are made up on your computer, the chat is the same every time you watch the same video at the same moment (so seeking just redraws it), and nothing is saved. They react to the details you filled in on the movie's page, and you can type to them: they answer, politely, using what the page says (ask who directed it and they will tell you if you filled it in). Choose the **clean** or **lively** look in the same place. While watching, `c` or the "chat" button shows and hides it; press `esc` once to leave the chat box, again to step back.
+
+## Livestream chat (a pretend live chat)
+
+Turn on **settings → video settings → livestream chat** for a chat beside the video, as if you were watching a stream. **Nothing is streamed and nobody in it is real**: the chatters are made up on your computer, the chat is the same every time you watch the same video at the same moment (so seeking just redraws it), and nothing is saved. They react to the details you filled in on the movie's page, and you can type to them: they answer, politely, using what the page says (ask who directed it and they will tell you if you filled it in). Choose the **clean** or **lively** look in the same place. While watching, `c` or the "chat" button shows and hides it; press `esc` once to leave the chat box, again to step back.
+
 ## Videos have their own folders
 
 `collection → videos` can have its own folders, separate from your music. Until you add one,

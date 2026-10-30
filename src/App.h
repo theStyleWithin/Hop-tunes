@@ -115,6 +115,9 @@ class App : public QObject {
     // How video is shown: "window" (video with the movie's details and an up-next list), "theater" (a wide video
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
+    // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
+    Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
+    Q_PROPERTY(QString videoChatLook READ videoChatLook WRITE setVideoChatLook NOTIFY videoChatChanged)   // "clean" | "lively"
     Q_PROPERTY(QVariantMap videoPlayerInfo READ videoPlayerInfo NOTIFY videoPlayerChanged)   // the playing video's page (as videoDetail)
     Q_PROPERTY(bool videoPlayerOpen READ videoPlayerOpen NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerPath READ videoPlayerPath NOTIFY videoPlayerChanged)
@@ -205,6 +208,10 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    bool videoChat() const { return m_videoChat; }
+    void setVideoChat(bool on);
+    QString videoChatLook() const { return m_videoChatLook; }
+    void setVideoChatLook(const QString &look);
     QString videoPlayerPath() const { return m_videoPlayerPath; }
     QString videoPlayerTitle() const;
     qint64 videoPlayerResumeMs() const { return m_videoPlayerResumeMs; }
@@ -333,6 +340,7 @@ signals:
     void videoPlayerChanged();
     void videoDetailChanged();
     void videoViewStyleChanged();
+    void videoChatChanged();
 
 private:
     void reload();
@@ -370,6 +378,8 @@ private:
     Collection m_fullCollection;            // unfiltered, for quickplay
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
+    bool m_videoChat = false;
+    QString m_videoChatLook = QStringLiteral("clean");
     QString m_detailPath;                              // the video whose details page is open
     QHash<QString, QJsonObject> m_videoMeta;           // what this profile filled in per video, by path
     void saveVideoMeta(const QString &path);

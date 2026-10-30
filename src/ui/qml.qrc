@@ -25,6 +25,8 @@
     <file>qml/VideosView.qml</file>
     <file>qml/SectionView.qml</file>
     <file>qml/VideoDetailView.qml</file>
+    <file>qml/LiveChat.qml</file>
+    <file>qml/ChatGen.js</file>
     <file>qml/DetailField.qml</file>
     <file>qml/DetailArea.qml</file>
     <file>qml/PictureViewer.qml</file>

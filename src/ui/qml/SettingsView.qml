@@ -265,8 +265,35 @@ Item {
             color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             wrapMode: Text.WordWrap; Layout.maximumWidth: 640
         }
+        RowLayout {
+            spacing: 16
+            Layout.topMargin: 8
+            Label { text: "livestream chat"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Choice {
+                objectName: "videoChatChoice"
+                options: [[false, "off"], [true, "on"]]
+                value: hop.videoChat
+                onPicked: function (v) { hop.videoChat = v }
+            }
+        }
+        RowLayout {
+            visible: hop.videoChat
+            spacing: 16
+            Label { text: "chat look"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Choice {
+                objectName: "videoChatLookChoice"
+                options: [["clean", "clean"], ["lively", "lively"]]
+                value: hop.videoChatLook
+                onPicked: function (v) { hop.videoChatLook = v }
+            }
+        }
         Label {
-            text: "while watching: t switches to theater, f to fullscreen, esc steps back."
+            text: "a pretend live chat beside the video, as if you were watching a stream. nothing is streamed and nobody in it is real: the chatters are generated on your computer, react to the details you filled in on the movie's page, and answer when you type. clean is plain and tidy; lively adds colours, badges and emote chips."
+            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+        }
+        Label {
+            text: "while watching: t switches to theater, f to fullscreen, c shows or hides the chat, esc steps back."
             color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
         }
 
