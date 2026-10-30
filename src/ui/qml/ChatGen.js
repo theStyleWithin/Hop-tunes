@@ -129,6 +129,12 @@ var MOVIE_LINES = [
     function (r, c) { return c.tags.length ? pick(r, [pick(r, c.tags).toLowerCase() + ' vibes', 'this has big ' + pick(r, c.tags).toLowerCase() + ' energy']) : ''; }
 ];
 
+// One line about this movie from the page, or '' when the page has nothing to say.
+function movieLine(r, c) {
+    for (var tries = 0; tries < 4; tries++) { var m = MOVIE_LINES[Math.floor(r() * MOVIE_LINES.length)](r, c); if (m) return m; }
+    return '';
+}
+
 function spam(r) { var e = ':' + pick(r, EMOTES) + ':'; var n = 2 + Math.floor(r() * 2), s = []; for (var i = 0; i < n; i++) s.push(e); return s.join(' '); }
 
 // One chat line. `at` is the position in the video in ms, `kind` is chosen by the caller.

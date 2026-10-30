@@ -356,6 +356,9 @@ void App::activate(const QString &id, bool guest)
     m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
     m_loadingSettings = false;
     emit videoChatChanged();
+    m_videoComments = [&] { const QString m = s.value(QStringLiteral("videoComments")).toString();
+                            return m == QLatin1String("mine") || m == QLatin1String("populated") ? m : QStringLiteral("off"); }();
+    emit videoCommentsChanged();
     emit videoViewStyleChanged();
     emit appearanceChanged();
     const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
@@ -424,6 +427,8 @@ void App::leaveProfile()
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
+    m_videoComments = QStringLiteral("off");
+    emit videoCommentsChanged();
     emit videoViewStyleChanged();
     emit appearanceChanged();
     m_folders.clear();
@@ -455,6 +460,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("videoChat"), m_videoChat);
     s.insert(QStringLiteral("videoChatLook"), m_videoChatLook);
+    s.insert(QStringLiteral("videoComments"), m_videoComments);
     m_store.saveSettings(m_profileId, s);
 }
 
@@ -890,7 +896,7 @@ void App::openVideoFile(const QString &path)
     m_videoPlayerPath = path;
     m_videoPlayerResumeMs = m_db.isOpen() ? m_db.videoProgress(path).positionMs : 0;
     m_videoPlayerOpen = true;
-    emit videoPlayerChanged();
+    emit videoPlayerChanged(); emit myVideoCommentsChanged();
 }
 
 void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
@@ -906,6 +912,36 @@ void App::setVideoChat(bool on)
     m_videoChat = on;
     saveProfileSettings();
     emit videoChatChanged();
+}
+
+void App::setVideoComments(const QString &mode)
+{
+    const QString m = mode == QLatin1String("mine") || mode == QLatin1String("populated") ? mode : QStringLiteral("off");
+    if (m == m_videoComments) return;
+    m_videoComments = m;
+    saveProfileSettings();
+    emit videoCommentsChanged();
+}
+
+QVariantList App::myVideoComments() const
+{
+    QVariantList out;
+    if (m_videoPlayerPath.isEmpty()) return out;
+    for (const VideoComment &c : m_db.videoComments(m_videoPlayerPath))
+        out.append(QVariantMap{{QStringLiteral("id"), c.id}, {QStringLiteral("text"), c.text}, {QStringLiteral("at"), c.at}});
+    return out;
+}
+
+void App::addVideoComment(const QString &text)
+{
+    const QString t = text.trimmed().left(500);
+    if (t.isEmpty() || m_videoPlayerPath.isEmpty() || m_videoComments == QLatin1String("off")) return;
+    if (m_db.addVideoComment(m_videoPlayerPath, t, QDateTime::currentMSecsSinceEpoch())) emit myVideoCommentsChanged();
+}
+
+void App::removeVideoComment(qint64 id)
+{
+    if (m_db.removeVideoComment(id)) emit myVideoCommentsChanged();
 }
 
 void App::setVideoChatLook(const QString &look)
@@ -931,7 +967,7 @@ void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)
     saveVideoProgress(positionMs, durationMs);
     m_videoPlayerOpen = false;
     m_videoPlayerPath.clear();
-    emit videoPlayerChanged();
+    emit videoPlayerChanged(); emit myVideoCommentsChanged();
 }
 
 void App::saveVideoProgress(qint64 positionMs, qint64 durationMs)

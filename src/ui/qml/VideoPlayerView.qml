@@ -357,6 +357,7 @@ Rectangle {
                 // details underneath: what the user filled in on the movie's page
                 Flickable {
                     id: infoFlick
+                    objectName: "videoInfoFlick"
                     visible: !page.full
                     x: page.style === "theater" ? page.margin : page.frameX
                     y: page.belowY
@@ -427,6 +428,21 @@ Rectangle {
                             contentItem: Label { text: "edit details"; color: editBtn.hovered ? hop.accent : Theme.muted
                                                  font { family: Theme.font; pixelSize: 14; underline: editBtn.hovered } }
                             background: Item {}
+                        }
+
+                        // pretend comments (window and theater only; off by default)
+                        VideoComments {
+                            objectName: "videoComments"
+                            visible: hop.videoComments !== "off"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 14
+                            Layout.bottomMargin: 20
+                            mode: hop.videoComments
+                            seed: hop.videoPlayerPath
+                            info: page.info
+                            mine: hop.myVideoComments
+                            duration: page.surface.duration
+                            onLeaveRequested: page.forceActiveFocus()
                         }
                     }
                 }

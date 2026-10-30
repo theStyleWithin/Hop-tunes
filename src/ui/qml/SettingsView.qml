@@ -292,6 +292,22 @@ Item {
             color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             wrapMode: Text.WordWrap; Layout.maximumWidth: 640
         }
+        RowLayout {
+            spacing: 16
+            Layout.topMargin: 8
+            Label { text: "comments"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Choice {
+                objectName: "videoCommentsChoice"
+                options: [["off", "off"], ["mine", "only mine"], ["populated", "populated"]]
+                value: hop.videoComments
+                onPicked: function (v) { hop.videoComments = v }
+            }
+        }
+        Label {
+            text: "a comments section under the video (window and theater only). off hides it completely. only mine is a box where you can write comments, as many as you like, and nobody ever answers. populated adds made-up commenters and replies, who also answer what you write after a little while. nobody is real; only your own comments are saved."
+            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+        }
         Label {
             text: "while watching: t switches to theater, f to fullscreen, c shows or hides the chat, esc steps back."
             color: Theme.dim; font { family: Theme.font; pixelSize: 13 }

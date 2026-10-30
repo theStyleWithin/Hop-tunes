@@ -20,6 +20,13 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   the "theater" and "fullscreen" buttons or the `t` and `f` keys (`esc` steps back, and `space` pauses).
   Choose the one you start in under **settings › video settings › viewing style**; it is saved per
   profile. Picking another video from the list switches to it, keeping your place in the first.
+- **Comments under videos** (settings › video settings › comments; window and theater only, never fullscreen).
+  Three choices: *off* (the default; the section is gone completely, for anyone who finds it bloat),
+  *only mine* (a box where you can write as many comments as you like and nobody ever answers; they are
+  saved per video in your profile and can be deleted), and *populated* (made-up commenters with likes and
+  replies, sorted by "top" or "newest first", "show more comments" never runs out, and a few of them answer
+  what you write after a little while). Like the chat, nobody is real, everything is generated on your
+  computer from the details you filled in on the movie's page, and only your own comments are saved.
 - **Livestream chat: a pretend live chat beside the video** (settings › video settings › livestream chat, off by
   default; a separate switch from the viewing style, so it works with window, theater and fullscreen). Nothing is
   streamed and nobody in it is real: the chatters are generated on your computer from the video and the second you

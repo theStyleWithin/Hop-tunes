@@ -92,6 +92,17 @@ Pick how video opens in **settings → video settings → viewing style**. **Win
 
 Turn on **settings → video settings → livestream chat** for a chat beside the video, as if you were watching a stream. **Nothing is streamed and nobody in it is real**: the chatters are made up on your computer, the chat is the same every time you watch the same video at the same moment (so seeking just redraws it), and nothing is saved. They react to the details you filled in on the movie's page, and you can type to them: they answer, politely, using what the page says (ask who directed it and they will tell you if you filled it in). Choose the **clean** or **lively** look in the same place. While watching, `c` or the "chat" button shows and hides it; press `esc` once to leave the chat box, again to step back.
 
+
+## Comments under videos
+
+**settings → video settings → comments** has three choices, and it only shows in the *window* and *theater* styles (never fullscreen):
+
+- **off** (default): no comments section at all. Choose this if you see it as clutter.
+- **only mine**: a box under the video's details where you write comments, as many as you like. Nobody ever replies. Your comments are saved with the video in your profile, and each has a *delete* link.
+- **populated**: the same box, plus made-up commenters with likes and replies (*show N replies*), sorted by *top* or *newest first*. *Show more comments* never runs out. A few of them answer what you write after a little while (a question about the director gets the director you filled in, or an honest "not sure").
+
+Nobody here is real. The comments are generated on your computer from the details you filled in on the movie's page, and are never stored; only the ones you write are.
+
 ## Livestream chat (a pretend live chat)
 
 Turn on **settings → video settings → livestream chat** for a chat beside the video, as if you were watching a stream. **Nothing is streamed and nobody in it is real**: the chatters are made up on your computer, the chat is the same every time you watch the same video at the same moment (so seeking just redraws it), and nothing is saved. They react to the details you filled in on the movie's page, and you can type to them: they answer, politely, using what the page says (ask who directed it and they will tell you if you filled it in). Choose the **clean** or **lively** look in the same place. While watching, `c` or the "chat" button shows and hides it; press `esc` once to leave the chat box, again to step back.
