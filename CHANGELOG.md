@@ -5,6 +5,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ## [1.6.0] - 2026-10-30
+
 ### Added
 - **A page for every movie.** Clicking a tile in `collection › videos` now opens the movie's page instead
   of playing it; playing is a button on that page ("play", or "resume from 12:30"). The page has empty
