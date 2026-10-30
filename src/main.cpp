@@ -2,7 +2,9 @@
 #include "App.h"
 #include "core/Paths.h"
 #include "core/ProfileStore.h"
+#ifdef HOPTUNES_HAVE_GST
 #include "platform/Mpris.h"
+#endif
 #ifdef Q_OS_WIN
 #include "platform/WinRuntime.h"
 #endif
@@ -23,7 +25,9 @@
 
 #include <cstdio>
 
+#ifdef HOPTUNES_HAVE_GST
 #include <gst/gst.h>
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -76,6 +80,7 @@ int main(int argc, char *argv[])
             return 1;
         }
     }
+#ifdef HOPTUNES_HAVE_GST
     gst_init(&argc, &argv);
     // The GStreamer video fallback's QML type (GstVideoSurfaceView.qml, used when
     // HOPTUNES_HAVE_MPV is off) only self-registers once its plugin .so is actually
@@ -83,6 +88,7 @@ int main(int argc, char *argv[])
     // whichever engine ends up active. Force the load now, before QGuiApplication exists
     // (verified necessary in exactly that order, not after).
     if (GstElement *probe = gst_element_factory_make("qml6glsink", nullptr)) gst_object_unref(probe);
+#endif
 
     QGuiApplication app(argc, argv);
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));
@@ -103,11 +109,15 @@ int main(int argc, char *argv[])
 
     // One window per session: a second launch hands its files to the running one.
     const bool devRun = qEnvironmentVariableIsSet("HOPTUNES_SCREENSHOT") || qEnvironmentVariableIsSet("HOPTUNES_NO_MPRIS");
+#ifdef HOPTUNES_HAVE_GST
     if (!devRun) {
         QStringList uris;
         for (const QString &f : files) uris << (f.startsWith(QLatin1String("file:")) ? f : QUrl::fromLocalFile(f).toString());
         if (hop::Mpris::forwardToRunningInstance(uris)) return 0;
     }
+#else
+    Q_UNUSED(devRun)
+#endif
 
     // The design uses Jost (SIL OFL), bundled so the app looks the same on every distro.
     // Its internal family name is "Jost*"; the QML asks for "Jost".
@@ -135,6 +145,7 @@ int main(int argc, char *argv[])
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return 1;
 
+#ifdef HOPTUNES_HAVE_GST
     // Media keys / desktop media widgets.
     hop::Mpris mpris(hopApp.player());
     QObject::connect(&mpris, &hop::Mpris::quitRequested, &app, &QCoreApplication::quit);
@@ -143,6 +154,7 @@ int main(int argc, char *argv[])
         if (auto *w = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) { w->show(); w->raise(); w->requestActivate(); }
     });
     mpris.start();
+#endif
     hopApp.openFiles(files);   // played now, or once a profile is open
 
     // Developer hook: HOPTUNES_AUTOPLAY=<row> starts playing that song once the library has loaded.
