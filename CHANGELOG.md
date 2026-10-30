@@ -25,6 +25,16 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   starts, and a guest who may not see your film is never told what it is.
   *Beta: not yet there: pictures, books and podcasts for guests, and a watch party for music.*
 
+## [1.7.1] - 2026-10-30
+
+### Fixed
+- **Closing Hop-tunes during a video scan no longer makes the next scan start over.** New videos are now
+  listed straight away, so shows and films appear while the scan is still working, and a scan that was cut
+  short carries on with only the files it had not finished. The lists refresh every couple of seconds while
+  it runs.
+- **Videos that had no thumbnail now get one.** A film whose picture could not be grabbed (or whose cached
+  picture was cleared) was never tried again; later scans now retry it.
+
 ## [1.7.0] - 2026-10-30
 
 ### Added

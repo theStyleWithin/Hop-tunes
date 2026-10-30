@@ -22,6 +22,7 @@
 #include "playback/Player.h"
 
 #include <QJsonObject>
+#include <QElapsedTimer>
 #include <QObject>
 #include <memory>
 #include <QSet>
@@ -631,6 +632,7 @@ private:
     int m_videoScanDone = 0;
     int m_videoScanTotal = 0;
     bool m_videoScanRescanPending = false;
+    QElapsedTimer m_videoReloadClock;
     bool m_videoPlayerOpen = false;
     QString m_videoPlayerPath;          // identity of what is playing (a file path, or share:<host>:<item> for a shared film)
     QString m_videoPlayerSource;        // set only for a shared film: the local address the player reads

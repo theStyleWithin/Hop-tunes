@@ -64,6 +64,12 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         m_videoScanTotal = total;
         emit videoScanProgressChanged();
     });
+    connect(&m_videoScanner, &VideoScanner::saved, this, [this] {
+        // Show what has been found so far, at most every couple of seconds.
+        if (m_videoReloadClock.isValid() && m_videoReloadClock.elapsed() < 2000) return;
+        m_videoReloadClock.start();
+        reloadVideos();
+    });
     connect(&m_videoScanner, &VideoScanner::finished, this, [this](int added, int updated, int removed, int) {
         emit videoScanProgressChanged();
         if (added || updated || removed || m_videos.count() == 0) reloadVideos();
