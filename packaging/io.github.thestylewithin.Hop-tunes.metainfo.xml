@@ -82,6 +82,15 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.2" date="2026-10-30">
+      <description>
+        <p>Hop-tunes comes to Android phones and tablets.</p>
+        <ul>
+          <li>An Android app for phones and tablets, laid out for the phone, with a bottom bar or a side drawer.</li>
+          <li>Music playback on Android. Video playback is not on Android yet.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.1" date="2026-10-30">
       <description>
         <p>A small bug fix update for video scanning.</p>
