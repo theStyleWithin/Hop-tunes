@@ -2,16 +2,19 @@
 // Library sharing (docs/design-sharing.md): invites, guest keys, approvals, and the encrypted server.
 #include "library/ProfileDb.h"
 #include "library/ShareAuth.h"
+#include "library/ShareClient.h"
 #include "library/ShareServer.h"
 
 #include <QHostAddress>
 #include <QJsonArray>
+#include <QDateTime>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QSslCipher>
 #include <QSslConfiguration>
 #include <QSslPreSharedKeyAuthenticator>
 #include <QSslSocket>
+#include <QTcpSocket>
 #include <QtTest>
 
 using namespace hop;
@@ -185,6 +188,108 @@ private slots:
         QVERIFY(auth.guestSecret(guestA).isEmpty());                                       // the key stops working
         QVERIFY(db.shareGrants(guestA).isEmpty());                                         // and the approvals are gone
         QCOMPARE(db.shareGuests().size(), 1);
+    }
+
+    // ---- the guest's side ----
+    void inviteLinks()
+    {
+        ShareClient::Invite inv;
+        QVERIFY(ShareClient::parseInvite(QStringLiteral("  hop://192.168.1.20:47800/abcd-efgh-jkmn-pqrs  "), &inv));
+        QCOMPARE(inv.address, QStringLiteral("192.168.1.20"));
+        QCOMPARE(inv.port, quint16(47800));
+        QCOMPARE(inv.code, QStringLiteral("ABCDEFGHJKMNPQRS"));
+        QVERIFY(ShareClient::parseInvite(QStringLiteral("hop://[fe80::1]:5000/ABCD-EFGH-JKMN-PQRS"), &inv));
+        QCOMPARE(inv.address, QStringLiteral("fe80::1"));
+        for (const char *bad : {"", "hop://host/ABCD-EFGH-JKMN-PQRS", "hop://h:1/ABCD-EFGH", "http://h:1/ABCD-EFGH-JKMN-PQRS",
+                                "hop://:1/ABCD-EFGH-JKMN-PQRS", "hop://h:99999/ABCD-EFGH-JKMN-PQRS", "not a link"})
+            QVERIFY2(!ShareClient::parseInvite(QString::fromLatin1(bad), nullptr), bad);
+    }
+
+    void aGuestJoinsBrowsesAndStreamsThroughTheLocalProxy()
+    {
+        if (!ShareServer::encryptionAvailable()) QSKIP("no TLS library");
+        Rig r;
+        QVERIFY(r.ok());
+        const QByteArray data = [] { QByteArray d(600000, 0); for (int i = 0; i < d.size(); ++i) d[i] = char(i * 13); return d; }();
+        const QString movie = r.file(QStringLiteral("A Film.mkv"), data);
+        const QString hidden = r.file(QStringLiteral("Hidden.mkv"), QByteArray(100, 'h'));
+        Q_UNUSED(hidden);
+
+        // join with the invite link, exactly as a guest would paste it
+        const QString code = r.auth.createInvite(3600, QDateTime::currentSecsSinceEpoch());
+        ShareClient::Invite inv;
+        QVERIFY(ShareClient::parseInvite(QStringLiteral("hop://127.0.0.1:%1/%2").arg(r.server.port()).arg(code), &inv));
+        bool done = false, ok = false; qint64 gid = 0; QString key;
+        ShareClient::redeem(inv, QStringLiteral("Guest A"), this, [&](bool o, qint64 g, const QString &k, const QString &) { ok = o; gid = g; key = k; done = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+        QVERIFY(ok && gid > 0 && key.size() == 64);
+
+        const ShareEndpoint ep{QStringLiteral("127.0.0.1"), r.server.port(), "guest:" + QByteArray::number(gid), QByteArray::fromHex(key.toLatin1())};
+        // a wrong key reports an error, not a hang
+        done = false; int status = -1; QString err;
+        ShareClient::fetchJson({ep.address, ep.port, ep.identity, QByteArray(32, 'x')}, "GET", "/v1/hello", {}, this,
+                               [&](int s, const QJsonObject &, const QString &e) { status = s; err = e; done = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+        QCOMPARE(status, 0);
+        QVERIFY(!err.isEmpty());
+
+        // nothing is approved yet; then the host approves the film
+        done = false; QJsonObject lib;
+        ShareClient::fetchJson(ep, "GET", "/v1/library", {}, this, [&](int s, const QJsonObject &o, const QString &) { status = s; lib = o; done = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+        QCOMPARE(status, 200);
+        QVERIFY(lib.value("items").toArray().isEmpty());
+        QVERIFY(r.db.setShareGrants(gid, {movie}, true));
+        done = false;
+        ShareClient::fetchJson(ep, "GET", "/v1/library", {}, this, [&](int, const QJsonObject &o, const QString &) { lib = o; done = true; });
+        QTRY_VERIFY_WITH_TIMEOUT(done, 5000);
+        QCOMPARE(lib.value("items").toArray().size(), 1);
+        const QString itemId = lib.value("items").toArray().first().toObject().value("id").toString();
+
+        // the player reads an ordinary local address; the proxy fetches it from the host
+        ShareProxy proxy;
+        QVERIFY(proxy.start());
+        const QUrl url(proxy.urlFor(ep, itemId));
+        QCOMPARE(url.host(), QStringLiteral("127.0.0.1"));
+        auto get = [&](const QUrl &u, const QByteArray &range, int &st, QByteArray &head) {
+            QTcpSocket s;
+            s.connectToHost(QHostAddress::LocalHost, quint16(u.port()));
+            if (!s.waitForConnected(2000)) return QByteArray();
+            s.write("GET " + u.path().toUtf8() + " HTTP/1.1\r\nHost: x\r\n" + (range.isEmpty() ? QByteArray() : "Range: " + range + "\r\n") + "\r\n");
+            QByteArray all;
+            QElapsedTimer t; t.start();
+            while (t.elapsed() < 8000 && (s.state() == QAbstractSocket::ConnectedState || s.bytesAvailable())) { QTest::qWait(10); all += s.readAll(); }
+            const int e = all.indexOf("\r\n\r\n");
+            head = e >= 0 ? all.left(e) : all;
+            st = head.mid(9, 3).toInt();
+            return e >= 0 ? all.mid(e + 4) : QByteArray();
+        };
+        int st = 0; QByteArray head;
+        QCOMPARE(get(url, {}, st, head), data);                                             // the whole film
+        QCOMPARE(st, 200);
+        QCOMPARE(get(url, "bytes=100000-100999", st, head), data.mid(100000, 1000));         // a seek
+        QCOMPARE(st, 206);
+        QVERIFY(head.toLower().contains("content-range: bytes 100000-100999/600000"));
+        QCOMPARE(get(url, "bytes=-10", st, head), data.right(10));
+        get(url, "bytes=999999999-", st, head);
+        QCOMPARE(st, 416);                                                                   // the host's errors pass through
+
+        // only what the app asked for is reachable
+        const QUrl guess(QStringLiteral("http://127.0.0.1:%1/s/0123456789abcdef0123456789abcdef").arg(proxy.port()));
+        get(guess, {}, st, head);
+        QCOMPARE(st, 404);
+        get(QUrl(QStringLiteral("http://127.0.0.1:%1/v1/library").arg(proxy.port())), {}, st, head);
+        QCOMPARE(st, 404);
+
+        // when the host withdraws approval the guest's next read fails
+        QVERIFY(r.db.setShareGrants(gid, {movie}, false));
+        get(url, "bytes=0-9", st, head);
+        QCOMPARE(st, 404);
+
+        // when the host stops, the player gets a clear error rather than a hang
+        r.server.stop();
+        get(url, "bytes=0-9", st, head);
+        QCOMPARE(st, 502);
     }
 
     void localAddresses()
