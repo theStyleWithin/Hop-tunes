@@ -130,6 +130,11 @@ Item {
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
             Item { Layout.fillWidth: true }
+            // centred on this row but adding nothing to its height, so the tabs stay exactly where they were
+            Item {
+                Layout.preferredWidth: tabChip.implicitWidth; Layout.preferredHeight: 0; Layout.alignment: Qt.AlignVCenter
+                ProfileChip { id: tabChip; anchors { right: parent.right; verticalCenter: parent.verticalCenter } }
+            }
             Shortcut { sequences: ["Ctrl+F", "/"]; enabled: hop.profileReady && search.visible; onActivated: { root.mode = root.mode === "playlists" ? "songs" : root.mode; search.forceActiveFocus(); search.selectAll() } }
         }
 
