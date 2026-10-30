@@ -11,3 +11,13 @@
 - Sub sections (albums, artists, songs, playlists; movies, shows, cartoons, anime, other) are pills under the tabs.
 - A mini player sits above the bottom bar; tapping it opens full now playing.
 - Party Watch is not part of the Android design for now.
+
+## Video player: portrait and landscape
+
+![Video player, portrait and landscape](android-video-mockup.png)
+
+- **Portrait:** the video sits at the top in 16:9, with the title, resume, speed, subtitles, volume (0 to 150 %)
+  and "next up" below it.
+- **Landscape:** the video fills the screen, with the same controls laid over it.
+- **Switching:** the ⟳ button in the player toggles between the two at any time, just for that video.
+  Settings › video player sets how videos open: portrait, auto (follows the phone) or landscape.
