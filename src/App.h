@@ -48,6 +48,9 @@ class App : public QObject {
     // The extra sections that are switched on, in tab order (single source of truth for the UI).
     Q_PROPERTY(QStringList sectionKinds READ sectionKinds CONSTANT)
     Q_PROPERTY(hop::SectionListModel *pictures READ pictures CONSTANT)
+    Q_PROPERTY(QVariantList pictureAlbums READ pictureAlbums NOTIFY pictureAlbumsChanged)   // one per folder: dir, name, count, cover
+    Q_PROPERTY(QString pictureAlbum READ pictureAlbum NOTIFY pictureAlbumChanged)   // the open album's folder, "" = the album list
+    Q_PROPERTY(hop::SectionListModel *pictureAlbumItems READ pictureAlbumItems CONSTANT)   // the pictures of the open album
     Q_PROPERTY(hop::SectionListModel *audiobooks READ audiobooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *ebooks READ ebooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *podcasts READ podcasts CONSTANT)
@@ -149,6 +152,9 @@ public:
     QVariantMap videoCategoryFolders() const;
     QString categoryOfVideo(const QString &path) const;   // the category whose folder is the closest parent
     SectionListModel *pictures() { return &m_sec[0]->model; }
+    QVariantList pictureAlbums() const { return m_pictureAlbums; }
+    QString pictureAlbum() const { return m_pictureAlbum; }
+    SectionListModel *pictureAlbumItems() { return &m_albumItems; }
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
     SectionListModel *podcasts() { return &m_sec[3]->model; }
@@ -303,6 +309,9 @@ public:
     Q_INVOKABLE void removeFolder(const QString &path);
     Q_INVOKABLE void addVideoFolder(const QUrl &folder);
     Q_INVOKABLE void removeVideoFolder(const QString &path);
+    Q_INVOKABLE void openPictureAlbum(const QString &dir);
+    Q_INVOKABLE void closePictureAlbum();
+    Q_INVOKABLE void renamePictureAlbum(const QString &dir, const QString &name);   // "" goes back to the folder's name
     Q_INVOKABLE void addSectionFolder(const QString &kind, const QUrl &folder);   // kind: pictures | audiobooks | ebooks | podcasts
     Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
     // Audiobooks and podcasts: plays the item, resuming where this profile left off.
@@ -341,6 +350,8 @@ public:
 
 signals:
     void foldersChanged();
+    void pictureAlbumsChanged();
+    void pictureAlbumChanged();
     void videoCategoryChanged();
     void sectionFoldersChanged();
     void sectionStatusChanged();
@@ -455,6 +466,11 @@ private:
     int m_selAlbum = -1;
     QStringList m_mosaicArt;
 
+    QHash<QString, QString> m_albumNames;   // folder -> the name this profile gave its album
+    QVariantList m_pictureAlbums;
+    QString m_pictureAlbum;
+    SectionListModel m_albumItems{SectionKind::Pictures};
+    void rebuildPictureAlbums(const QList<SectionItem> &items);
     struct SectionState {
         SectionState(SectionKind k, SectionIndex *idx) : kind(k), model(k), scanner(k, idx) {}
         SectionKind kind;

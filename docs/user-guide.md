@@ -93,6 +93,10 @@ Pick how video opens in **settings → video settings → viewing style**. **Win
 Turn on **settings → video settings → livestream chat** for a chat beside the video, as if you were watching a stream. **Nothing is streamed and nobody in it is real**: the chatters are made up on your computer, the chat is the same every time you watch the same video at the same moment (so seeking just redraws it), and nothing is saved. They react to the details you filled in on the movie's page, and you can type to them: they answer, politely, using what the page says (ask who directed it and they will tell you if you filled it in). Choose the **clean** or **lively** look in the same place. While watching, `c` or the "chat" button shows and hides it; press `esc` once to leave the chat box, again to step back.
 
 
+## Picture albums
+
+**collection › pictures** is a shelf of albums: one slot for every folder that has pictures in it, showing a cover, the name and the number of pictures. Click a slot to open it and see its pictures (click one for the full-size viewer: arrow keys to move, space for a slideshow, esc to close); **‹ albums** goes back. Each folder you add stays its own album, and so does each subfolder that holds pictures. Hover a slot (or open the album) and choose **rename** to give it your own name; it is remembered per profile. Clearing the name goes back to the folder's name.
+
 ## Movie volume
 
 The video player has its own **volume slider** (next to the play button), separate from the music volume and from your computer's volume. It goes from 0 to **150 %**: the orange part past the 100 % mark boosts films that are recorded too quietly (very loud boosts can distort, so turn it up only as far as you need). The button beside it mutes. Keys: **↑ / ↓** change the volume, **m** mutes. It is remembered per profile.
