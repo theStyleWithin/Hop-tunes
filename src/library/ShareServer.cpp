@@ -367,7 +367,7 @@ void ShareServer::onPeer(QSslSocket *socket)
 {
     if (!socket) return;
     const QString identity = m_identities.take(socket);
-    if (m_conns.size() >= kMaxConnections || (!m_allowInternet && !isLocalAddress(socket->peerAddress()))
+    if (m_conns.size() >= kMaxConnections || !acceptsPeer(socket->peerAddress())
         || !(identity.startsWith(QLatin1String("guest:")) || identity.startsWith(QLatin1String("invite:")))) {
         socket->abort();
         socket->deleteLater();

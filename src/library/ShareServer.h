@@ -79,6 +79,8 @@ public:
     // False when encryption is not available on this machine (no TLS library) or the port is taken.
     bool start(quint16 port = 0, bool allowInternet = false);
     void stop();
+    void setAllowInternet(bool on) { m_allowInternet = on; }   // otherwise only home-network addresses may connect
+    bool allowInternet() const { return m_allowInternet; }
     bool isListening() const;
     quint16 port() const;
     static bool encryptionAvailable();
@@ -90,6 +92,8 @@ public:
 
     // Whether a peer is on a home network (loopback, private, link-local); anything else needs "allow internet".
     static bool isLocalAddress(const QHostAddress &a);
+    // Whether a connection from this address is let in right now: home-network addresses always, others only with "allow internet".
+    bool acceptsPeer(const QHostAddress &a) const { return m_allowInternet || isLocalAddress(a); }
 
 signals:
     void connectedGuestsChanged();

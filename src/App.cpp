@@ -363,6 +363,7 @@ void App::activate(const QString &id, bool guest)
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_statusNote = s.value(QStringLiteral("statusNote")).toString().left(300);
+    m_sharePublicAddress = s.value(QStringLiteral("sharePublicAddress")).toString().left(120);
     QTimer::singleShot(0, this, [this] { emit sharedHostsChanged(); });   // once the profile database is open
     m_videoVolume = qBound(0, s.value(QStringLiteral("videoVolume")).toInt(100), 150);
     m_videoChat = s.value(QStringLiteral("videoChat")).toBool(false);
@@ -446,6 +447,7 @@ void App::leaveProfile()
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
     m_statusNote.clear();
+    m_sharePublicAddress.clear();
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
@@ -497,6 +499,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("statusNote"), m_statusNote);
+    s.insert(QStringLiteral("sharePublicAddress"), m_sharePublicAddress);
     s.insert(QStringLiteral("videoVolume"), m_videoVolume);
     s.insert(QStringLiteral("videoChat"), m_videoChat);
     s.insert(QStringLiteral("videoChatLook"), m_videoChatLook);
@@ -1103,6 +1106,25 @@ void App::setVideoVolume(int percent)
     emit videoVolumeChanged();
 }
 
+void App::setSharingInternet(bool on)
+{
+    if (!m_share || on == m_share->server.allowInternet()) return;
+    m_share->server.setAllowInternet(on);
+    emit sharingChanged();
+}
+
+void App::setSharingPublicAddress(const QString &text)
+{
+    // an address or a name, optionally with a port: letters, digits and . - : [ ] only, so it can only ever be an address
+    QString t = text.trimmed();
+    t.remove(QRegularExpression(QStringLiteral("[^A-Za-z0-9.:\\-\\[\\]]")));
+    t = t.left(120);
+    if (t == m_sharePublicAddress) return;
+    m_sharePublicAddress = t;
+    saveProfileSettings();
+    emit sharingChanged();
+}
+
 void App::setSharing(bool on)
 {
     if (on == bool(m_share)) return;
@@ -1128,7 +1150,12 @@ void App::setSharing(bool on)
         if (!mine.isEmpty()) it.title = mine;
     });
     // a fixed port first, so a router's port forwarding can point at it later; any free one if that is taken
-    if (!share->server.start(47800) && !share->server.start(0)) return;
+    if (!share->server.start(47800) && !share->server.start(0)) {
+        m_sharingMessage = tr("sharing could not start: this computer would not let Hop-tunes listen for connections (a sandbox or a firewall may be blocking it).");
+        emit sharingChanged();
+        return;
+    }
+    m_sharingMessage.clear();
     connect(&share->server, &ShareServer::connectedGuestsChanged, this, &App::shareGuestsChanged);
     connect(&share->server, &ShareServer::inviteRedeemed, this, [this] { keepShareModeValid(); emit shareGuestsChanged(); });
     m_share = std::move(share);
@@ -1165,7 +1192,17 @@ QVariantMap App::makeShareInvite(double hours)
     const qint64 secs = qint64(qBound(10.0 / 60.0, hours, 24.0) * 3600.0);
     const QString code = m_share->auth.createInvite(secs, QDateTime::currentSecsSinceEpoch());
     const QStringList addrs = sharingAddresses();
-    const QString where = (addrs.isEmpty() ? QStringLiteral("this-computer") : addrs.first()) + QLatin1Char(':') + QString::number(sharingPort());
+    // from outside the home, the invite carries the public address the host typed (with the port unless they gave one)
+    QString where;
+    if (m_share->server.allowInternet() && !m_sharePublicAddress.isEmpty()) {
+        where = m_sharePublicAddress;
+        if (where.count(QLatin1Char(':')) > 1 && !where.startsWith(QLatin1Char('[')))   // a bare IPv6 address needs brackets
+            where = QLatin1Char('[') + where + QLatin1Char(']');
+        const bool hasPort = where.startsWith(QLatin1Char('[')) ? where.contains(QStringLiteral("]:")) : where.count(QLatin1Char(':')) == 1;
+        if (!hasPort) where += QLatin1Char(':') + QString::number(sharingPort());
+    } else {
+        where = (addrs.isEmpty() ? QStringLiteral("this-computer") : addrs.first()) + QLatin1Char(':') + QString::number(sharingPort());
+    }
     return {{QStringLiteral("code"), code}, {QStringLiteral("link"), QStringLiteral("hop://") + where + QLatin1Char('/') + code},
             {QStringLiteral("hours"), hours}};
 }

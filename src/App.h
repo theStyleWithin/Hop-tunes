@@ -130,6 +130,9 @@ class App : public QObject {
     // Library sharing (the host's side; docs/design-sharing.md). Off every time Hop-tunes starts.
     Q_PROPERTY(bool sharing READ sharing WRITE setSharing NOTIFY sharingChanged)
     Q_PROPERTY(bool sharingAvailable READ sharingAvailable CONSTANT)   // false when this computer has no TLS library
+    Q_PROPERTY(bool sharingInternet READ sharingInternet WRITE setSharingInternet NOTIFY sharingChanged)   // also accept connections from outside the home network (off whenever sharing starts)
+    Q_PROPERTY(QString sharingPublicAddress READ sharingPublicAddress WRITE setSharingPublicAddress NOTIFY sharingChanged)   // what guests outside should use in the invite
+    Q_PROPERTY(QString sharingMessage READ sharingMessage NOTIFY sharingChanged)   // why sharing did not start, or ""
     Q_PROPERTY(int sharingPort READ sharingPort NOTIFY sharingChanged)
     Q_PROPERTY(QStringList sharingAddresses READ sharingAddresses NOTIFY sharingChanged)   // this computer's home-network addresses
     // "Sharing mode" in the collection: tick what one guest may see. It exists only while sharing is on and there is a guest.
@@ -257,6 +260,11 @@ public:
     bool sharing() const { return bool(m_share); }
     void setSharing(bool on);
     static bool sharingAvailable() { return ShareServer::encryptionAvailable(); }
+    bool sharingInternet() const { return m_share && m_share->server.allowInternet(); }
+    void setSharingInternet(bool on);
+    QString sharingPublicAddress() const { return m_sharePublicAddress; }
+    void setSharingPublicAddress(const QString &text);
+    QString sharingMessage() const { return m_sharingMessage; }
     int sharingPort() const { return m_share ? m_share->server.port() : 0; }
     QStringList sharingAddresses() const;
     QVariantList shareGuests() const;
@@ -497,6 +505,8 @@ private:
     QString m_shareJoinMessage;
     bool m_shareJoining = false;
     int m_shareGen = 0;   // bumped when the profile closes, so a late reply from a host is ignored
+    QString m_sharePublicAddress;   // saved per profile (a name or number only the host knows)
+    QString m_sharingMessage;
     std::unique_ptr<Share> m_share;
     bool m_shareMode = false;
     qint64 m_shareTarget = 0;

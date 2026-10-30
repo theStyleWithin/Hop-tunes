@@ -1083,6 +1083,58 @@ private slots:
         window()->setProperty("view", QStringLiteral("collection"));
     }
 
+    // "Also from outside": off to begin with, the invite then carries the public address the host typed, and the steps
+    // are there to read. (The address is cleaned so it can only ever be an address.)
+    void sharingFromOutside()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
+        m_app->setSharing(true);
+        QVERIFY(m_app->sharing());
+        QVERIFY(!m_app->sharingInternet());                              // home network only whenever sharing starts
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("sharingInternetChoice") != nullptr);
+        QVERIFY(item("outsidePanel") == nullptr || !item("outsidePanel")->isVisible());
+        const QString homeLink = m_app->makeShareInvite(1).value("link").toString();
+        QVERIFY(!homeLink.contains(QStringLiteral("203.0.113.5")));
+
+        QTest::qWait(150);
+        QVERIFY(click("choice_outside"));
+        QTRY_VERIFY(m_app->sharingInternet());
+        QTRY_VERIFY(item("outsidePanel") != nullptr && item("outsidePanel")->isVisible());
+        QVERIFY(item("sharePublicAddress") != nullptr);
+
+        // with no public address typed the invite still uses the home address; with one, that one (and the port)
+        QVERIFY(!m_app->makeShareInvite(1).value("link").toString().contains(QStringLiteral("203.0.113.5")));
+        m_app->setSharingPublicAddress(QStringLiteral("  203.0.113.5 "));
+        QCOMPARE(m_app->sharingPublicAddress(), QStringLiteral("203.0.113.5"));
+        QVERIFY(m_app->makeShareInvite(1).value("link").toString().startsWith(QStringLiteral("hop://203.0.113.5:%1/").arg(m_app->sharingPort())));
+        m_app->setSharingPublicAddress(QStringLiteral("my host!<x>.example.com:5000"));   // nothing but an address survives
+        QCOMPARE(m_app->sharingPublicAddress(), QStringLiteral("myhostx.example.com:5000"));
+        QVERIFY(m_app->makeShareInvite(1).value("link").toString().startsWith(QStringLiteral("hop://myhostx.example.com:5000/")));   // a port typed is kept
+        m_app->setSharingPublicAddress(QStringLiteral("2001:db8::1"));
+        QVERIFY(m_app->makeShareInvite(1).value("link").toString().startsWith(QStringLiteral("hop://[2001:db8::1]:%1/").arg(m_app->sharingPort())));
+        // the link a guest would paste is understood
+        ShareClient::Invite inv;
+        QVERIFY(ShareClient::parseInvite(m_app->makeShareInvite(1).value("link").toString(), &inv));
+        QCOMPARE(inv.address, QStringLiteral("2001:db8::1"));
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(st.value("sharePublicAddress").toString(), QStringLiteral("2001:db8::1"));   // remembered for next time
+
+        // the steps, with this computer's real port in them
+        QVERIFY(click("netHelpToggle"));
+        QTRY_VERIFY(item("netHelp") != nullptr && item("netHelp")->isVisible());
+        shot("sharing-outside");
+        QVERIFY(click("choice_home"));
+        QTRY_VERIFY(!m_app->sharingInternet());
+
+        m_app->setSharingPublicAddress(QString());
+        m_app->setSharing(false);                                         // switching it off and on again starts at home-only
+        m_app->setSharing(true);
+        QVERIFY(!m_app->sharingInternet());
+        m_app->setSharing(false);
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
     // The guest's side (here one profile is both the host and a guest of itself over the loopback address): join with an
     // invite link, see only what was ticked, read it through the local proxy, change the address, leave.
     void guestSideJoinsBrowsesAndLeaves()

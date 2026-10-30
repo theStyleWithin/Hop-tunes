@@ -14,6 +14,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   seeking works, a shared song plays through the normal music player (and is never counted as one of your own
   plays or hearts), and the guest's own resume position for films is kept on their computer. Everything is encrypted
   (a key shared with each guest, no certificates and no accounts) and works on a home network.
+  Connecting from outside your home is a switch ("also from outside", off by default) with a step-by-step guide
+  (port forwarding and firewall) in the app and in `docs/party-watch-internet.md`.
   *Beta: not yet there: pictures, books and podcasts for guests, watching together in sync, and connecting over
   the internet.*
 

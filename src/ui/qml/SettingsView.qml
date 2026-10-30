@@ -14,6 +14,7 @@ Item {
 
     property string profileMsg: ""
     property var invite: ({})          // the invite code just made (sharing)
+    property bool showNetHelp: false
     property bool confirmRemove: false
 
     // Segmented choice: one of a few options, the chosen one filled with the accent.
@@ -552,6 +553,83 @@ Item {
                 text: "you are sharing. on this network your address is " + (hop.sharingAddresses.length > 0 ? hop.sharingAddresses.join(" or ") : "(not connected to a network)") + ", port " + hop.sharingPort + "."
                 color: Theme.text2; font { family: Theme.font; pixelSize: 15 }
                 wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+
+            Label {
+                visible: hop.sharingMessage !== ""
+                text: hop.sharingMessage; color: Theme.danger; font { family: Theme.font; pixelSize: 14 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+            RowLayout {
+                spacing: 16
+                Label { text: "who can connect"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140; Layout.topMargin: 6 }
+                Choice {
+                    objectName: "sharingInternetChoice"
+                    options: [["home", "this network only"], ["outside", "also from outside"]]
+                    value: hop.sharingInternet ? "outside" : "home"
+                    onPicked: function (v) { hop.sharingInternet = (v === "outside") }
+                }
+            }
+            ColumnLayout {
+                objectName: "outsidePanel"
+                visible: hop.sharingInternet
+                Layout.fillWidth: true
+                spacing: 8
+                Label {
+                    text: "anyone who has an invite and your address can try to connect from anywhere. every connection still needs a guest's own private key, and sharing switches itself off when you close Hop-tunes. you also have to let it through your router and firewall: see \"how to set this up\" below."
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                    wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                }
+                RowLayout {
+                    spacing: 16
+                    Label { text: "your public address"; color: Theme.text; font { family: Theme.font; pixelSize: 15 } Layout.preferredWidth: 140 }
+                    TextField {
+                        id: publicField
+                        objectName: "sharePublicAddress"
+                        Layout.preferredWidth: 300
+                        text: hop.sharingPublicAddress
+                        placeholderText: "e.g. 203.0.113.5 or a name"; placeholderTextColor: Theme.dim
+                        selectByMouse: true
+                        color: Theme.text; font { family: Theme.font; pixelSize: 15 }
+                        onEditingFinished: hop.sharingPublicAddress = text
+                        background: Rectangle { color: Theme.panel; border { width: publicField.activeFocus ? 2 : 1; color: publicField.activeFocus ? hop.accent : Theme.line } }
+                    }
+                }
+                Label {
+                    text: "this goes into the invite link instead of your home-network address. your router's status page shows it (often under \"WAN\" or \"Internet\")."
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 13 }
+                    wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                }
+                AbstractButton {
+                    id: helpBtn
+                    objectName: "netHelpToggle"
+                    hoverEnabled: true
+                    onClicked: root.showNetHelp = !root.showNetHelp
+                    contentItem: Label { text: root.showNetHelp ? "hide the steps" : "how to set this up"; color: helpBtn.hovered ? hop.accent : Theme.text2
+                                         font { family: Theme.font; pixelSize: 15; underline: helpBtn.hovered } }
+                    background: Item {}
+                }
+                ColumnLayout {
+                    objectName: "netHelp"
+                    visible: root.showNetHelp
+                    spacing: 6
+                    Repeater {
+                        model: [
+                            "1. give this computer a fixed address on your home network (your router calls it a DHCP reservation or static lease). today it is " + (hop.sharingAddresses.length > 0 ? hop.sharingAddresses[0] : "(see your router)") + ".",
+                            "2. in your router's settings find port forwarding (also called virtual server or NAT) and add a rule: protocol TCP, outside port " + hop.sharingPort + ", inside port " + hop.sharingPort + ", to this computer's address.",
+                            "3. let it through this computer's firewall. linux with ufw: sudo ufw allow " + hop.sharingPort + "/tcp. with firewalld: sudo firewall-cmd --permanent --add-port=" + hop.sharingPort + "/tcp, then sudo firewall-cmd --reload. windows: tick private and public when it asks, or add an inbound rule for TCP port " + hop.sharingPort + " in windows defender firewall.",
+                            "4. find your public address on the router's status page. if it starts with 100.64 to 100.127, or with 10., 172.16 to 172.31 or 192.168, your internet provider shares one address between customers and port forwarding cannot work: ask them for a public address, or use IPv6 if you have it.",
+                            "5. type that address above, make an invite and send it. home addresses change now and then: if a guest cannot connect later, send them the new one (they use \"change address\").",
+                            "6. test it from outside your home, with a guest: many routers do not let you reach your own public address from inside."
+                        ]
+                        delegate: Label {
+                            required property string modelData
+                            text: modelData
+                            color: Theme.text2; font { family: Theme.font; pixelSize: 14 }
+                            wrapMode: Text.WordWrap; Layout.maximumWidth: 640; Layout.fillWidth: true
+                        }
+                    }
+                }
             }
 
             Label { text: "invite someone"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 6  }

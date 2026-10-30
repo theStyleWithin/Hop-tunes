@@ -318,6 +318,25 @@ private slots:
         QVERIFY(db.shareHosts().isEmpty());
     }
 
+    void outsideConnectionsNeedTheSwitch()
+    {
+        QTemporaryDir dir;
+        ProfileDb db;
+        QVERIFY(db.open(dir.filePath(QStringLiteral("p.sqlite"))));
+        ShareAuth auth(db);
+        GrantLibrary lib(db, auth, QStringLiteral("Home"));
+        ShareServer server(db, auth, lib);
+        const QHostAddress home(QStringLiteral("192.168.1.9")), world(QStringLiteral("8.8.8.8")), world6(QStringLiteral("2001:db8::1"));
+        QVERIFY(!server.allowInternet());
+        QVERIFY(server.acceptsPeer(home));
+        QVERIFY(!server.acceptsPeer(world));                       // the default: home network only
+        QVERIFY(!server.acceptsPeer(world6));
+        server.setAllowInternet(true);
+        QVERIFY(server.acceptsPeer(world) && server.acceptsPeer(world6) && server.acceptsPeer(home));
+        server.setAllowInternet(false);
+        QVERIFY(!server.acceptsPeer(world));
+    }
+
     void localAddresses()
     {
         for (const char *a : {"127.0.0.1", "10.1.2.3", "172.16.0.9", "172.31.255.1", "192.168.1.50", "169.254.3.4",
