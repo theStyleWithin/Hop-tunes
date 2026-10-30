@@ -246,6 +246,30 @@ Item {
             color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
         }
 
+        // ---- video settings ----------------------------------------------------------
+        Label { text: "video settings"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+        RowLayout {
+            spacing: 16
+            Label { text: "viewing style"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Choice {
+                objectName: "videoStyleChoice"
+                options: [["window", "window"], ["theater", "theater"], ["fullscreen", "fullscreen"]]
+                value: hop.videoViewStyle
+                onPicked: function (v) { hop.videoViewStyle = v }
+            }
+        }
+        Label {
+            text: hop.videoViewStyle === "window" ? "the video sits beside a list of your other videos, with the movie's details underneath."
+                : hop.videoViewStyle === "theater" ? "a wide video across the window, with the details and your other videos underneath."
+                : "the video fills the whole screen."
+            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+        }
+        Label {
+            text: "while watching: t switches to theater, f to fullscreen, esc steps back."
+            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+        }
+
         // ---- music folders ---------------------------------------------------------
         // The music scanner's list. Videos use their own list below once one is added; until
         // then they scan these same folders, so existing libraries keep working.
