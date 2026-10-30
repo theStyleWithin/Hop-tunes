@@ -1,4 +1,4 @@
-# Design: sharing a library with family (draft 2, for review)
+# Design: sharing a library with family (draft 3, for review)
 
 Status: **draft, nothing is built.** Goal: let one person (the *host*) let a few people they trust (the *guests*,
 first of all the host's dad) watch and listen to part of their Hop-tunes library. Not a media server: both sides
@@ -18,7 +18,10 @@ run Hop-tunes, and the host decides, item by item, what each guest may see. **St
 - **Read-only, and only what was approved.** Guests never see profiles, the status box, comments, file paths or
   anything not approved. Items are addressed by opaque ids, never paths.
 - **Trusted people, not the public.** No public listing, no discovery of strangers, no accounts, no central server.
-- **Plain to see.** A visible "sharing" indicator, a list of who is connected, and one click to stop or to kick.
+- **Plain to see, but quiet.** A visible "sharing" indicator while it is on, and one click to stop or to remove a guest.
+- **No activity indicators, for anyone.** Nobody is shown what the other is watching or listening to, and there is no
+  "last seen", "now playing" or "is watching" anywhere. If you are both connected you are, presumably, watching
+  something together; you can just ask each other.
 
 ## All content types
 Music, videos, pictures, audiobooks, ebooks and podcasts can all be shared the same way, each with its own
@@ -27,7 +30,7 @@ rules (pictures and ebooks are stream-to-view: shown, never saved).
 
 ## What the host controls (Settings → Sharing)
 - The master switch (off by default).
-- **Guests:** a list with name, last seen and **remove**. Opening a guest shows their approvals, per category.
+- **Guests:** a list with name and **remove** (no last-seen or activity). Opening a guest shows their approvals, per category.
 - **Approving:** inside the host's own collection, a "share with…" choice on an item (or a selection), or from the
   guest's page: browse a category and tick what that guest may see. Because a library can have thousands of
   items, there are host-side shortcuts, each still an explicit action by the host: approve a whole album, show,
@@ -44,8 +47,8 @@ rules (pictures and ebooks are stream-to-view: shown, never saved).
   host.
 - Watch progress stays on the guest's own machine and is never sent to the host.
 
-## Watch together (a later phase)
-A "watch party": the host picks something and plays it, and guests who are approved for it follow along in sync
+## Watch party (a later phase)
+A **watch party**: the host picks something and plays it, and guests who are approved for it follow along in sync
 (play, pause and seek follow the host). Each guest still streams their own copy from the host, so it needs the host's
 upload speed for every guest. Not in the first version.
 
@@ -87,7 +90,7 @@ upload speed for every guest. Not in the first version.
    codes, guest browse and stream, remove, limits.
 2. **Internet use:** the address in the invite, VPN and port-forward instructions, the "allow internet" switch.
 3. **Other sections:** pictures, audiobooks, ebooks, podcasts, with the same approvals.
-4. **Watch together**, subtitles and audio-track choices, and (maybe) transcoding.
+4. **Watch party**, subtitles and audio-track choices, and (maybe) transcoding.
 
 ## Testing
 - Unit tests: invite and key handling, rate limiting and lockout, default-deny (an unapproved id is refused even if
@@ -97,9 +100,15 @@ upload speed for every guest. Not in the first version.
 - A security review of the server code before it ships: it is the first part of Hop-tunes that listens for
   connections.
 
+## Decisions so far
+- Approvals are explicit and per guest, remembered, default-deny. Shortcuts (a whole album, show, folder or category,
+  or everything matching a search) are fine, as explicit actions by the host.
+- Stream only, no downloads.
+- No activity indicators of any kind, in either direction.
+- The same-time feature is called **watch party**.
+
 ## Questions that are still open
-1. Is the approval shortcut (approve a whole album, show, folder or category, or everything matching a search, as
-   an explicit action by the host) acceptable, or must it really be strictly one item at a time?
-2. Is "watch party" the same-time viewing described above (everyone follows the host's playback)?
-3. Is "install Tailscale" acceptable for your dad over the internet?
-4. Should the host be able to see what a guest is playing right now?
+1. Tailscale (or ZeroTier) as the recommended way to connect over the internet: acceptable, or would a no-account
+   option (port forwarding, or a self-hosted VPN) be preferred? See the explanation in the review thread.
+2. Should a plain "connected / not connected" dot be allowed on the host's guest list (so you know the guest got in),
+   or nothing at all?
