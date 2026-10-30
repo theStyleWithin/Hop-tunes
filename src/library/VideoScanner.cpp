@@ -103,7 +103,11 @@ VideoScanner::Result VideoScanner::scanFolders(VideoIndex *index, const QStringL
             ++r.scanned;
             const auto k = known.constFind(path);
             const qint64 mtime = fi.lastModified().toSecsSinceEpoch();
-            if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size()) continue;
+            // A file that was probed but never got a picture (the frame grab failed that time,
+            // or the cache was cleared) is tried again, so thumbnails fill in on later scans.
+            const bool lostThumb = k != known.constEnd() && !thumbCacheDir.isEmpty() && k->durationMs > 0
+                                   && (k->thumb.isEmpty() || !QFileInfo::exists(k->thumb));
+            if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size() && !lostThumb) continue;
             (k == known.constEnd() || k->mtime == 0 ? r.added : r.updated)++;
 
             Video v;

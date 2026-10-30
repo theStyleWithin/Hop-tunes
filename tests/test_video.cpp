@@ -148,6 +148,29 @@ private slots:
         QCOMPARE(idx.count(), 0);
     }
 
+    // A film whose frame grab failed (or whose cached picture vanished) gets its thumbnail
+    // on the next scan, even though the file itself never changed.
+    void missingThumbnailsAreRetried()
+    {
+        QTemporaryDir dir, cache;
+        const QString root = dir.path();
+        QVERIFY(writeTestClip(root + QStringLiteral("/a.mkv"), 320, 240, 2000));
+        VideoIndex idx;
+        QVERIFY(idx.open(QStringLiteral(":memory:")));
+
+        VideoScanner::scanFolders(&idx, {root});   // no cache dir: probed, no thumbnail
+        QVERIFY(idx.videosUnder({root}).constFirst().thumb.isEmpty());
+
+        VideoScanner::scanFolders(&idx, {root}, nullptr, {}, cache.path());
+        const QString thumb = idx.videosUnder({root}).constFirst().thumb;
+        QVERIFY(!thumb.isEmpty());
+        QVERIFY(QFileInfo::exists(thumb));
+
+        QFile::remove(thumb);   // cache cleared
+        VideoScanner::scanFolders(&idx, {root}, nullptr, {}, cache.path());
+        QVERIFY(QFileInfo::exists(idx.videosUnder({root}).constFirst().thumb));
+    }
+
     // A scan cut short (the app closed mid-scan) must show what it had and resume at the
     // files it had not finished, never start over or lose rows.
     void interruptedScanResumes()
