@@ -35,3 +35,11 @@ Same fields as the desktop page: poster (change / reset), title, year, rating, s
 genre, director, writers, studio, tags, and cast & crew (add person, role, photo, remove). On a phone it is
 one scrolling column with play and resume next to the poster; on a tablet the poster and play buttons sit on
 the left and the details on the right. Everything stays on the device.
+
+## Profile and status box
+
+![Profile page with the status box](android-profile-mockup.png)
+
+The private status box sits right above the profile, as on desktop: a box for a lyric, a quote or how you feel,
+saved as you type (up to 300 characters), and nobody else ever sees it. Below it are the profile (switch
+profile), a library summary and settings. On a tablet the box and profile are on the left, the rest on the right.
