@@ -25,8 +25,11 @@ Item {
         ColumnLayout {
             Layout.preferredWidth: 260; Layout.maximumWidth: 260; Layout.fillWidth: false; Layout.fillHeight: true
             spacing: 6
-            Label { text: "shared with me"; color: Theme.text; font { family: Theme.font; pixelSize: 22 } }
-            Label { text: "beta"; color: hop.accent; font { family: Theme.font; pixelSize: 13 } }
+            RowLayout {
+                spacing: 8
+                Label { text: "shared with me"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+                Label { text: "beta"; color: hop.accent; font { family: Theme.font; pixelSize: 12 } }
+            }
             ListView {
                 id: hostList
                 objectName: "sharedHostList"
@@ -47,7 +50,7 @@ Item {
                     contentItem: ColumnLayout {
                         spacing: 0
                         Label { text: hd.modelData.name; elide: Text.ElideRight; Layout.fillWidth: true
-                                color: hd.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 17 } }
+                                color: hd.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
                         Label { text: hd.modelData.address + ":" + hd.modelData.port; elide: Text.ElideRight; Layout.fillWidth: true
                                 color: Theme.dim; font { family: Theme.font; pixelSize: 12 } }
                     }
@@ -63,7 +66,7 @@ Item {
                 Layout.fillWidth: true
                 spacing: 18
                 Label { visible: root.host !== null; text: root.host ? root.host.name : ""; color: Theme.text
-                        font { family: Theme.font; pixelSize: 26; weight: Font.Light } elide: Text.ElideRight }
+                        font { family: Theme.font; pixelSize: 30; weight: Font.Light } elide: Text.ElideRight }
                 Item { Layout.fillWidth: true }
                 AbstractButton {
                     id: refreshBtn
