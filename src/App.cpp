@@ -27,6 +27,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 
+#include <QMap>
 #include <algorithm>
 
 namespace hop {
@@ -328,6 +329,7 @@ void App::activate(const QString &id, bool guest)
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    m_albumNames.clear();
     for (auto &sec : m_sec) sec->folders.clear();
     if (guest) {
         if (!suggestedFolder().isEmpty()) m_folders << suggestedFolder();
@@ -336,6 +338,8 @@ void App::activate(const QString &id, bool guest)
         for (auto &sec : m_sec)
             for (const QJsonValue &v : s.value(sectionKey(sec->kind) + QStringLiteral("Folders")).toArray())
                 sec->folders << v.toString();
+        const QJsonObject an = s.value(QStringLiteral("pictureAlbumNames")).toObject();
+        for (auto it = an.constBegin(); it != an.constEnd(); ++it) m_albumNames.insert(it.key(), it.value().toString());
         if (s.contains(QStringLiteral("videoFolders"))) {
             m_videoFoldersOwn = true;
             for (const QJsonValue &v : s.value(QStringLiteral("videoFolders")).toArray()) m_videoFolders << v.toString();
@@ -434,6 +438,7 @@ void App::leaveProfile()
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    m_albumNames.clear();
     for (auto &sec : m_sec) { sec->scanner.cancel(); sec->folders.clear(); }
     reload();
     emit foldersChanged();
@@ -447,6 +452,9 @@ void App::saveProfileSettings()
     QJsonObject s = m_store.settings(m_profileId);
     s.insert(QStringLiteral("folders"), QJsonArray::fromStringList(m_folders));
     if (m_videoFoldersOwn) s.insert(QStringLiteral("videoFolders"), QJsonArray::fromStringList(m_videoFolders));
+    QJsonObject an;
+    for (auto it = m_albumNames.constBegin(); it != m_albumNames.constEnd(); ++it) an.insert(it.key(), it.value());
+    s.insert(QStringLiteral("pictureAlbumNames"), an);
     for (const auto &sec : m_sec)
         s.insert(sectionKey(sec->kind) + QStringLiteral("Folders"), QJsonArray::fromStringList(sec->folders));
     s.insert(QStringLiteral("volume"), m_player.volume());
@@ -532,6 +540,7 @@ QString App::removeProfile()
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    m_albumNames.clear();
     for (auto &sec : m_sec) sec->folders.clear();
     reload();
     emit foldersChanged();
@@ -731,6 +740,67 @@ void App::reloadSection(int i)
         }
     }
     sec.model.setItems(items, progress, m_played);
+    if (sec.kind == SectionKind::Pictures) rebuildPictureAlbums(items);
+}
+
+// Pictures are shown as albums, one per folder they sit in; clicking one opens its pictures.
+void App::rebuildPictureAlbums(const QList<SectionItem> &items)
+{
+    QMap<QString, QList<SectionItem>> byDir;   // folder -> its pictures, in the index's order
+    for (const SectionItem &it : items) byDir[QFileInfo(it.path).absolutePath()].append(it);
+    QHash<QString, int> names;   // two folders can share a name: those also show their parent
+    for (auto d = byDir.constBegin(); d != byDir.constEnd(); ++d) ++names[QFileInfo(d.key()).fileName().toLower()];
+    QList<QVariantMap> albums;
+    for (auto d = byDir.constBegin(); d != byDir.constEnd(); ++d) {
+        const QFileInfo fi(d.key());
+        QString name = fi.fileName().isEmpty() ? d.key() : fi.fileName();
+        if (names.value(fi.fileName().toLower()) > 1) name += QStringLiteral(" (") + QFileInfo(fi.absolutePath()).fileName() + QLatin1Char(')');
+        const bool named = m_albumNames.contains(d.key());
+        if (named) name = m_albumNames.value(d.key());
+        albums.append({{QStringLiteral("dir"), d.key()}, {QStringLiteral("name"), name}, {QStringLiteral("renamed"), named}, {QStringLiteral("count"), d.value().size()},
+                       {QStringLiteral("cover"), QUrl::fromLocalFile(d.value().first().path).toString()}});
+    }
+    std::sort(albums.begin(), albums.end(), [](const QVariantMap &a, const QVariantMap &b) {
+        return a.value(QStringLiteral("name")).toString().compare(b.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive) < 0;
+    });
+    m_pictureAlbums.clear();
+    for (const QVariantMap &a : albums) m_pictureAlbums.append(a);
+    emit pictureAlbumsChanged();
+    // keep an open album in step with a rescan; if its folder is gone, go back to the list
+    if (!m_pictureAlbum.isEmpty()) {
+        if (byDir.contains(m_pictureAlbum)) m_albumItems.setItems(byDir.value(m_pictureAlbum));
+        else closePictureAlbum();
+    }
+}
+
+void App::openPictureAlbum(const QString &dir)
+{
+    QList<SectionItem> mine;
+    for (const SectionItem &it : m_sec[0]->model.items())
+        if (QFileInfo(it.path).absolutePath() == dir) mine.append(it);
+    if (mine.isEmpty()) return;
+    m_albumItems.setItems(mine);
+    m_pictureAlbum = dir;
+    emit pictureAlbumChanged();
+}
+
+void App::renamePictureAlbum(const QString &dir, const QString &name)
+{
+    if (m_guest) return;
+    const QString n = name.simplified().left(60);
+    if (n.isEmpty()) { if (!m_albumNames.remove(dir)) return; }
+    else if (m_albumNames.value(dir) == n) return;
+    else m_albumNames.insert(dir, n);
+    saveProfileSettings();
+    rebuildPictureAlbums(m_sec[0]->model.items());
+}
+
+void App::closePictureAlbum()
+{
+    if (m_pictureAlbum.isEmpty()) return;
+    m_pictureAlbum.clear();
+    m_albumItems.setItems({});
+    emit pictureAlbumChanged();
 }
 
 void App::removeVideoFolder(const QString &path)

@@ -23,6 +23,15 @@ Item {
     readonly property var status: hop.sectionStatus[kind] || ({ scanning: false, done: 0, total: 0 })
     readonly property var folders: hop.sectionFolders[kind] || []
 
+    // Pictures are shown as albums, one per folder; an open album shows its own pictures.
+    readonly property bool albumList: kind === "pictures" && hop.pictureAlbum === ""
+    readonly property bool albumOpen: kind === "pictures" && hop.pictureAlbum !== ""
+    readonly property var openAlbum: {
+        const list = hop.pictureAlbums
+        for (let i = 0; i < list.length; ++i) if (list[i].dir === hop.pictureAlbum) return list[i]
+        return ({ name: "", count: 0 })
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 10
@@ -34,10 +43,56 @@ Item {
                 text: root.status.total > 0 ? "scanning " + root.status.done + " / " + root.status.total : "scanning…"
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
+            AbstractButton {
+                id: albumBack
+                objectName: "pictureAlbumBack"
+                visible: root.albumOpen
+                hoverEnabled: true
+                onClicked: hop.closePictureAlbum()
+                Accessible.name: "back to albums"
+                contentItem: Label { text: "‹ albums"; color: albumBack.hovered ? hop.accent : Theme.text2; font { family: Theme.font; pixelSize: 16 } }
+                background: Item {}
+            }
+            Label {
+                visible: root.albumOpen && !headEdit.visible
+                text: root.openAlbum.name
+                color: Theme.text; elide: Text.ElideRight; font { family: Theme.font; pixelSize: 20 }
+            }
+            TextField {
+                id: headEdit
+                objectName: "pictureAlbumNameEdit"
+                visible: false
+                implicitWidth: 320
+                maximumLength: 60
+                selectByMouse: true
+                color: Theme.text
+                font { family: Theme.font; pixelSize: 18 }
+                placeholderText: "album name"; placeholderTextColor: Theme.dim
+                onAccepted: { hop.renamePictureAlbum(hop.pictureAlbum, text); visible = false }
+                Keys.onEscapePressed: visible = false
+                onActiveFocusChanged: if (!activeFocus) visible = false
+                background: Rectangle { color: Theme.panel; border { width: 2; color: hop.accent } }
+            }
+            AbstractButton {
+                id: headRename
+                objectName: "pictureAlbumRename"
+                visible: root.albumOpen && !headEdit.visible && !hop.guest
+                hoverEnabled: true
+                onClicked: { headEdit.text = root.openAlbum.name; headEdit.visible = true; headEdit.forceActiveFocus(); headEdit.selectAll() }
+                Accessible.name: "rename album"
+                contentItem: Label { text: "rename"; color: headRename.hovered ? hop.accent : Theme.muted
+                                     font { family: Theme.font; pixelSize: 13; underline: headRename.hovered } }
+                background: Item {}
+            }
             Item { Layout.fillWidth: true }
             Label {
-                visible: !root.status.scanning && root.model.count > 0
-                text: root.model.count + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
+                visible: !root.status.scanning && root.albumList && root.model.count > 0
+                text: hop.pictureAlbums.length + (hop.pictureAlbums.length === 1 ? " album, " : " albums, ") + root.model.count + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
+                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            }
+            Label {
+                visible: !root.status.scanning && root.model.count > 0 && !root.albumList
+                text: (root.albumOpen ? root.openAlbum.count : root.model.count) + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
             AbstractButton {
@@ -80,13 +135,93 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
-        // pictures: a grid of thumbnails
+        // pictures: one slot per folder, like a photo album shelf
         GridView {
-            id: grid
-            visible: root.kind === "pictures" && root.model.count > 0
+            id: albums
+            objectName: "pictureAlbums"
+            visible: root.albumList && root.model.count > 0
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
-            model: root.kind === "pictures" ? root.model : null
+            model: root.albumList ? hop.pictureAlbums : []
+            readonly property int columns: Math.max(2, Math.floor(width / 260))
+            cellWidth: width / columns; cellHeight: cellWidth * 3 / 4 + 52
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+            delegate: AbstractButton {
+                id: slot
+                required property int index
+                required property var modelData
+                objectName: "pictureAlbum_" + index
+                width: albums.cellWidth - 16; height: albums.cellHeight - 8
+                hoverEnabled: true
+                onClicked: hop.openPictureAlbum(slot.modelData.dir)
+                Accessible.name: slot.modelData.name
+                background: Item {}
+                contentItem: ColumnLayout {
+                    spacing: 6
+                    Rectangle {
+                        Layout.fillWidth: true; Layout.preferredHeight: width * 3 / 4
+                        color: Theme.panel
+                        clip: true
+                        Image {
+                            anchors.fill: parent
+                            source: slot.modelData.cover
+                            asynchronous: true
+                            cache: false
+                            fillMode: Image.PreserveAspectCrop
+                            sourceSize.width: 520
+                            opacity: slot.hovered ? 0.85 : 1.0
+                        }
+                        Rectangle {
+                            anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
+                            width: countLabel.implicitWidth + 16; height: 24; radius: 12
+                            color: Theme.fade(0.6)
+                            Label { id: countLabel; anchors.centerIn: parent; text: slot.modelData.count
+                                    color: "white"; font { family: Theme.font; pixelSize: 13 } }
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Label { visible: !slotEdit.visible; text: slot.modelData.name; Layout.fillWidth: true; elide: Text.ElideRight
+                                color: slot.hovered ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 16 } }
+                        TextField {
+                            id: slotEdit
+                            objectName: "pictureAlbumEdit_" + slot.index
+                            visible: false
+                            Layout.fillWidth: true
+                            maximumLength: 60
+                            selectByMouse: true
+                            color: Theme.text
+                            font { family: Theme.font; pixelSize: 15 }
+                            onAccepted: { hop.renamePictureAlbum(slot.modelData.dir, text); visible = false }
+                            Keys.onEscapePressed: visible = false
+                            onActiveFocusChanged: if (!activeFocus) visible = false
+                            background: Rectangle { color: Theme.panel; border { width: 2; color: hop.accent } }
+                        }
+                        AbstractButton {
+                            id: slotRename
+                            objectName: "pictureAlbumRename_" + slot.index
+                            visible: (slot.hovered || slotRename.hovered) && !slotEdit.visible && !hop.guest
+                            hoverEnabled: true
+                            onClicked: { slotEdit.text = slot.modelData.name; slotEdit.visible = true; slotEdit.forceActiveFocus(); slotEdit.selectAll() }
+                            Accessible.name: "rename album"
+                            contentItem: Label { text: "rename"; color: slotRename.hovered ? hop.accent : Theme.muted
+                                                 font { family: Theme.font; pixelSize: 12; underline: slotRename.hovered } }
+                            background: Item {}
+                        }
+                    }
+                }
+            }
+        }
+
+        // an open album: a grid of thumbnails
+        GridView {
+            id: grid
+            visible: root.albumOpen && root.model.count > 0
+            Layout.fillWidth: true; Layout.fillHeight: true
+            clip: true
+            model: root.albumOpen ? hop.pictureAlbumItems : null
             readonly property int columns: Math.max(2, Math.floor(width / 220))
             cellWidth: width / columns; cellHeight: cellWidth * 3 / 4 + 28
             boundsBehavior: Flickable.StopAtBounds

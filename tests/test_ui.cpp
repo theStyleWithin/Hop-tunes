@@ -893,7 +893,49 @@ private slots:
         // Not mixed into the music or video folder lists.
         QVERIFY(!m_app->folders().contains(QFileInfo(dir).canonicalFilePath()));
         QVERIFY(!m_app->videoFolders().contains(QFileInfo(dir).canonicalFilePath()));
+        // One slot per folder: the shelf first, the pictures once a slot is opened.
+        QTRY_VERIFY(item("pictureAlbum_0") != nullptr);
+        QCOMPARE(m_app->pictureAlbums().size(), 1);
+        QCOMPARE(m_app->pictureAlbums().first().toMap().value("count").toInt(), 1);
+        QCOMPARE(m_app->pictureAlbums().first().toMap().value("name").toString(), QStringLiteral("Pictures"));
+        // (a click can land before a freshly shown slot has been laid out, so it is repeated until it takes)
+        QTRY_VERIFY_WITH_TIMEOUT((click("pictureAlbum_0"), m_app->pictureAlbum() == QFileInfo(dir).canonicalFilePath()), 8000);
         QTRY_VERIFY(item("pictureTile_0") != nullptr);
+        QCOMPARE(m_app->pictureAlbumItems()->count(), 1);
+        shot("p-album-open");
+        QTRY_VERIFY_WITH_TIMEOUT((click("pictureAlbumBack"), m_app->pictureAlbum().isEmpty()), 8000);
+
+        // A second folder is a second slot, kept apart from the first; slots can be named, and the name is remembered.
+        const QString trip = m_home.filePath(QStringLiteral("Pictures2/Trip"));
+        QVERIFY(QDir().mkpath(trip));
+        QVERIFY(img.save(trip + QStringLiteral("/a.png")));
+        QVERIFY(img.save(trip + QStringLiteral("/b.png")));
+        m_app->addSectionFolder(QStringLiteral("pictures"), QUrl::fromLocalFile(trip));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->pictures()->count(), 3, 15000);
+        QCOMPARE(m_app->pictureAlbums().size(), 2);
+        QTRY_VERIFY(item("pictureAlbum_1") != nullptr);
+        shot("p-albums");
+        const QString tripDir = QFileInfo(trip).canonicalFilePath();
+        m_app->renamePictureAlbum(tripDir, QStringLiteral("  Summer   trip "));
+        QStringList names;
+        for (const QVariant &a : m_app->pictureAlbums()) names << a.toMap().value("name").toString();
+        QVERIFY2(names.contains(QStringLiteral("Summer trip")), qPrintable(names.join(',')));
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(st.value("pictureAlbumNames").toObject().value(tripDir).toString(), QStringLiteral("Summer trip"));
+        m_app->rescan();   // the name survives a rescan
+        QTRY_VERIFY(!m_app->sectionStatus().value("pictures").toMap().value("scanning").toBool());
+        names.clear();
+        for (const QVariant &a : m_app->pictureAlbums()) names << a.toMap().value("name").toString();
+        QVERIFY(names.contains(QStringLiteral("Summer trip")));
+        m_app->openPictureAlbum(tripDir);
+        QCOMPARE(m_app->pictureAlbumItems()->count(), 2);
+        m_app->renamePictureAlbum(tripDir, QString());   // empty: back to the folder's name
+        m_app->closePictureAlbum();
+        names.clear();
+        for (const QVariant &a : m_app->pictureAlbums()) names << a.toMap().value("name").toString();
+        QVERIFY(names.contains(QStringLiteral("Trip")));
+        m_app->removeSectionFolder(QStringLiteral("pictures"), tripDir);
+        QTRY_COMPARE(m_app->pictures()->count(), 1);
 
         m_app->removeSectionFolder(QStringLiteral("pictures"), QFileInfo(dir).canonicalFilePath());
         QTRY_COMPARE(m_app->pictures()->count(), 0);

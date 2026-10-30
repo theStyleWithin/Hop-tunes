@@ -222,7 +222,7 @@ Item {
                 Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
             }
         }
-        PictureViewer { id: pictureViewer; model: hop.pictures }
+        PictureViewer { id: pictureViewer; model: hop.pictureAlbumItems }
         EbookReader { id: ebookReader }
 
         StackLayout {
