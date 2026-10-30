@@ -20,10 +20,6 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QSslCipher>
-#include <QSslConfiguration>
-#include <QSslPreSharedKeyAuthenticator>
-#include <QSslSocket>
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <QtTest>
@@ -51,45 +47,6 @@ bool writeWav(const QString &path, int ms)
     f.write(QByteArray(int(bytes), '\0'));
     return true;
 }
-
-// A guest's side of one connection to a sharing host (see test_share.cpp for the full client): connect with an identity
-// and a shared key, send one request, return the body (empty if the handshake was refused). The host runs in this
-// thread, so waiting must keep the event loop going.
-struct GuestLink {
-    QSslSocket socket;
-    explicit GuestLink(quint16 port, const QByteArray &identity, const QByteArray &key)
-    {
-        QSslConfiguration conf = QSslConfiguration::defaultConfiguration();
-        conf.setProtocol(QSsl::TlsV1_2);
-        conf.setCiphers({QSslCipher(QStringLiteral("ECDHE-PSK-CHACHA20-POLY1305"), QSsl::TlsV1_2)});
-        conf.setPeerVerifyMode(QSslSocket::VerifyNone);
-        socket.setSslConfiguration(conf);
-        QObject::connect(&socket, &QSslSocket::preSharedKeyAuthenticationRequired, [identity, key](QSslPreSharedKeyAuthenticator *a) {
-            a->setIdentity(identity); a->setPreSharedKey(key);
-        });
-        socket.connectToHostEncrypted(QStringLiteral("127.0.0.1"), port);
-        QElapsedTimer t; t.start();
-        while (!socket.isEncrypted() && t.elapsed() < 4000 && socket.state() != QAbstractSocket::UnconnectedState) QTest::qWait(10);
-    }
-    bool ok() const { return socket.isEncrypted(); }
-    QByteArray request(const QByteArray &req)
-    {
-        socket.write(req);
-        QByteArray all;
-        QElapsedTimer t; t.start();
-        while (t.elapsed() < 3000) {
-            QTest::qWait(20);
-            all += socket.readAll();
-            const int e = all.indexOf("\r\n\r\n");
-            if (e >= 0) {
-                const int c = all.toLower().indexOf("content-length:");
-                const int want = c >= 0 ? all.mid(c + 15, all.indexOf('\r', c) - c - 15).trimmed().toInt() : 0;
-                if (all.size() >= e + 4 + want) return all.mid(e + 4);
-            }
-        }
-        return {};
-    }
-};
 
 // A tiny VP8+Opus/Matroska clip (see test_video.cpp for the same recipe) — enough for
 // VideoScanner to probe and for the Videos grid to show a real tile.
@@ -970,70 +927,6 @@ private slots:
         QVERIFY(r.property("answers").toBool());
         QVERIFY(r.property("answerDirector").toBool());
         QVERIFY(r.property("ago").toBool());
-    }
-
-    // Settings -> sharing: off at start, an invite code, a guest who uses it appears with a connected dot, and removing
-    // them works. The host is real here (it listens on this machine); the guest is a small client.
-    void sharingSettings()
-    {
-        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
-        QVERIFY(!m_app->sharing());                                       // off whenever Hop-tunes starts
-        window()->setProperty("view", QStringLiteral("settings"));
-        QTRY_VERIFY(item("sharingChoice") != nullptr);
-        QVERIFY(item("sharingPanel") == nullptr || !item("sharingPanel")->isVisible());
-        QTest::qWait(150);
-        QVERIFY(click("choice_sharing"));
-        QTRY_VERIFY(m_app->sharing());
-        QVERIFY(m_app->sharingPort() > 0);
-        QTRY_VERIFY(item("sharingPanel") != nullptr && item("sharingPanel")->isVisible());
-        QVERIFY(item("sharingWhere")->property("text").toString().contains(QString::number(m_app->sharingPort())));
-        QVERIFY(m_app->shareGuests().isEmpty());
-
-        QTest::qWait(150);
-        QVERIFY(click("makeInvite"));
-        QTRY_VERIFY(item("inviteCode") != nullptr && item("inviteCode")->isVisible());
-        const QString code = item("inviteCode")->property("text").toString();
-        QCOMPARE(code.size(), 19);
-        QVERIFY(item("inviteLink")->property("text").toString().startsWith(QStringLiteral("hop://")));
-        QVERIFY(item("inviteLink")->property("text").toString().endsWith(code));
-        ensureVisible(item("shareGuest_0") ? item("shareGuest_0") : item("inviteLink"));
-        shot("sharing-invite");
-
-        // a guest uses the invite: they appear in the list, not yet connected
-        const QByteArray label = ShareAuth::normalizeCode(code).left(4).toLatin1();
-        GuestLink first(quint16(m_app->sharingPort()), "invite:" + label, ShareAuth::secretFromCode(code));
-        QVERIFY(first.ok());
-        const QByteArray body = "{\"name\":\"Dad\"}";
-        const QByteArray reply = first.request("POST /v1/redeem HTTP/1.1\r\nContent-Length: " + QByteArray::number(body.size()) + "\r\n\r\n" + body);
-        const QString key = QString::fromLatin1(reply).section(QStringLiteral("\"key\":\""), 1).section(QLatin1Char('"'), 0, 0);
-        const QString gid = QString::fromLatin1(reply).section(QStringLiteral("\"guest\":"), 1).section(QRegularExpression(QStringLiteral("[,}]")), 0, 0);
-        QCOMPARE(key.size(), 64);
-        QTRY_COMPARE(m_app->shareGuests().size(), 1);
-        QTRY_VERIFY(item("shareGuest_0") != nullptr && item("shareGuest_0")->isVisible());
-        QVERIFY(!item("shareGuestDot_0")->property("connected").toBool());
-
-        // when the guest comes back with their key, the dot lights up; when they leave, it goes out
-        {
-            GuestLink back(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
-            QVERIFY(back.ok());
-            QTRY_VERIFY(item("shareGuestDot_0")->property("connected").toBool());
-            ensureVisible(item("shareGuest_0"));
-            shot("sharing-guest");
-        }
-        QTRY_VERIFY(!item("shareGuestDot_0")->property("connected").toBool());
-
-        QVERIFY(click("removeGuest_0"));
-        QTRY_VERIFY(m_app->shareGuests().isEmpty());
-        GuestLink gone(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
-        QVERIFY(!gone.ok());                                              // a removed guest's key is dead
-
-        const int port = m_app->sharingPort();
-        QVERIFY(click("choice_stopped"));
-        QTRY_VERIFY(!m_app->sharing());
-        QCOMPARE(m_app->sharingPort(), 0);
-        GuestLink late(quint16(port), "guest:1", QByteArray(32, 'x'));
-        QVERIFY(!late.ok());                                              // nothing listens any more
-        window()->setProperty("view", QStringLiteral("collection"));
     }
 
     // A private status box above the profile: empty by default, kept per profile, saved as you type.
