@@ -82,6 +82,17 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.0" date="2026-10-30">
+      <description>
+        <p>Video categories, picture albums and a few personal touches.</p>
+        <ul>
+          <li>Videos are split into movies, shows, cartoons, anime and other videos, each with its own folders.</li>
+          <li>Pictures are shown as albums, one per folder, and albums can be renamed.</li>
+          <li>A movie volume slider that is separate from the music volume and can boost up to 150 percent.</li>
+          <li>A private status box at the top right, and search now sits next to the tabs.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.6.0" date="2026-10-30">
       <description>
         <p>Movie pages and a better video player.</p>

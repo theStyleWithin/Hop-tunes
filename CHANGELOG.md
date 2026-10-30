@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-30
+
 ### Added
 - **A private status box** at the top right of the collection view, right above your profile: an empty
   box for anything you want to see there, like a lyric, a quote or how you feel. Nobody else ever sees
@@ -24,6 +26,14 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   settings), and a video belongs to the category whose folder is its closest parent, so a folder
   inside a movies folder can still be added as anime. Your existing video folders are your movies, so
   nothing moves. The "up next" list while watching follows the category you are in.
+
+### Changed
+- **Search now sits right after the tabs.** In the collection view the search box (with the song count after
+  it) moved from the far right to just after "podcasts" in the music · videos · pictures row. Nothing
+  else about the menu changed.
+- **Your profile moved down.** The profile name and picture are at the right end of that tab row, where
+  search used to be, in the collection view. In settings, quickplay and the other views the profile stays
+  in the top bar.
 
 ## [1.6.0] - 2026-10-30
 
