@@ -1136,6 +1136,24 @@ private slots:
         if (auto *f = item("videoDetailAddPerson")) { auto *fl = f->parentItem(); while (fl && !fl->inherits("QQuickFlickable")) fl = fl->parentItem(); if (fl) fl->setProperty("contentY", 560); }
         QTest::qWait(300);
         shot("mock-videodetail-cast");
+        m_app->setVideoChat(true);
+        m_app->setVideoComments(QStringLiteral("populated"));
+        m_app->playVideo(0);
+        QTest::qWait(800);
+        shot("mock-player-portrait-nextup");
+        QVERIFY(click("phoneTab_comments"));
+        QTest::qWait(500);
+        shot("mock-player-portrait-comments");
+        QVERIFY2(overflowing().isEmpty(), qPrintable(QStringLiteral("player overflows: ") + overflowing().join(QStringLiteral(" | "))));
+        w->resize(880, 420);
+        QTest::qWait(700);
+        shot("mock-player-landscape");
+        w->resize(420, 880);
+        QTest::qWait(300);
+        m_app->closeVideoPlayer(0, 0);
+        m_app->setVideoChat(false);
+        m_app->setVideoComments(QStringLiteral("off"));
+        QTest::qWait(300);
         m_app->closeVideoDetail();
         QVERIFY(click("pillTab_music"));
         m_app->playSongs(0);

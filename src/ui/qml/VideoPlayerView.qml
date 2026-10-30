@@ -18,10 +18,15 @@ Rectangle {
     color: "black"
     clip: true
 
+    PhoneVideoPlayer {   // phones: the layout from the mockups
+        visible: Theme.compact && hop.videoPlayerOpen
+        anchors.fill: parent
+    }
+
     Loader {
         id: loader
         anchors.fill: parent
-        active: hop.videoPlayerOpen
+        active: hop.videoPlayerOpen && !Theme.compact
         sourceComponent: Component {
             Item {
                 id: page

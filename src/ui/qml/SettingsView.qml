@@ -122,6 +122,17 @@ Item {
                 onPicked: function (v) { hop.navStyle = v }
             }
         }
+        SRow {   // phones: how videos open (the rotate button in the player turns one video either way)
+            visible: Theme.compact
+            Label { text: "video player"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }
+            Label { text: "orientation: how videos open"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } Layout.topMargin: -6 }
+            Choice {
+                objectName: "videoOrientationChoice"
+                options: [["portrait", "portrait"], ["auto", "auto"], ["landscape", "landscape"]]
+                value: hop.videoOrientation
+                onPicked: function (v) { hop.videoOrientation = v }
+            }
+        }
         SRow {
             visible: Window.window !== null && Window.window.mobileNav === true
             Label { text: "on tablets"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }

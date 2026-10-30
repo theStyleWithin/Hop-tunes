@@ -11,7 +11,7 @@ ApplicationWindow {
     // phones and tablets: bottom bar / side drawer (MobileNav.qml) instead of the desktop's top pivots
     property bool forceMobile: false   // tests and screenshots
     readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
-    readonly property bool tablet: width >= 600
+    readonly property bool tablet: Math.min(width, height) >= 600   // a phone turned sideways is still a phone
     Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
     readonly property int railWidth: !mobileNav || !tablet ? 0 : (hop.navStyle === "drawer" ? 240 : 84)
     minimumWidth: mobileNav ? 0 : 900

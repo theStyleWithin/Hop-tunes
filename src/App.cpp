@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QCoreApplication>
+#endif
 
 #include "core/Paths.h"
 #include "library/Smart.h"
@@ -367,6 +371,8 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
+    m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
+    if (m_videoOrientation != QLatin1String("portrait") && m_videoOrientation != QLatin1String("landscape")) m_videoOrientation = QStringLiteral("auto");
     m_navStyle = s.value(QStringLiteral("navStyle")).toString() == QLatin1String("drawer") ? QStringLiteral("drawer") : QStringLiteral("bar");
     m_statusNote = s.value(QStringLiteral("statusNote")).toString().left(300);
     m_videoVolume = qBound(0, s.value(QStringLiteral("videoVolume")).toInt(100), 150);
@@ -374,6 +380,7 @@ void App::activate(const QString &id, bool guest)
     m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
     m_loadingSettings = false;
     emit videoChatChanged();
+    emit videoOrientationChanged();
     emit navStyleChanged();
     emit statusNoteChanged();
     emit videoVolumeChanged();
@@ -446,11 +453,13 @@ void App::leaveProfile()
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
+    m_videoOrientation = QStringLiteral("auto");
     m_navStyle = QStringLiteral("bar");
     m_statusNote.clear();
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
+    emit videoOrientationChanged();
     emit navStyleChanged();
     emit statusNoteChanged();
     m_videoVolume = 100;
@@ -499,6 +508,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
     s.insert(QStringLiteral("navStyle"), m_navStyle);
     s.insert(QStringLiteral("statusNote"), m_statusNote);
     s.insert(QStringLiteral("videoVolume"), m_videoVolume);
@@ -1084,6 +1094,27 @@ void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
     if (row < 0 || row >= m_videos.count()) return;
     saveVideoProgress(positionMs, durationMs);
     openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::setVideoOrientation(const QString &mode)
+{
+    const QString v = mode == QLatin1String("portrait") || mode == QLatin1String("landscape") ? mode : QStringLiteral("auto");
+    if (v == m_videoOrientation) return;
+    m_videoOrientation = v;
+    saveProfileSettings();
+    emit videoOrientationChanged();
+}
+
+void App::requestOrientation(const QString &mode)
+{
+#ifdef Q_OS_ANDROID
+    // android.content.pm.ActivityInfo: SCREEN_ORIENTATION_LANDSCAPE 0, PORTRAIT 1, UNSPECIFIED -1 (follows the phone)
+    const jint v = mode == QLatin1String("landscape") ? 0 : (mode == QLatin1String("portrait") ? 1 : -1);
+    const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+    if (activity.isValid()) activity.callMethod<void>("setRequestedOrientation", "(I)V", v);
+#else
+    Q_UNUSED(mode)
+#endif
 }
 
 void App::setNavStyle(const QString &style)
