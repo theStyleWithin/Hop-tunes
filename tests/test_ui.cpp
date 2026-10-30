@@ -164,7 +164,10 @@ class TestUi : public QObject {
                     const QString t = p->property("text").toString();
                     label = !t.isEmpty() ? QStringLiteral("\"%1\"").arg(t.left(30)) : p->objectName();
                 }
-                out << QStringLiteral("%1 %2 right=%3").arg(QLatin1String(it->metaObject()->className()), label).arg(vis.right());
+                QString chain;
+                for (QQuickItem *p = it->parentItem(); p && chain.size() < 120; p = p->parentItem())
+                    chain += QStringLiteral(" <%1:%2").arg(QLatin1String(p->metaObject()->className()).left(14)).arg(int(p->width()));
+                out << QStringLiteral("%1 %2 right=%3%4").arg(QLatin1String(it->metaObject()->className()), label).arg(vis.right()).arg(qEnvironmentVariableIsSet("HOPTUNES_DEBUG_CHAIN") ? chain : QString());
             }
             for (QQuickItem *c : it->childItems()) walk(c, clip);
         };
