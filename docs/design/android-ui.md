@@ -21,3 +21,8 @@
 - **Landscape:** the video fills the screen, with the same controls laid over it.
 - **Switching:** the ⟳ button in the player toggles between the two at any time, just for that video.
   Settings › video player sets how videos open: portrait, auto (follows the phone) or landscape.
+- **Pretend live chat and comments:** in portrait they sit under the video as tabs (next up, live chat,
+  comments), with made-up commenters, replies and your own comments. In landscape a slim live chat slides in
+  from the right edge and can be closed; comments are not shown there. Settings › video player has the same
+  choices as the desktop: live chat off / clean / lively, comments off / only mine / populated. Nobody in
+  either is real; it is all generated on the device.
