@@ -79,6 +79,7 @@ bool MpvCore::init()
     // decide what happens next; the UI layer owns "what's next", like Player does for audio).
     mpv_set_option_string(m_mpv, "keep-open", "yes");
     mpv_set_option_string(m_mpv, "video-timeout", "20");
+    mpv_set_option_string(m_mpv, "volume-max", "150");   // the video player's boost range
     const int rc = mpv_initialize(m_mpv);
     if (rc < 0) {
         setError(QString::fromUtf8(mpv_error_string(rc)));
@@ -86,6 +87,7 @@ bool MpvCore::init()
         m_mpv = nullptr;
         return false;
     }
+    mpv_set_property_string(m_mpv, "volume", QByteArray::number(m_volume).constData());
     mpv_set_wakeup_callback(m_mpv, &MpvCore::wakeupTrampoline, this);
     mpv_observe_property(m_mpv, 1, "time-pos", MPV_FORMAT_DOUBLE);
     mpv_observe_property(m_mpv, 2, "duration", MPV_FORMAT_DOUBLE);
@@ -133,7 +135,7 @@ void MpvCore::stop()
 
 void MpvCore::setVolume(int percent)
 {
-    m_volume = qBound(0, percent, 100);
+    m_volume = qBound(0, percent, 150);
     if (m_mpv) mpv_set_property_string(m_mpv, "volume", QByteArray::number(m_volume).constData());
 }
 
@@ -255,7 +257,7 @@ void MpvCore::pause() {}
 void MpvCore::togglePause() {}
 void MpvCore::seek(qint64) {}
 void MpvCore::stop() {}
-void MpvCore::setVolume(int percent) { m_volume = qBound(0, percent, 100); }
+void MpvCore::setVolume(int percent) { m_volume = qBound(0, percent, 150); }
 void MpvCore::addSubtitleFile(const QString &) {}
 void MpvCore::setSubtitleTrack(int) {}
 void MpvCore::processEvents() {}

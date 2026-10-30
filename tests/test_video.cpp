@@ -183,6 +183,18 @@ private slots:
         QVERIFY2(core.init(), qPrintable(core.error()));
     }
 
+    // The movie volume can go past 100 % (a boost for quiet films) but no further, and not below 0.
+    void mpvCoreVolumeAllowsABoost()
+    {
+        MpvCore core;
+        core.setVolume(130);
+        QCOMPARE(core.volume(), 130);
+        core.setVolume(900);
+        QCOMPARE(core.volume(), 150);
+        core.setVolume(-5);
+        QCOMPARE(core.volume(), 0);
+    }
+
     void mpvCoreLoadsPlaysSeeksAndReportsDuration()
     {
 #ifndef HOPTUNES_HAVE_MPV

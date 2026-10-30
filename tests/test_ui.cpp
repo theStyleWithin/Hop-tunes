@@ -648,6 +648,24 @@ private slots:
         shot("m6-about");
     }
 
+    // The movie volume is its own per-profile setting (0-150 %), apart from the music volume.
+    void movieVolumeIsSeparateFromMusicVolume()
+    {
+        QCOMPARE(m_app->videoVolume(), 100);
+        const double music = m_app->player()->volume();
+        m_app->setVideoVolume(130);
+        QCOMPARE(m_app->videoVolume(), 130);
+        m_app->setVideoVolume(999);
+        QCOMPARE(m_app->videoVolume(), 150);
+        m_app->setVideoVolume(-3);
+        QCOMPARE(m_app->videoVolume(), 0);
+        m_app->setVideoVolume(120);
+        QCOMPARE(m_app->player()->volume(), music);   // untouched
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(s.value(QStringLiteral("videoVolume")).toInt(), 120);
+        m_app->setVideoVolume(100);
+    }
+
     // Scanning and the Videos grid only (spec §5b) — not opening the player itself:
     // MpvVideoItem is a QQuickFramebufferObject, which needs a real GL scenegraph, and
     // this whole test suite runs the software backend (no GPU in CI). Opening the player
