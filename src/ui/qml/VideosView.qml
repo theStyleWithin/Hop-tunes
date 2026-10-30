@@ -37,7 +37,16 @@ Item {
         visible: hop.videoDetailRow < 0   // the grid; a movie's page replaces it while open
 
         // movies · shows · cartoons · anime · other videos
+        PillRow {
+            visible: Theme.compact
+            Layout.fillWidth: true
+            namePrefix: "pillCat_"
+            items: hop.videoCategories.map(function (c) { return [c === "other" ? "other" : root.labels[c], c] })
+            current: root.cat
+            onPicked: function (v) { hop.videoCategory = v }
+        }
         RowLayout {
+            visible: !Theme.compact
             Layout.fillWidth: true
             spacing: 22
             Repeater {
@@ -50,8 +59,8 @@ Item {
                     onClicked: hop.videoCategory = modelData
                     Accessible.name: root.labels[modelData]
                     contentItem: Label { text: root.labels[catTab.modelData]
-                                         color: root.cat === catTab.modelData ? hop.accent : (catTab.hovered ? Theme.text2 : Theme.dim)
-                                         font { family: Theme.font; pixelSize: 17 } }
+                                         color: root.cat === catTab.modelData ? Theme.accent : (catTab.hovered ? Theme.text2 : Theme.dim)
+                                         font { family: Theme.font; pixelSize: Theme.fs(17) } }
                     background: Item {}
                 }
             }
@@ -62,8 +71,8 @@ Item {
                 hoverEnabled: true
                 visible: !hop.guest && (hop.videoCategoryFolders[root.cat] || []).length > 0
                 onClicked: root.addFolderRequested(root.cat)
-                contentItem: Label { text: "+ add folder"; color: addCatFolder.hovered ? hop.accent : Theme.muted
-                                     font { family: Theme.font; pixelSize: 14; underline: addCatFolder.hovered } }
+                contentItem: Label { text: "+ add folder"; color: addCatFolder.hovered ? Theme.accent : Theme.muted
+                                     font { family: Theme.font; pixelSize: Theme.fs(14); underline: addCatFolder.hovered } }
                 background: Item {}
             }
         }
@@ -73,13 +82,13 @@ Item {
             Label {
                 visible: hop.videoScanning
                 text: hop.videoScanTotal > 0 ? "scanning videos " + hop.videoScanDone + " / " + hop.videoScanTotal : "scanning videos…"
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             Item { Layout.fillWidth: true }
             Label {
-                visible: !hop.videoScanning && hop.videos.count > 0
+                visible: !hop.videoScanning && hop.videos.count > 0 && !Theme.compact
                 text: hop.videos.count + (hop.videos.count === 1 ? " video" : " videos")
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
         }
 
@@ -90,19 +99,19 @@ Item {
             spacing: 18
             Label {
                 text: (hop.videoCategoryFolders[root.cat] || []).length === 0 ? "add a folder for " + root.labels[root.cat] : "no " + root.labels[root.cat] + " found yet"
-                color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light }
+                color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(40); weight: Font.Light }
             }
             Label {
                 text: root.hints[root.cat] + " mkv, mp4, webm, mov, avi, wmv and a few others, anywhere under the folders you add here."
-                color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
-                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) }
+                wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }
             Button {
                 objectName: root.cat === "movies" ? "videosChooseFolder" : "videosChooseFolder_" + root.cat
                 text: "choose a folder for " + root.labels[root.cat] + "…"
                 onClicked: root.addFolderRequested(root.cat)
-                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 18; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
+                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(18); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
             }
             Item { Layout.fillHeight: true }
         }
@@ -113,8 +122,8 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
             model: hop.videos
-            readonly property int columns: Math.max(2, Math.floor(width / 260))
-            cellWidth: width / columns; cellHeight: cellWidth * 9 / 16 + 70
+            readonly property int columns: Theme.compact ? 2 : Math.max(2, Math.floor(width / 260))
+            cellWidth: width / columns; cellHeight: cellWidth * 9 / 16 + (Theme.compact ? 44 : 70)
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
             delegate: AbstractButton {
@@ -144,13 +153,13 @@ Item {
                         Label {
                             anchors { right: parent.right; bottom: parent.bottom; margins: 4 }
                             text: tile.duration
-                            color: "white"; font { family: Theme.font; pixelSize: 11 }
+                            color: "white"; font { family: Theme.font; pixelSize: Theme.fs(11) }
                         }
                     }
-                    Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight
-                            color: Theme.text; font { family: Theme.font; pixelSize: 14 } }
+                    Label { text: tile.title; Layout.fillWidth: true; Layout.topMargin: Theme.compact ? 2 : 0; elide: Text.ElideRight
+                            color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 17 : Theme.fs(14) } }
                     RowLayout {
-                        visible: !hop.guest
+                        visible: !hop.guest && !Theme.compact
                         spacing: 12
                         AbstractButton {
                             id: imageBtn
@@ -161,8 +170,8 @@ Item {
                             onClicked: { thumbDialog.row = tile.index; thumbDialog.open() }
                             contentItem: Label {
                                 text: "image"
-                                color: imageBtn.hovered ? hop.accent : Theme.muted
-                                font { family: Theme.font; pixelSize: 12; underline: imageBtn.hovered }
+                                color: imageBtn.hovered ? Theme.accent : Theme.muted
+                                font { family: Theme.font; pixelSize: Theme.fs(12); underline: imageBtn.hovered }
                             }
                             background: Item {}
                         }
@@ -176,8 +185,8 @@ Item {
                             onClicked: hop.clearVideoThumb(tile.index)
                             contentItem: Label {
                                 text: "reset"
-                                color: resetBtn.hovered ? hop.accent : Theme.muted
-                                font { family: Theme.font; pixelSize: 12; underline: resetBtn.hovered }
+                                color: resetBtn.hovered ? Theme.accent : Theme.muted
+                                font { family: Theme.font; pixelSize: Theme.fs(12); underline: resetBtn.hovered }
                             }
                             background: Item {}
                         }

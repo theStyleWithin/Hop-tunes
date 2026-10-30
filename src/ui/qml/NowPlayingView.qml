@@ -6,7 +6,7 @@ import QtQuick.Layouts
 // Now playing (design/screens/5): drifting art mosaic, big type, up next.
 Rectangle {
     id: root
-    color: Theme.bgDeep
+    color: Theme.compact ? Theme.bg : Theme.bgDeep
     clip: true
     readonly property var player: hop.player
     signal back()
@@ -28,6 +28,7 @@ Rectangle {
     // Background mosaic of placeholder tiles from the queue's albums.
     Grid {
         id: mosaic
+        visible: !Theme.compact
         columns: 8
         spacing: 6
         opacity: 0.38
@@ -53,6 +54,7 @@ Rectangle {
         }
     }
     Rectangle {
+        visible: !Theme.compact
         anchors.fill: parent
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -65,45 +67,52 @@ Rectangle {
 
     RowLayout {
         id: header
+        visible: !Theme.compact
         opacity: root.chrome
         Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 450 } }
-        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 48; rightMargin: 48; topMargin: 24 }
+        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 24 }
         AbstractButton {
             implicitWidth: 44; implicitHeight: 44
             onClicked: root.back()
             Accessible.name: "back"
             background: Rectangle { radius: 22; color: "transparent"; border { width: 2; color: Theme.border } }
-            contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
+            contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
         }
         Item { Layout.fillWidth: true }
-        Label { text: "NOW PLAYING"; color: Theme.muted; font { family: Theme.font; pixelSize: 16; letterSpacing: 3 } }
+        Label { text: "NOW PLAYING"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16); letterSpacing: 3 } }
     }
 
-    RowLayout {
-        anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: 48; rightMargin: 48; topMargin: 16; bottomMargin: 36 }
-        spacing: 48
+    GridLayout {   // desktop and tablets: the song beside its up-next list
+        visible: !Theme.compact
+        anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 16; bottomMargin: 36 }
+        columns: Theme.compact ? 1 : 2
+        columnSpacing: 48; rowSpacing: 18
 
         ColumnLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignBottom
             spacing: 20
 
-            AlbumArt { key: root.player.album; source: root.player.artUrl; Layout.preferredWidth: 200; Layout.preferredHeight: 200; visible: root.player.hasTrack }
-            Label { text: root.player.hasTrack ? root.player.artist : ""; color: Theme.text2; font { family: Theme.font; pixelSize: 28; weight: Font.Light } }
+            AlbumArt { key: root.player.album; source: root.player.artUrl; Layout.preferredWidth: Theme.compact ? 240 : 200; Layout.preferredHeight: Theme.compact ? 240 : 200; Layout.alignment: Theme.compact ? Qt.AlignHCenter : Qt.AlignLeft; visible: root.player.hasTrack }
+            Label { text: root.player.hasTrack ? root.player.artist : ""; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(28); weight: Font.Light }
+                    elide: Text.ElideRight; Layout.fillWidth: true }
             Label {
                 text: root.player.hasTrack ? root.player.title : "nothing playing"
-                color: Theme.text; font { family: Theme.font; pixelSize: 76; weight: Font.Light; letterSpacing: -2 }
+                color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(76); weight: Font.Light; letterSpacing: -2 }
                 elide: Text.ElideRight; Layout.fillWidth: true
+                wrapMode: Theme.compact ? Text.WordWrap : Text.NoWrap; maximumLineCount: Theme.compact ? 2 : 1
             }
             Label {
                 visible: root.player.hasTrack
+                wrapMode: Text.WordWrap; Layout.fillWidth: true
                 text: root.player.album + (root.player.year > 0 ? " · " + root.player.year : "")
                       + " · track " + (root.player.currentIndex + 1) + " of " + root.player.queueLength
-                color: Theme.muted; font { family: Theme.font; pixelSize: 22 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(22) }
             }
             RowLayout {
                 spacing: 18
                 Layout.topMargin: 8
+                Layout.alignment: Theme.compact ? Qt.AlignHCenter : Qt.AlignLeft
                 opacity: root.chrome
                 Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 450 } }
                 TransportButton { glyph: "prev"; iconSize: 24; implicitWidth: 52; onClicked: root.player.previous(); Accessible.name: "previous" }
@@ -121,6 +130,7 @@ Rectangle {
             opacity: root.chrome
             Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 450 } }
             Layout.preferredWidth: 360
+            Layout.fillWidth: Theme.compact
             Layout.alignment: Qt.AlignBottom
             Layout.preferredHeight: upNext.implicitHeight + 40
             color: Theme.fade(0.82)
@@ -129,11 +139,11 @@ Rectangle {
                 id: upNext
                 anchors { fill: parent; margins: 20 }
                 spacing: 0
-                Label { text: "up next"; color: hop.accent; font { family: Theme.font; pixelSize: 22 } bottomPadding: 8 }
+                Label { text: "up next"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(22) } bottomPadding: 8 }
                 Label {
                     visible: root.player.currentIndex + 1 >= root.player.queueLength
                     text: root.player.repeatMode === 1 ? "the queue starts again" : "nothing after this song"
-                    color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
                 }
                 Repeater {
                     // the next 7 songs; drag the handle to reorder, click to jump, × to remove
@@ -159,7 +169,7 @@ Rectangle {
                             anchors.fill: parent
                             spacing: 10
                             Label {
-                                text: "≡"; color: Theme.dim; font.pixelSize: 18
+                                text: "≡"; color: Theme.dim; font.pixelSize: Theme.fs(18)
                                 Layout.preferredWidth: 18
                                 MouseArea {
                                     id: drag
@@ -181,7 +191,7 @@ Rectangle {
                             Label {
                                 objectName: "upNextTitle_" + qrow.index
                                 text: { root.queueRev; return hop.player.queueTitle(qrow.modelData) }
-                                color: Theme.text; font { family: Theme.font; pixelSize: 17 }
+                                color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) }
                                 elide: Text.ElideRight; Layout.fillWidth: true
                                 MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: root.player.playQueueIndex(qrow.modelData) }
                             }
@@ -190,7 +200,7 @@ Rectangle {
                                 implicitWidth: 26; implicitHeight: 26
                                 onClicked: root.player.removeFromQueue(qrow.modelData)
                                 Accessible.name: "remove from queue"
-                                contentItem: Label { text: "×"; color: Theme.muted; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                contentItem: Label { text: "×"; color: Theme.muted; font.pixelSize: Theme.fs(18); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                 background: Item { }
                             }
                         }
@@ -199,15 +209,21 @@ Rectangle {
                 Label {
                     visible: root.player.queueLength - root.player.currentIndex - 1 > 7
                     text: "+ " + (root.player.queueLength - root.player.currentIndex - 8) + " more"
-                    color: Theme.dim; font { family: Theme.font; pixelSize: 13 } topPadding: 4
+                    color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } topPadding: 4
                 }
                 Label {
                     text: hop.djSeed !== "" ? "smart dj · " + hop.djSeed
                         : (root.player.crossfadeMs > 0 ? "crossfade " + Math.round(root.player.crossfadeMs / 1000) + " s · albums stay gapless" : "gapless")
                           + (root.player.shuffle ? " · shuffle" : "") + (root.player.repeatMode === 1 ? " · repeat" : (root.player.repeatMode === 2 ? " · repeat this song" : ""))
-                    color: Theme.tabIdle; font { family: Theme.font; pixelSize: 13 } topPadding: 8
+                    color: Theme.tabIdle; font { family: Theme.font; pixelSize: Theme.fs(13) } topPadding: 8
                 }
             }
         }
+    }
+
+    PhoneNowPlaying {   // phones
+        visible: Theme.compact
+        anchors.fill: parent
+        onBack: root.back()
     }
 }

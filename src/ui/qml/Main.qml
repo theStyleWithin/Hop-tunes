@@ -8,13 +8,22 @@ ApplicationWindow {
     id: win
     width: 1280
     height: 800
-    minimumWidth: 900
-    minimumHeight: 600
+    // phones and tablets: bottom bar / side drawer (MobileNav.qml) instead of the desktop's top pivots
+    property bool forceMobile: false   // tests and screenshots
+    readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
+    readonly property bool tablet: Math.min(width, height) >= 600   // a phone turned sideways is still a phone
+    Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
+    readonly property int railWidth: !mobileNav || !tablet ? 0 : (hop.navStyle === "drawer" ? 240 : 84)
+    minimumWidth: mobileNav ? 0 : 900
+    minimumHeight: mobileNav ? 0 : 600
     visible: true
     title: hop.player.hasTrack ? hop.player.title + " · Hop-tunes" : "Hop-tunes"
-    color: view === "now playing" ? Theme.bgDeep : Theme.bg
+    color: view === "now playing" && !Theme.compact ? Theme.bgDeep : Theme.bg
 
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
+    // phones and tablets: the bottom bar / drawer shows these four, as in the mockups; quickplay and settings are reached from profile
+    readonly property var navViews: ["collection", "now playing", "search", "profile"]
+    readonly property var allViews: views.concat(["search", "profile"])
     property string view: {
         var v = String(initialView || "").replace("nowplaying", "now playing")
         if (v === "albums" || v === "songs" || v === "artists" || v === "playlists") v = "collection"
@@ -83,8 +92,12 @@ ApplicationWindow {
         visible: hop.profileReady
 
         // pivots, with the private status box at the right end (in the collection view)
+        Item {   // phones with the side drawer: room for the ☰ header
+            visible: win.mobileNav && !win.tablet && hop.navStyle === "drawer"
+            implicitHeight: 56
+        }
         Item {
-            visible: win.view !== "now playing"
+            visible: win.view !== "now playing" && !win.mobileNav
             Layout.fillWidth: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 24
             implicitHeight: pivots.implicitHeight
@@ -112,7 +125,7 @@ ApplicationWindow {
                     contentItem: Label {
                         text: pivot.modelData
                         color: pivot.on ? Theme.strong : (pivot.hovered ? Theme.text2 : Theme.dim)
-                        font { family: Theme.font; pixelSize: 44; weight: pivot.on ? Font.Normal : Font.Light }
+                        font { family: Theme.font; pixelSize: Theme.fs(44); weight: pivot.on ? Font.Normal : Font.Light }
                     }
                     background: Item { }
                 }
@@ -127,7 +140,8 @@ ApplicationWindow {
             id: stack
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: win.views.indexOf(win.view)
+            Layout.leftMargin: win.railWidth
+            currentIndex: win.allViews.indexOf(win.view)
             // Slide-and-fade between pivots (spec §4.5: ≤ 200 ms, off with "reduce motion").
             transform: Translate { id: slide }
             onCurrentIndexChanged: if (Theme.motion > 0) pivotAnim.restart()
@@ -139,13 +153,32 @@ ApplicationWindow {
             CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
-            SettingsView { onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            SettingsView { objectName: "settingsView"; onBack: win.view = "profile"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            PhoneSearch { }
+            PhoneProfile { onGo: function (v) { win.view = v } }
         }
 
         MiniPlayer {
+            compact: win.mobileNav && !win.tablet
             Layout.fillWidth: true
+            Layout.leftMargin: win.railWidth + (compact ? 12 : 0)
+            Layout.rightMargin: compact ? 12 : 0
+            Layout.bottomMargin: compact ? 6 : 0
             visible: win.view !== "now playing"
             onOpenNowPlaying: win.view = "now playing"
         }
+        Item {   // room for the phone's bottom bar
+            visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer" && win.view !== "now playing"
+            implicitHeight: 72
+        }
+    }
+
+    MobileNav {
+        anchors.fill: parent
+        visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen && !(win.view === "now playing" && !win.tablet)
+        views: win.navViews
+        view: win.view === "quickplay" || win.view === "settings" ? "profile" : win.view
+        tablet: win.tablet
+        onPicked: function (v) { win.view = v }
     }
 }

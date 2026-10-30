@@ -66,16 +66,16 @@ Popup {
         RowLayout {
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 20 }
             Label { text: root.currentTitle; color: "white"; elide: Text.ElideRight; Layout.fillWidth: true
-                    font { family: Theme.font; pixelSize: 18 } }
+                    font { family: Theme.font; pixelSize: Theme.fs(18) } }
             Label { text: root.model ? (root.current + 1) + " / " + root.model.count : ""; color: "white"
-                    font { family: Theme.font; pixelSize: 14 } }
+                    font { family: Theme.font; pixelSize: Theme.fs(14) } }
             AbstractButton {
                 objectName: "pictureViewerClose"
                 implicitWidth: 44; implicitHeight: 44
                 onClicked: root.close()
                 Accessible.name: "close"
                 background: Rectangle { radius: 22; color: Theme.fade(0.5); border { width: 2; color: Theme.border } }
-                contentItem: Label { text: "×"; color: "white"; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Label { text: "×"; color: "white"; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
             }
         }
 
@@ -86,7 +86,7 @@ Popup {
             onClicked: root.step(-1)
             Accessible.name: "previous picture"
             background: Rectangle { radius: 26; color: Theme.fade(0.5) }
-            contentItem: Label { text: "‹"; color: "white"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
+            contentItem: Label { text: "‹"; color: "white"; font.pixelSize: Theme.fs(32); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
         }
         AbstractButton {
             objectName: "pictureViewerNext"
@@ -95,7 +95,7 @@ Popup {
             onClicked: root.step(1)
             Accessible.name: "next picture"
             background: Rectangle { radius: 26; color: Theme.fade(0.5) }
-            contentItem: Label { text: "›"; color: "white"; font.pixelSize: 32; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
+            contentItem: Label { text: "›"; color: "white"; font.pixelSize: Theme.fs(32); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
         }
         AbstractButton {
             objectName: "pictureViewerSlideshow"
@@ -106,7 +106,7 @@ Popup {
             background: Rectangle { radius: 6; color: Theme.fade(0.5) }
             contentItem: Label { text: root.slideshow ? "pause slideshow" : "start slideshow"; color: "white"
                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                 font { family: Theme.font; pixelSize: 14 } }
+                                 font { family: Theme.font; pixelSize: Theme.fs(14) } }
         }
     }
 }

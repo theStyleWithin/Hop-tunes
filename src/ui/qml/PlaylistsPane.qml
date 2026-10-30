@@ -11,6 +11,7 @@ Item {
     signal songMenu(var paths, string path, bool hearted, int row, int count, var playFn, Item src, real x, real y)
     property string message: ""
     readonly property var info: hop.selectedPlaylistInfo
+    property int phoneStep: 0   // phones: 0 the lists of songs, 1 the chosen one
 
     NamePrompt {
         id: prompt
@@ -38,11 +39,12 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        spacing: 32
+        spacing: Theme.compact ? 0 : 32
 
         // ---- list of lists ----
         ColumnLayout {
-            Layout.preferredWidth: 260; Layout.maximumWidth: 260; Layout.fillHeight: true
+            visible: !Theme.compact || root.phoneStep === 0
+            Layout.preferredWidth: 260; Layout.maximumWidth: Theme.compact ? 100000 : 260; Layout.fillWidth: Theme.compact; Layout.fillHeight: true
             spacing: 4
             ListView {
                 id: lists
@@ -60,22 +62,22 @@ Item {
                     Label {
                         visible: pdc.index === 0 || hop.playlists[pdc.index - 1].kind !== pdc.modelData.kind
                         text: pdc.modelData.kind === "auto" ? "AUTO" : (pdc.modelData.kind === "smart" ? "SMART" : "YOURS")
-                        color: Theme.dim; font { family: Theme.font; pixelSize: 12; letterSpacing: 2 }
+                        color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 2 }
                         topPadding: pdc.index === 0 ? 0 : 14; bottomPadding: 6; leftPadding: 10
                     }
                     ItemDelegate {
                         id: pd
                         readonly property bool sel: pdc.modelData.key === hop.selectedPlaylist
                         objectName: "playlist_" + pdc.modelData.name
-                        width: lists.width; height: 38
+                        width: lists.width; height: Theme.compact ? 52 : 38
                         leftPadding: 10
-                        onClicked: hop.selectPlaylist(pdc.modelData.key)
+                        onClicked: { hop.selectPlaylist(pdc.modelData.key); root.phoneStep = 1 }
                         Accessible.name: pdc.modelData.name
                         background: Rectangle { color: pd.sel || pd.hovered ? Theme.hover : "transparent" }
                         contentItem: Label {
                             text: (pdc.modelData.key === "auto:hearted" ? "♥ " : "") + pdc.modelData.name
                             elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
-                            color: pd.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 17 }
+                            color: pd.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) }
                         }
                     }
                 }
@@ -88,19 +90,29 @@ Item {
 
         // ---- the selected list ----
         ColumnLayout {
+            visible: !Theme.compact || root.phoneStep === 1
             Layout.fillWidth: true; Layout.fillHeight: true
             spacing: 6
+            AbstractButton {   // phones: back to the lists
+                visible: Theme.compact
+                objectName: "backToPlaylists"
+                implicitHeight: 44
+                onClicked: root.phoneStep = 0
+                Accessible.name: "back to playlists"
+                background: Item {}
+                contentItem: Label { text: "‹  playlists"; color: Theme.accent; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 18 } }
+            }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
                 ColumnLayout {
-                    Layout.fillWidth: true
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
                     spacing: 2
-                    Label { text: root.info.name || ""; color: Theme.text; font { family: Theme.font; pixelSize: 34; weight: Font.Light } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: root.info.name || ""; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(34); weight: Font.Light } elide: Text.ElideRight; Layout.fillWidth: true }
                     Label {
                         text: (root.info.count || 0) + ((root.info.count === 1) ? " song" : " songs") + (root.info.count ? " · " + root.info.length : "")
                               + (root.info.kind === "smart" ? " · smart, updates by itself" : (root.info.kind === "auto" ? " · built in" : ""))
-                        color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                        color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
                     }
                 }
                 Button {
@@ -108,8 +120,8 @@ Item {
                     text: "play"
                     enabled: hop.playlistSongs.count > 0
                     onClicked: hop.playPlaylist(0)
-                    contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 15; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    background: Rectangle { implicitWidth: 100; implicitHeight: 40; color: parent.enabled ? (parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent) : Theme.line }
+                    contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(15); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { implicitWidth: Theme.compact ? 72 : 100; implicitHeight: 40; color: parent.enabled ? (parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent) : Theme.line }
                 }
                 PlainButton {
                     visible: root.info.kind === "manual" || root.info.kind === "smart"
@@ -120,7 +132,7 @@ Item {
                     }
                 }
                 PlainButton {
-                    text: "⋯"; implicitWidth: 52
+                    text: "⋯"; implicitWidth: Theme.compact ? 44 : 52
                     onClicked: more.popup(0, height)
                     Accessible.name: "more playlist actions"
                     Menu {
@@ -128,7 +140,7 @@ Item {
                         background: Rectangle { implicitWidth: 220; color: Theme.panel; border { width: 1; color: Theme.line } }
                         component Item_: MenuItem {
                             id: mi
-                            contentItem: Label { text: mi.text; leftPadding: 6; color: mi.enabled ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: 15 } }
+                            contentItem: Label { text: mi.text; leftPadding: 6; color: mi.enabled ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(15) } }
                             background: Rectangle { implicitHeight: 36; color: mi.highlighted ? Theme.hover : "transparent" }
                         }
                         Item_ { text: "edit rules…"; visible: root.info.kind === "smart"; height: visible ? implicitHeight : 0
@@ -148,7 +160,7 @@ Item {
                     }
                 }
             }
-            Label { visible: root.message !== ""; text: root.message; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+            Label { visible: root.message !== ""; text: root.message; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
             Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line; Layout.topMargin: 8 }
 
             Label {
@@ -158,7 +170,7 @@ Item {
                     : root.info.kind === "smart" ? "no songs match these rules yet."
                     : root.info.key === "auto:hearted" ? "heart songs with ♡ and they collect here."
                     : "nothing here yet. it fills in as you listen."
-                color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) }
                 wrapMode: Text.WordWrap; Layout.fillWidth: true
             }
             Item { Layout.fillHeight: true; visible: hop.playlistSongs.count === 0 }
@@ -200,8 +212,8 @@ Item {
         Overlay.modal: Rectangle { color: Theme.scrim }
         contentItem: ColumnLayout {
             spacing: 18
-            Label { text: "delete \\u201c" + (root.info.name || "") + "\\u201d?"; color: Theme.strong; font { family: Theme.font; pixelSize: 26; weight: Font.Light } }
-            Label { text: "only the playlist goes. the songs stay in your library."; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } }
+            Label { text: "delete \\u201c" + (root.info.name || "") + "\\u201d?"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(26); weight: Font.Light } }
+            Label { text: "only the playlist goes. the songs stay in your library."; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
             RowLayout {
                 Layout.alignment: Qt.AlignRight
                 spacing: 12

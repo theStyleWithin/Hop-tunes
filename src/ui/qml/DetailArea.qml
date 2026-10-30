@@ -22,7 +22,7 @@ TextArea {
     background: Rectangle {
         implicitHeight: 96
         color: root.activeFocus ? Theme.panel : "transparent"
-        border { width: 1; color: root.activeFocus ? hop.accent : Theme.borderSoft }
-        radius: 3
+        border { width: 1; color: root.activeFocus ? Theme.accent : Theme.borderSoft }
+        radius: Theme.compact ? 10 : 3
     }
 }

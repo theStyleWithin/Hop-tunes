@@ -58,10 +58,10 @@ Popup {
                 Layout.fillWidth: true
                 spacing: 0
                 Label { text: hop.bookTitle; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true
-                        font { family: Theme.font; pixelSize: 18 } }
+                        font { family: Theme.font; pixelSize: Theme.fs(18) } }
                 Label { text: (hop.bookAuthor !== "" ? hop.bookAuthor + "  ·  " : "") + "chapter " + (hop.bookChapterIndex + 1) + " of " + hop.bookChapterCount
                         color: Theme.muted; elide: Text.ElideRight; Layout.fillWidth: true
-                        font { family: Theme.font; pixelSize: 13 } }
+                        font { family: Theme.font; pixelSize: Theme.fs(13) } }
             }
             AbstractButton {
                 objectName: "bookSmaller"
@@ -69,7 +69,7 @@ Popup {
                 onClicked: root.fontSize = Math.max(12, root.fontSize - 2)
                 Accessible.name: "smaller text"
                 background: Rectangle { radius: 6; color: parent.hovered ? Theme.hover : "transparent"; border { width: 1; color: Theme.borderSoft } }
-                contentItem: Label { text: "A−"; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 14 } }
+                contentItem: Label { text: "A−"; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(14) } }
             }
             AbstractButton {
                 objectName: "bookLarger"
@@ -77,7 +77,7 @@ Popup {
                 onClicked: root.fontSize = Math.min(40, root.fontSize + 2)
                 Accessible.name: "larger text"
                 background: Rectangle { radius: 6; color: parent.hovered ? Theme.hover : "transparent"; border { width: 1; color: Theme.borderSoft } }
-                contentItem: Label { text: "A+"; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 18 } }
+                contentItem: Label { text: "A+"; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(18) } }
             }
             AbstractButton {
                 objectName: "bookContents"
@@ -85,7 +85,7 @@ Popup {
                 onClicked: toc.open()
                 Accessible.name: "contents"
                 background: Rectangle { radius: 6; color: parent.hovered ? Theme.hover : "transparent"; border { width: 1; color: Theme.borderSoft } }
-                contentItem: Label { text: "contents"; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 14 } }
+                contentItem: Label { text: "contents"; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(14) } }
             }
             AbstractButton {
                 objectName: "bookClose"
@@ -93,7 +93,7 @@ Popup {
                 onClicked: root.close()
                 Accessible.name: "close"
                 background: Rectangle { radius: 22; color: parent.hovered ? Theme.hover : "transparent"; border { width: 2; color: Theme.border } }
-                contentItem: Label { text: "×"; color: Theme.text; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Label { text: "×"; color: Theme.text; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
             }
         }
 
@@ -117,7 +117,7 @@ Popup {
                 textFormat: Text.RichText
                 wrapMode: Text.WordWrap
                 color: Theme.text
-                linkColor: hop.accent
+                linkColor: Theme.accent
                 font { family: Theme.font; pixelSize: root.fontSize }
                 lineHeight: 1.05
             }
@@ -132,11 +132,11 @@ Popup {
                 implicitWidth: 120; implicitHeight: 40
                 onClicked: hop.goToBookChapter(hop.bookChapterIndex - 1)
                 background: Rectangle { radius: 6; color: parent.hovered ? Theme.hover : "transparent"; border { width: 1; color: Theme.borderSoft } }
-                contentItem: Label { text: "‹ previous"; opacity: parent.enabled ? 1 : 0.4; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 14 } }
+                contentItem: Label { text: "‹ previous"; opacity: parent.enabled ? 1 : 0.4; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(14) } }
             }
             Item { Layout.fillWidth: true }
             Label { text: Math.round(((hop.bookChapterIndex + root.fraction) / Math.max(1, hop.bookChapterCount)) * 100) + "%"
-                    color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
             Item { Layout.fillWidth: true }
             AbstractButton {
                 objectName: "bookNext"
@@ -144,7 +144,7 @@ Popup {
                 implicitWidth: 120; implicitHeight: 40
                 onClicked: { hop.saveBookProgress(root.fraction); hop.goToBookChapter(hop.bookChapterIndex + 1) }
                 background: Rectangle { radius: 6; color: parent.hovered ? Theme.hover : "transparent"; border { width: 1; color: Theme.borderSoft } }
-                contentItem: Label { text: "next ›"; opacity: parent.enabled ? 1 : 0.4; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 14 } }
+                contentItem: Label { text: "next ›"; opacity: parent.enabled ? 1 : 0.4; color: Theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(14) } }
             }
         }
 
@@ -173,9 +173,9 @@ Popup {
                     background: Rectangle { color: hovered ? Theme.hover : "transparent" }
                     contentItem: Label {
                         text: (index + 1) + ".  " + modelData
-                        color: index === hop.bookChapterIndex ? hop.accent : Theme.text
+                        color: index === hop.bookChapterIndex ? Theme.accent : Theme.text
                         elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
-                        font { family: Theme.font; pixelSize: 16 }
+                        font { family: Theme.font; pixelSize: Theme.fs(16) }
                     }
                 }
             }

@@ -8,12 +8,15 @@
 #include <QSaveFile>
 #include <QUrl>
 
+#ifdef HOPTUNES_HAVE_GST
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
+#endif
 
 namespace hop::VideoThumbnail {
 
+#ifdef HOPTUNES_HAVE_GST
 namespace {
 
 // RAII so every early return still tears the pipeline down.
@@ -107,5 +110,9 @@ QString grab(const QString &videoPath, qint64 mtime, qint64 durationMs, const QS
     gst_sample_unref(sample);
     return result;
 }
+
+#else   // no GStreamer (Android for now): no picture is grabbed
+QString grab(const QString &, qint64, qint64, const QString &) { return {}; }
+#endif
 
 } // namespace hop::VideoThumbnail

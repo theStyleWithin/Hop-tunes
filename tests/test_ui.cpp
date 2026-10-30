@@ -143,6 +143,37 @@ class TestUi : public QObject {
         i->setProperty("text", QString());
         for (const QChar c : text) QTest::keyClick(window(), c.toLatin1());
     }
+    // Phones: everything you can see must fit the screen's width. An item counts as overflowing when its
+    // visible part (cut only by a scrolling row of pills, which is meant to pan) reaches past the right edge.
+    QStringList overflowing()
+    {
+        QStringList out;
+        const qreal W = window()->width();
+        std::function<void(QQuickItem *, QRectF)> walk = [&](QQuickItem *it, QRectF clip) {
+            if (!it->isVisible() || it->opacity() <= 0.01) return;
+            QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+            if ((it->clip() && !it->inherits("QQuickFlickable")) || it->property("namePrefix").isValid())
+                clip = clip.intersected(r);   // a clipped picture is cut; scrolling pill rows may pan; other scrolling content may not
+
+            const QRectF vis = r.intersected(clip);
+            const bool leaf = it->childItems().isEmpty();
+            if (leaf && it->width() > 0 && vis.right() > W + 1)
+                {
+                QString label = it->objectName();
+                for (QQuickItem *p = it; label.isEmpty() && p; p = p->parentItem()) {
+                    const QString t = p->property("text").toString();
+                    label = !t.isEmpty() ? QStringLiteral("\"%1\"").arg(t.left(30)) : p->objectName();
+                }
+                QString chain;
+                for (QQuickItem *p = it->parentItem(); p && chain.size() < 120; p = p->parentItem())
+                    chain += QStringLiteral(" <%1:%2").arg(QLatin1String(p->metaObject()->className()).left(14)).arg(int(p->width()));
+                out << QStringLiteral("%1 %2 right=%3%4").arg(QLatin1String(it->metaObject()->className()), label).arg(vis.right()).arg(qEnvironmentVariableIsSet("HOPTUNES_DEBUG_CHAIN") ? chain : QString());
+            }
+            for (QQuickItem *c : it->childItems()) walk(c, clip);
+        };
+        walk(window()->contentItem(), QRectF(-1e6, -1e6, 2e6, 2e6));
+        return out;
+    }
     // HOPTUNES_UI_SHOTS=<dir> saves design renders of each screen while the test runs.
     void shot(const char *name)
     {
@@ -943,6 +974,203 @@ private slots:
         QCOMPARE(m_app->statusNote().size(), 300);
         m_app->setStatusNote(QString());
         QTRY_COMPARE(item("statusNote")->property("text").toString(), QString());   // the box follows
+    }
+
+    // Phones and tablets: a bottom bar or a side drawer, switched in settings, and a rail or a permanent
+    // drawer on a wide screen. (The desktop keeps its top pivots; forceMobile stands in for Android here.)
+    void phoneAndTabletNavigation()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {   // a failed check must not leave the window phone-sized for the tests after it
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setNavStyle(QStringLiteral("bar")); w->setProperty("forceMobile", false); w->resize(size); }
+        } restore{w, before, m_app.get()};
+        w->setProperty("forceMobile", true);
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setNavStyle(QStringLiteral("bar"));
+        w->resize(412, 860);
+        QTRY_COMPARE(w->property("tablet").toBool(), false);
+        QTRY_COMPARE(w->property("railWidth").toInt(), 0);
+        QVERIFY(w->property("mobileNav").toBool());
+        shot("android-phone-bar");
+
+        // the bottom bar moves between views
+        QTRY_VERIFY(item("navMenuButton") == nullptr || !item("navMenuButton")->isVisible());
+        QTRY_VERIFY(item("navTab_now playing") != nullptr && item("navTab_now playing")->isVisible());
+        QVERIFY(click("navTab_now playing"));
+        QTRY_COMPARE(w->property("view").toString(), QStringLiteral("now playing"));
+        shot("android-phone-nowplaying");
+        w->setProperty("view", QStringLiteral("settings"));
+        shot("android-phone-settings");
+        w->setProperty("view", QStringLiteral("quickplay"));
+        shot("android-phone-quickplay");
+        w->setProperty("view", QStringLiteral("collection"));
+
+        // the side drawer: a ☰ button opens it, and the choice is remembered in the profile
+        m_app->setNavStyle(QStringLiteral("drawer"));
+        QTRY_VERIFY(item("navMenuButton") != nullptr && item("navMenuButton")->isVisible());
+        QVERIFY(click("navMenuButton"));
+        QTRY_VERIFY(item("mobileNav") != nullptr && item("mobileNav")->property("drawerOpen").toBool());
+        shot("android-phone-drawer");
+        QCOMPARE(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("navStyle").toString(),
+                 QStringLiteral("drawer"));
+        QMetaObject::invokeMethod(item("mobileNav"), "closeDrawer");
+        QTRY_VERIFY(!item("mobileNav")->property("drawerOpen").toBool());
+        m_app->setNavStyle(QStringLiteral("nonsense"));   // anything else means the bottom bar
+        QCOMPARE(m_app->navStyle(), QStringLiteral("bar"));
+
+        // a tablet: a side rail, or a permanent drawer
+        w->resize(1000, 700);
+        QTRY_VERIFY(w->property("tablet").toBool());
+        QTRY_COMPARE(w->property("railWidth").toInt(), 84);
+        shot("android-tablet-rail");
+        m_app->setNavStyle(QStringLiteral("drawer"));
+        QTRY_COMPARE(w->property("railWidth").toInt(), 240);
+        shot("android-tablet-drawer");
+
+        m_app->setNavStyle(QStringLiteral("bar"));
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->property("railWidth").toInt(), 0);
+        QVERIFY(!w->property("mobileNav").toBool());
+        QTRY_COMPARE(w->size(), before);   // the desktop layout is back before the next test looks at it
+        QTRY_VERIFY(!item("navTab_collection") || !item("navTab_collection")->isVisible());
+        QTest::qWait(400);
+    }
+
+    // Every screen fits a phone (412 and 320 wide): nothing visible runs past the right edge.
+    void phoneScreensFitTheScreen()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setNavStyle(QStringLiteral("bar")); w->setProperty("forceMobile", false); w->resize(size); }
+        } restore{w, before, m_app.get()};
+        w->setProperty("forceMobile", true);
+        m_app->setNavStyle(QStringLiteral("bar"));
+        QStringList failures;
+        const QList<QSize> sizes{QSize(412, 892), QSize(320, 640)};
+        for (const QSize &sz : sizes) {
+            w->resize(sz);
+            QTRY_COMPARE(w->width(), sz.width());
+            const QString tag = QString::number(sz.width());
+            auto check = [&](const char *name, const QString &what) {
+                QTest::qWait(250);
+                shot((QStringLiteral("phone%1-").arg(tag) + QLatin1String(name)).toLatin1().constData());
+                const QStringList bad = overflowing();
+                if (!bad.isEmpty()) {
+                    qWarning("%s (%s) overflows: %s", name, qPrintable(tag), qPrintable(bad.mid(0, 4).join(QStringLiteral(" | "))));
+                    failures << what + QStringLiteral(" at ") + tag;
+                }
+            };
+            w->setProperty("view", QStringLiteral("collection"));
+            QTRY_VERIFY(item("pillTab_music") != nullptr);
+            QVERIFY(click("pillTab_music"));
+            QVERIFY(click("pillMode_artists"));
+            check("music-artists", QStringLiteral("artists"));
+            QVERIFY(click("pillMode_albums"));
+            check("music-albums", QStringLiteral("albums"));
+            QVERIFY(click("pillMode_songs"));
+            check("music-songs", QStringLiteral("songs"));
+            QVERIFY(click("pillMode_playlists"));
+            check("music-playlists", QStringLiteral("playlists"));
+            QVERIFY(click("pillTab_videos"));
+            check("videos", QStringLiteral("videos"));
+            QVERIFY(click("pillTab_pictures"));
+            check("pictures", QStringLiteral("pictures"));
+            QVERIFY(click("pillTab_music"));
+            w->setProperty("view", QStringLiteral("now playing"));
+            check("nowplaying", QStringLiteral("now playing"));
+            w->setProperty("view", QStringLiteral("quickplay"));
+            check("quickplay", QStringLiteral("quickplay"));
+            w->setProperty("view", QStringLiteral("search"));
+            check("search", QStringLiteral("search"));
+            w->setProperty("view", QStringLiteral("profile"));
+            check("profile", QStringLiteral("profile"));
+            w->setProperty("view", QStringLiteral("settings"));
+            check("settings", QStringLiteral("settings"));
+        }
+        m_app->setNavStyle(QStringLiteral("bar"));
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_COMPARE(w->size(), before);
+        QTRY_VERIFY(!item("pillTab_music") || !item("pillTab_music")->isVisible());
+        QTest::qWait(400);
+        QVERIFY2(failures.isEmpty(), qPrintable(QStringLiteral("overflowing: ") + failures.join(QStringLiteral(", "))));
+    }
+
+    // Design renders against the saved phone mockups, with a richer library than the other tests have:
+    // set HOPTUNES_FIXTURE_DIR to a folder holding music/ (tagged albums) and shows/ (clips).
+    void phoneMockupRenders()
+    {
+        const QString fx = qEnvironmentVariable("HOPTUNES_FIXTURE_DIR");
+        if (fx.isEmpty() || qEnvironmentVariable("HOPTUNES_UI_SHOTS").isEmpty()) QSKIP("set HOPTUNES_FIXTURE_DIR and HOPTUNES_UI_SHOTS");
+        auto *w = window();
+        const QSize before = w->size();
+        w->setProperty("forceMobile", true);
+        w->resize(420, 880);
+        m_app->addFolder(QUrl::fromLocalFile(fx + QStringLiteral("/music")));
+        m_app->addVideoCategoryFolder(QStringLiteral("shows"), QUrl::fromLocalFile(fx + QStringLiteral("/shows")));
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->librarySize() >= 12 && !m_app->scanning(), 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 30000);
+        w->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("pillTab_music"));
+        QVERIFY(click("pillMode_albums"));
+        QTRY_VERIFY(m_app->allAlbums()->rowCount() >= 6);
+        shot("mock-collection-music");
+        QVERIFY(click("pillTab_videos"));
+        QVERIFY(click("pillCat_shows"));
+        QTest::qWait(1500);
+        shot("mock-collection-videos");
+        m_app->openVideoDetail(0);
+        QTest::qWait(500);
+        m_app->addCastMember(); m_app->setCastMember(0, QStringLiteral("Mira Hollis"), QStringLiteral("Nell (lead)"));
+        m_app->addCastMember(); m_app->setCastMember(1, QStringLiteral("Tomas Ruiz"), QStringLiteral("Harbour master"));
+        m_app->addCastMember(); m_app->setCastMember(2, QStringLiteral("Ana Veltri"), QStringLiteral("director"));
+        QTest::qWait(500);
+        shot("mock-videodetail-top");
+        QVERIFY2(overflowing().isEmpty(), qPrintable(QStringLiteral("video details overflow: ") + overflowing().join(QStringLiteral(" | "))));
+        if (auto *f = item("videoDetailAddPerson")) { auto *fl = f->parentItem(); while (fl && !fl->inherits("QQuickFlickable")) fl = fl->parentItem(); if (fl) fl->setProperty("contentY", 560); }
+        QTest::qWait(300);
+        shot("mock-videodetail-cast");
+        m_app->setVideoChat(true);
+        m_app->setVideoComments(QStringLiteral("populated"));
+        m_app->playVideo(0);
+        QTest::qWait(800);
+        shot("mock-player-portrait-nextup");
+        QVERIFY(click("phoneTab_comments"));
+        QTest::qWait(500);
+        shot("mock-player-portrait-comments");
+        QVERIFY2(overflowing().isEmpty(), qPrintable(QStringLiteral("player overflows: ") + overflowing().join(QStringLiteral(" | "))));
+        w->resize(880, 420);
+        QTest::qWait(700);
+        shot("mock-player-landscape");
+        w->resize(420, 880);
+        QTest::qWait(300);
+        m_app->closeVideoPlayer(0, 0);
+        m_app->setVideoChat(false);
+        m_app->setVideoComments(QStringLiteral("off"));
+        QTest::qWait(300);
+        m_app->closeVideoDetail();
+        QVERIFY(click("pillTab_music"));
+        m_app->playSongs(0);
+        QTest::qWait(1200);
+        w->setProperty("view", QStringLiteral("now playing"));
+        shot("mock-nowplaying");
+        w->setProperty("view", QStringLiteral("collection"));
+        shot("mock-collection-miniplayer");
+        w->setProperty("view", QStringLiteral("profile"));
+        shot("mock-profile");
+        w->setProperty("view", QStringLiteral("settings"));
+        shot("mock-settings");
+        m_app->player()->stop();
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        QTest::qWait(400);
     }
 
     // Pictures (and the other new sections) have their own folder list and their own

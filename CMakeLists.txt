@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(hop-tunes VERSION 1.7.1 LANGUAGES CXX)
+project(hop-tunes VERSION 1.7.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -23,10 +23,24 @@ option(HOPTUNES_BUILD_APP   "Build the desktop application" ON)
 option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui)
-find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)   # EpubBook unzips the book itself
-pkg_check_modules(TAGLIB  REQUIRED IMPORTED_TARGET taglib)
-pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
+if(ANDROID)
+    # No pkg-config on Android: TagLib and SQLite are cross-built into HOPTUNES_ANDROID_PREFIX
+    # (static, see docs/android.md) and given the same target names the rest of this file uses.
+    set(HOPTUNES_ANDROID_PREFIX "" CACHE PATH "prefix holding the cross-built TagLib and SQLite")
+    add_library(PkgConfig::TAGLIB INTERFACE IMPORTED)
+    set_target_properties(PkgConfig::TAGLIB PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${HOPTUNES_ANDROID_PREFIX}/include;${HOPTUNES_ANDROID_PREFIX}/include/taglib"
+        INTERFACE_LINK_LIBRARIES "${HOPTUNES_ANDROID_PREFIX}/lib/libtag.a;ZLIB::ZLIB")
+    add_library(PkgConfig::SQLITE3 INTERFACE IMPORTED)
+    set_target_properties(PkgConfig::SQLITE3 PROPERTIES
+        INTERFACE_INCLUDE_DIRECTORIES "${HOPTUNES_ANDROID_PREFIX}/include"
+        INTERFACE_LINK_LIBRARIES "${HOPTUNES_ANDROID_PREFIX}/lib/libsqlite3.a")
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(TAGLIB  REQUIRED IMPORTED_TARGET taglib)
+    pkg_check_modules(SQLITE3 REQUIRED IMPORTED_TARGET sqlite3)
+endif()
 
 # ---- core library: no GUI, no GStreamer (unit-testable) ---------------------
 add_library(hoptunes_core STATIC
@@ -56,6 +70,11 @@ target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
+# On Android there is no GStreamer yet: HOPTUNES_HAVE_GST stays off, the GStreamer-only code
+# compiles to small stubs, and Player gets a stand-in "gst/gst.h" (src/platform/android) so
+# it reports "playback engine missing" instead of playing. A real Android engine comes later.
+if(NOT ANDROID)
+find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET gstreamer-1.0)
 pkg_check_modules(GIO REQUIRED IMPORTED_TARGET gio-2.0)
 # Video (spec §5b): GstDiscoverer + a frame-grab pipeline for the library side (probing,
@@ -88,23 +107,36 @@ if(WIN32)
 else()
     pkg_check_modules(MPV IMPORTED_TARGET mpv)
 endif()
+endif()
 add_library(hoptunes_playback STATIC
     src/playback/Player.h     src/playback/Player.cpp
     src/playback/MpvCore.h    src/playback/MpvCore.cpp
     src/playback/GstVideoPlayer.h src/playback/GstVideoPlayer.cpp
-    src/platform/Mpris.h      src/platform/Mpris.cpp
     src/library/VideoProbe.h     src/library/VideoProbe.cpp
     src/library/VideoThumbnail.h src/library/VideoThumbnail.cpp
     src/library/VideoScanner.h   src/library/VideoScanner.cpp
     src/library/SectionScanner.h src/library/SectionScanner.cpp
 )
-target_link_libraries(hoptunes_playback PUBLIC hoptunes_core Qt6::Gui PkgConfig::GST PkgConfig::GIO
-    PkgConfig::GST_PBUTILS PkgConfig::GST_APP PkgConfig::GST_VIDEO)
+target_link_libraries(hoptunes_playback PUBLIC hoptunes_core Qt6::Gui)
+if(ANDROID)
+    # Music on Android goes through Qt Multimedia, behind the small "gst/gst.h" stand-in.
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Multimedia)
+    target_sources(hoptunes_playback PRIVATE src/platform/android/GstShim.cpp)
+    target_include_directories(hoptunes_playback PUBLIC src/platform/android)
+    target_link_libraries(hoptunes_playback PUBLIC Qt6::Multimedia)
+else()
+    target_link_libraries(hoptunes_playback PUBLIC PkgConfig::GST PkgConfig::GIO
+        PkgConfig::GST_PBUTILS PkgConfig::GST_APP PkgConfig::GST_VIDEO)
+    target_compile_definitions(hoptunes_playback PUBLIC HOPTUNES_HAVE_GST)
+endif()
 if(MPV_FOUND)
     target_link_libraries(hoptunes_playback PUBLIC PkgConfig::MPV)
     target_compile_definitions(hoptunes_playback PUBLIC HOPTUNES_HAVE_MPV)
 else()
     message(STATUS "libmpv not found: video playback disabled (library scanning still works)")
+endif()
+if(NOT ANDROID)
+    target_sources(hoptunes_playback PRIVATE src/platform/Mpris.h src/platform/Mpris.cpp)
 endif()
 target_compile_options(hoptunes_playback PRIVATE -Wall -Wextra)
 
@@ -115,13 +147,23 @@ if(HOPTUNES_BUILD_APP)
     find_package(Qt6 6.4 REQUIRED COMPONENTS Gui Quick QuickControls2 OpenGL)
 
     # WIN32: a GUI program on Windows (no console window); the keyword does nothing elsewhere.
-    add_executable(hop-tunes WIN32
+    set(HOPTUNES_APP_FILES
         src/main.cpp
         src/App.h                    src/App.cpp
         src/ui/MpvVideoItem.h        src/ui/MpvVideoItem.cpp
         src/ui/qml.qrc
         assets/assets.qrc
     )
+    if(ANDROID)
+        qt_add_executable(hop-tunes ${HOPTUNES_APP_FILES})   # a shared library the Android app loads
+        set_target_properties(hop-tunes PROPERTIES
+            QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+            QT_ANDROID_ABIS "arm64-v8a"
+            QT_ANDROID_MIN_SDK_VERSION 24
+            QT_ANDROID_TARGET_SDK_VERSION 34)
+    else()
+        add_executable(hop-tunes WIN32 ${HOPTUNES_APP_FILES})
+    endif()
     if(WIN32)
         target_sources(hop-tunes PRIVATE src/platform/WinRuntime.h src/platform/WinRuntime.cpp ${CMAKE_BINARY_DIR}/hop-tunes.rc)
     endif()
@@ -139,14 +181,16 @@ if(HOPTUNES_BUILD_APP)
         target_link_libraries(hop-tunes-portable PRIVATE z)
     endif()
 
-    include(GNUInstallDirs)
-    install(TARGETS hop-tunes RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-    set(HOPTUNES_APP_ID io.github.thestylewithin.Hop-tunes)
-    install(FILES packaging/${HOPTUNES_APP_ID}.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-    install(FILES packaging/${HOPTUNES_APP_ID}.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
-    install(FILES packaging/${HOPTUNES_APP_ID}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
-    install(FILES docs/hop-tunes.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
-    install(FILES THIRD_PARTY_NOTICES.md README.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
+    if(NOT ANDROID)
+        include(GNUInstallDirs)
+        install(TARGETS hop-tunes RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        set(HOPTUNES_APP_ID io.github.thestylewithin.Hop-tunes)
+        install(FILES packaging/${HOPTUNES_APP_ID}.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+        install(FILES packaging/${HOPTUNES_APP_ID}.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+        install(FILES packaging/${HOPTUNES_APP_ID}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+        install(FILES docs/hop-tunes.1 DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
+        install(FILES THIRD_PARTY_NOTICES.md README.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
+    endif()
 endif()
 
 # ---- tests --------------------------------------------------------------------

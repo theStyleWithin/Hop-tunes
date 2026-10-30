@@ -8,17 +8,21 @@ Rectangle {
     id: root
     signal openNowPlaying()
     readonly property var player: hop.player
-    color: Theme.bar
-    implicitHeight: 78
+    property bool compact: false   // phones: song, play button and a thin progress line only
+    color: compact ? Theme.panel : Theme.bar
+    radius: compact ? 14 : 0
+    clip: compact
+    implicitHeight: compact ? 68 : 78
 
-    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: Theme.line }
+    Rectangle { visible: !root.compact; anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: Theme.line }
 
     RowLayout {
-        anchors { fill: parent; leftMargin: 48; rightMargin: 48 }
-        spacing: 20
+        anchors { fill: parent; leftMargin: root.compact ? 12 : 48; rightMargin: root.compact ? 12 : 48 }
+        spacing: root.compact ? 10 : 20
 
         MouseArea {
             Layout.preferredWidth: 220
+            Layout.fillWidth: root.compact
             Layout.fillHeight: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.openNowPlaying()
@@ -28,19 +32,25 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
                 spacing: 14
-                AlbumArt { key: player.album; source: player.artUrl; Layout.preferredWidth: 48; Layout.preferredHeight: 48; visible: player.hasTrack }
+                AlbumArt { key: player.album; source: player.artUrl; cornerColor: Theme.panel; Layout.preferredWidth: root.compact ? 46 : 48; Layout.preferredHeight: root.compact ? 46 : 48; visible: player.hasTrack }
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true
-                    Label { text: player.hasTrack ? player.title : "nothing playing"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: player.artist; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack }
+                    Label { text: player.hasTrack ? player.title : "nothing playing"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: player.artist; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack }
+                    Rectangle {   // phones: how far into the song, under the text
+                        visible: root.compact && player.hasTrack
+                        Layout.fillWidth: true; Layout.topMargin: 6; implicitHeight: 3; radius: 2; color: Theme.track
+                        Rectangle { height: parent.height; radius: 2; color: Theme.accent
+                                    width: parent.width * Math.min(1, player.position / Math.max(1, player.duration)) }
+                    }
                 }
             }
         }
 
         HeartButton {
             objectName: "miniHeart"
-            visible: player.hasTrack
+            visible: player.hasTrack && !root.compact
             on: hop.currentHearted
             onClicked: hop.toggleHeartCurrent()
         }
@@ -49,17 +59,19 @@ Rectangle {
             spacing: 8
             TransportButton {
                 objectName: "shuffleButton"
+                visible: !root.compact
                 glyph: "shuffle"; iconSize: 15; active: player.shuffle
                 onClicked: player.shuffle = !player.shuffle
                 Accessible.name: player.shuffle ? "shuffle on" : "shuffle off"
                 ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: player.shuffle ? "shuffle: on" : "shuffle: off"
             }
-            TransportButton { glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
-            TransportButton { glyph: player.playing ? "pause" : "play"; round: true; iconSize: 16; enabled: player.hasTrack || hop.songs.count > 0
+            TransportButton { visible: !root.compact; glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
+            TransportButton { glyph: player.playing ? "pause" : "play"; round: !root.compact; iconSize: root.compact ? 18 : 16; enabled: player.hasTrack || hop.songs.count > 0
                               onClicked: player.hasTrack ? player.toggle() : hop.playSongs(0); Accessible.name: player.playing ? "pause" : "play" }
-            TransportButton { glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
+            TransportButton { visible: !root.compact; glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
             TransportButton {
                 objectName: "repeatButton"
+                visible: !root.compact
                 glyph: player.repeatMode === 2 ? "repeat1" : "repeat"; iconSize: 15; active: player.repeatMode !== 0
                 onClicked: player.cycleRepeat()
                 Accessible.name: ["repeat off", "repeat all", "repeat one"][player.repeatMode]
@@ -68,9 +80,10 @@ Rectangle {
         }
 
         RowLayout {
+            visible: !root.compact
             Layout.fillWidth: true
             spacing: 12
-            Label { text: player.hasTrack ? hop.formatTime(Math.max(1, player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+            Label { text: player.hasTrack ? hop.formatTime(Math.max(1, player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
             Slider {
                 id: seek
                 Layout.fillWidth: true
@@ -82,7 +95,7 @@ Rectangle {
                 background: Rectangle {
                     x: seek.leftPadding; y: seek.topPadding + seek.availableHeight / 2 - height / 2
                     width: seek.availableWidth; height: 4; color: Theme.track
-                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: hop.accent }
+                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: Theme.accent }
                 }
                 handle: Rectangle {
                     x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width)
@@ -91,11 +104,12 @@ Rectangle {
                     visible: seek.hovered || seek.pressed
                 }
             }
-            Label { text: player.hasTrack ? hop.formatTime(player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+            Label { text: player.hasTrack ? hop.formatTime(player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
         }
 
         // volume (spec §4.6)
         RowLayout {
+            visible: !root.compact
             spacing: 2
             property real lastVolume: 1.0
             id: vol
@@ -127,9 +141,10 @@ Rectangle {
         }
 
         Label {
+            visible: !root.compact
             text: hop.djSeed !== "" ? "smart dj" : (player.fading ? "crossfading" : (player.crossfadeMs > 0 ? "crossfade " + Math.round(player.crossfadeMs / 1000) + " s" : "gapless"))
-            color: hop.djSeed !== "" || player.fading ? hop.accent : Theme.muted
-            font { family: Theme.font; pixelSize: 13 }
+            color: hop.djSeed !== "" || player.fading ? Theme.accent : Theme.muted
+            font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
     }
 }
