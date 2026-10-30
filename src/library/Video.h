@@ -23,7 +23,10 @@ struct Video {
     bool customThumb = false;   // thumb is this profile's own picked image (not stored in the index)
     qint64  added = 0;     // when the file first appeared in the index
 
+    QString customTitle;   // the title this profile typed for it (not stored in the index)
+
     QString displayTitle() const;   // file name, extension stripped
+    QString shownTitle() const { return customTitle.isEmpty() ? displayTitle() : customTitle; }
     bool is4k() const { return width >= 3840 || height >= 2160; }
 };
 

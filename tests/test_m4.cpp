@@ -103,6 +103,26 @@ private slots:
         QVERIFY(!db.albumOverrides().contains(QStringLiteral("Other\x1fAlbum")));
     }
 
+    void videoMetaRoundTrips()
+    {
+        QTemporaryDir tmp;
+        const QString file = tmp.filePath(QStringLiteral("profile.sqlite"));
+        const QString v = QStringLiteral("/m/movie.mkv");
+        {
+            ProfileDb db;
+            QVERIFY(db.open(file));
+            QVERIFY(db.videoMetas().isEmpty());
+            QVERIFY(db.setVideoMeta(v, QStringLiteral("{\"year\":\"1998\"}")));
+        }
+        ProfileDb db;
+        QVERIFY(db.open(file));   // persisted
+        QCOMPARE(db.videoMetas().value(v), QStringLiteral("{\"year\":\"1998\"}"));
+        QVERIFY(db.setVideoMeta(v, QStringLiteral("{\"year\":\"1999\"}")));   // replace
+        QCOMPARE(db.videoMetas().size(), 1);
+        QVERIFY(db.setVideoMeta(v, QString()));   // clear
+        QVERIFY(db.videoMetas().isEmpty());
+    }
+
     void playedItems()
     {
         QTemporaryDir tmp;

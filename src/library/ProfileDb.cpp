@@ -116,6 +116,15 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=6")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 6;
+    }
+    if (version < 7) {
+        // v7: details the user fills in for a video (title, year, cast, ...), one JSON object per video.
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE video_meta (path TEXT PRIMARY KEY, json TEXT NOT NULL)")
+            && exec("PRAGMA user_version=7")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -366,6 +375,28 @@ bool ProfileDb::setAlbumOverrideArt(const QString &ref, const QString &artPath)
     Stmt s(m_db, "INSERT INTO album_override(ref, art) VALUES(?1, ?2) "
                  "ON CONFLICT(ref) DO UPDATE SET art = ?2");
     s.bind(1, ref); s.bind(2, artPath);
+    return s.run();
+}
+
+QHash<QString, QString> ProfileDb::videoMetas() const
+{
+    QHash<QString, QString> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path, json FROM video_meta");
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0), s.str(1));
+    return out;
+}
+
+bool ProfileDb::setVideoMeta(const QString &videoPath, const QString &json)
+{
+    if (!m_db || videoPath.isEmpty()) return false;
+    if (json.isEmpty()) {
+        Stmt d(m_db, "DELETE FROM video_meta WHERE path = ?1");
+        d.bind(1, videoPath);
+        return d.run();
+    }
+    Stmt s(m_db, "INSERT INTO video_meta(path, json) VALUES(?1, ?2) ON CONFLICT(path) DO UPDATE SET json = ?2");
+    s.bind(1, videoPath); s.bind(2, json);
     return s.run();
 }
 

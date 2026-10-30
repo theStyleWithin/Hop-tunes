@@ -19,6 +19,7 @@
 #include <QFile>
 #include <QImage>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QFileInfo>
 #include <QRandomGenerator>
 #include <QSet>
@@ -364,6 +365,12 @@ void App::activate(const QString &id, bool guest)
     m_albumOverrides = m_db.albumOverrides();
     m_played = m_db.playedItems();
     m_videoThumbOverrides = m_db.videoThumbOverrides();
+    m_videoMeta.clear();
+    const QHash<QString, QString> metas = m_db.videoMetas();
+    for (auto it = metas.cbegin(); it != metas.cend(); ++it) {
+        const QJsonDocument doc = QJsonDocument::fromJson(it.value().toUtf8());
+        if (doc.isObject()) m_videoMeta.insert(it.key(), doc.object());
+    }
     m_songOrder = m_db.songOrder();
     m_search.clear();
     m_djSeed.clear();
@@ -397,6 +404,8 @@ void App::leaveProfile()
     m_albumOverrides.clear();
     m_played.clear();
     m_videoThumbOverrides.clear();
+    m_videoMeta.clear();
+    m_detailPath.clear();
     m_songOrder.clear();
     m_search.clear();
     m_selPlaylist.clear();
@@ -800,12 +809,14 @@ void App::reloadVideos()
 {
     QList<Video> list = m_videoIndex.videosUnder(videoFolders());
     for (Video &v : list) {
+        v.customTitle = m_videoMeta.value(v.path).value(QStringLiteral("title")).toString();
         const auto it = m_videoThumbOverrides.constFind(v.path);
         if (it == m_videoThumbOverrides.constEnd() || !QFile::exists(it.value())) continue;
         v.thumb = it.value();
         v.customThumb = true;
     }
     m_videos.setVideos(list);
+    if (!m_detailPath.isEmpty()) emit videoDetailChanged();   // a picked poster, a new scan
 }
 
 QString App::setVideoThumb(int row, const QUrl &image)
@@ -840,7 +851,9 @@ void App::clearVideoThumb(int row)
 
 QString App::videoPlayerTitle() const
 {
-    return m_videoPlayerPath.isEmpty() ? QString() : QFileInfo(m_videoPlayerPath).completeBaseName();
+    if (m_videoPlayerPath.isEmpty()) return {};
+    const QString mine = m_videoMeta.value(m_videoPlayerPath).value(QStringLiteral("title")).toString();
+    return mine.isEmpty() ? QFileInfo(m_videoPlayerPath).completeBaseName() : mine;
 }
 
 QString App::videoEngine() const
@@ -876,8 +889,201 @@ void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)
 
 void App::saveVideoProgress(qint64 positionMs, qint64 durationMs)
 {
-    if (m_db.isOpen() && !m_videoPlayerPath.isEmpty() && positionMs > 0)
+    if (m_db.isOpen() && !m_videoPlayerPath.isEmpty() && positionMs > 0) {
         m_db.setVideoProgress(m_videoPlayerPath, positionMs, durationMs);
+        // Watched to (nearly) the end: remember it as watched; the resume position is forgotten then.
+        if (durationMs > 0 && positionMs >= durationMs - 5000 && !m_played.contains(m_videoPlayerPath)) {
+            m_played.insert(m_videoPlayerPath);
+            m_db.setItemPlayed(m_videoPlayerPath, true);
+        }
+        if (m_videoPlayerPath == m_detailPath) emit videoDetailChanged();
+    }
+}
+
+// ---- movie details: filled in by the user, saved per profile ------------------------------------------
+
+namespace {
+
+const QStringList kVideoFields = {QStringLiteral("title"),    QStringLiteral("year"),     QStringLiteral("rating"),
+                                  QStringLiteral("score"),    QStringLiteral("tagline"),  QStringLiteral("overview"),
+                                  QStringLiteral("genre"),    QStringLiteral("director"), QStringLiteral("writers"),
+                                  QStringLiteral("studio"),   QStringLiteral("tags")};
+
+QString hoursMinutes(qint64 ms)
+{
+    const qint64 mins = (ms + 30'000) / 60'000;
+    if (mins >= 60) return QStringLiteral("%1h %2m").arg(mins / 60).arg(mins % 60);
+    return QStringLiteral("%1m").arg(qMax<qint64>(1, mins));
+}
+
+} // namespace
+
+int App::videoDetailRow() const
+{
+    if (m_detailPath.isEmpty()) return -1;
+    const QList<Video> &vs = m_videos.videos();
+    for (int i = 0; i < vs.size(); ++i) if (vs[i].path == m_detailPath) return i;
+    return -1;
+}
+
+QVariantMap App::videoDetail() const
+{
+    QVariantMap d;
+    const int row = videoDetailRow();
+    if (row < 0) return d;
+    const Video &v = m_videos.videos()[row];
+    d[QStringLiteral("row")] = row;
+    d[QStringLiteral("path")] = v.path;
+    d[QStringLiteral("fileName")] = v.displayTitle();
+    d[QStringLiteral("thumb")] = v.thumb.isEmpty() ? QString() : QUrl::fromLocalFile(v.thumb).toString();
+    d[QStringLiteral("customThumb")] = v.customThumb;
+    d[QStringLiteral("resolution")] = VideoListModel::resolutionBadge(v.width, v.height);
+    d[QStringLiteral("width")] = v.width;
+    d[QStringLiteral("height")] = v.height;
+    d[QStringLiteral("codec")] = v.codec.toUpper();
+    d[QStringLiteral("hdr")] = v.hdr;
+    d[QStringLiteral("container")] = v.container.toUpper();
+    d[QStringLiteral("length")] = v.durationMs > 0 ? hoursMinutes(v.durationMs) : QString();
+    d[QStringLiteral("size")] = SectionListModel::formatSize(v.size);
+    const VideoProgress p = m_db.isOpen() ? m_db.videoProgress(v.path) : VideoProgress{};
+    d[QStringLiteral("resumeText")] = p.positionMs > 0 ? TrackListModel::formatDuration(p.positionMs) : QString();
+    d[QStringLiteral("played")] = m_played.contains(v.path);
+
+    const QJsonObject mo = m_videoMeta.value(v.path);
+    QVariantMap meta;
+    for (const QString &k : kVideoFields) meta[k] = mo.value(k).toString();
+    d[QStringLiteral("meta")] = meta;
+    QVariantList cast;
+    for (const QJsonValue &c : mo.value(QStringLiteral("cast")).toArray()) {
+        const QJsonObject co = c.toObject();
+        const QString photo = co.value(QStringLiteral("photo")).toString();
+        cast.append(QVariantMap{{QStringLiteral("name"), co.value(QStringLiteral("name")).toString()},
+                                {QStringLiteral("role"), co.value(QStringLiteral("role")).toString()},
+                                {QStringLiteral("photo"), photo.isEmpty() || !QFile::exists(photo) ? QString() : QUrl::fromLocalFile(photo).toString()}});
+    }
+    d[QStringLiteral("cast")] = cast;
+    return d;
+}
+
+void App::openVideoDetail(int row)
+{
+    if (row < 0 || row >= m_videos.count()) return;
+    m_detailPath = m_videos.videos()[row].path;
+    emit videoDetailChanged();
+}
+
+void App::closeVideoDetail()
+{
+    if (m_detailPath.isEmpty()) return;
+    m_detailPath.clear();
+    emit videoDetailChanged();
+}
+
+// Writes this video's details; an object with nothing filled in is removed altogether.
+void App::saveVideoMeta(const QString &path)
+{
+    QJsonObject &o = m_videoMeta[path];
+    for (const QString &k : kVideoFields) if (o.value(k).toString().trimmed().isEmpty()) o.remove(k);
+    if (o.value(QStringLiteral("cast")).toArray().isEmpty()) o.remove(QStringLiteral("cast"));
+    if (o.isEmpty()) {
+        m_videoMeta.remove(path);
+        if (m_db.isOpen()) m_db.setVideoMeta(path, QString());
+    } else if (m_db.isOpen()) {
+        m_db.setVideoMeta(path, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+    }
+    emit videoDetailChanged();
+}
+
+void App::setVideoField(const QString &key, const QString &value)
+{
+    if (m_detailPath.isEmpty() || !kVideoFields.contains(key)) return;
+    const QString v = value.trimmed();
+    if (m_videoMeta.value(m_detailPath).value(key).toString() == v) return;   // nothing changed: no write
+    m_videoMeta[m_detailPath].insert(key, v);
+    saveVideoMeta(m_detailPath);
+    if (key == QLatin1String("title")) reloadVideos();   // the grid shows the title typed here
+}
+
+void App::addCastMember()
+{
+    if (m_detailPath.isEmpty()) return;
+    QJsonObject &o = m_videoMeta[m_detailPath];
+    QJsonArray cast = o.value(QStringLiteral("cast")).toArray();
+    cast.append(QJsonObject{{QStringLiteral("name"), QString()}, {QStringLiteral("role"), QString()}});
+    o.insert(QStringLiteral("cast"), cast);
+    // An empty row is kept so the user can type into it; it is dropped again only by "remove".
+    if (m_db.isOpen()) m_db.setVideoMeta(m_detailPath, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+    emit videoDetailChanged();
+}
+
+void App::setCastMember(int index, const QString &name, const QString &role)
+{
+    if (m_detailPath.isEmpty()) return;
+    QJsonObject &o = m_videoMeta[m_detailPath];
+    QJsonArray cast = o.value(QStringLiteral("cast")).toArray();
+    if (index < 0 || index >= cast.size()) return;
+    QJsonObject c = cast[index].toObject();
+    if (c.value(QStringLiteral("name")).toString() == name.trimmed() && c.value(QStringLiteral("role")).toString() == role.trimmed()) return;
+    c[QStringLiteral("name")] = name.trimmed();
+    c[QStringLiteral("role")] = role.trimmed();
+    cast[index] = c;
+    o.insert(QStringLiteral("cast"), cast);
+    if (m_db.isOpen()) m_db.setVideoMeta(m_detailPath, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+    emit videoDetailChanged();
+}
+
+void App::removeCastMember(int index)
+{
+    if (m_detailPath.isEmpty()) return;
+    QJsonObject &o = m_videoMeta[m_detailPath];
+    QJsonArray cast = o.value(QStringLiteral("cast")).toArray();
+    if (index < 0 || index >= cast.size()) return;
+    const QString photo = cast[index].toObject().value(QStringLiteral("photo")).toString();
+    if (!photo.isEmpty()) QFile::remove(photo);
+    cast.removeAt(index);
+    o.insert(QStringLiteral("cast"), cast);
+    saveVideoMeta(m_detailPath);
+}
+
+QString App::setCastPhoto(int index, const QUrl &image)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    if (m_detailPath.isEmpty()) return QStringLiteral("no movie open");
+    QJsonObject &o = m_videoMeta[m_detailPath];
+    QJsonArray cast = o.value(QStringLiteral("cast")).toArray();
+    if (index < 0 || index >= cast.size()) return QStringLiteral("no such person");
+    QImage img(image.isLocalFile() ? image.toLocalFile() : image.toString());
+    if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    if (img.width() > 600 || img.height() > 600) img = img.scaled(600, 600, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const QString dir = m_store.dirFor(m_profileId) + QStringLiteral("/video-cast");
+    QDir().mkpath(dir);
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(m_detailPath.toUtf8(), QCryptographicHash::Sha1).toHex());
+    const QString path = dir + QLatin1Char('/') + hash + QLatin1Char('_') + QString::number(QDateTime::currentMSecsSinceEpoch()) + QStringLiteral(".jpg");
+    if (!img.save(path, "JPG", 85)) return QStringLiteral("could not save the picture");
+    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    QJsonObject c = cast[index].toObject();
+    const QString old = c.value(QStringLiteral("photo")).toString();
+    if (!old.isEmpty()) QFile::remove(old);
+    c[QStringLiteral("photo")] = path;
+    cast[index] = c;
+    o.insert(QStringLiteral("cast"), cast);
+    if (m_db.isOpen()) m_db.setVideoMeta(m_detailPath, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+    emit videoDetailChanged();
+    return {};
+}
+
+void App::toggleVideoWatched()
+{
+    if (m_detailPath.isEmpty() || !m_db.isOpen()) return;
+    const bool now = !m_played.contains(m_detailPath);
+    if (now) {
+        m_played.insert(m_detailPath);
+        m_db.setVideoProgress(m_detailPath, 1, 1);   // at the end: drops any resume position
+    } else {
+        m_played.remove(m_detailPath);
+    }
+    m_db.setItemPlayed(m_detailPath, now);
+    emit videoDetailChanged();
 }
 
 void App::applySearch()

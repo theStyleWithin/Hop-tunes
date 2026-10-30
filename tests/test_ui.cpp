@@ -674,6 +674,67 @@ private slots:
         // covers the same App-level behaviour with no QML engine involved at all.
     }
 
+    // Clicking a movie opens its details page (empty boxes the user fills in); nothing plays until Play.
+    void videoDetailsPageIsEmptyBoxesAndPlayNeedsAClick()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("subTab_videos"));
+        QTRY_VERIFY(item("videoTile_0") != nullptr);
+        QCOMPARE(m_app->videoDetailRow(), -1);
+        QVERIFY(click("videoTile_0"));
+        QTRY_COMPARE(m_app->videoDetailRow(), 0);
+        QVERIFY(!m_app->videoPlayerOpen());                       // no auto-play
+        const QString path = m_app->videos()->videos().first().path;
+
+        // Everything starts empty; only facts from the file itself are known.
+        QVariantMap d = m_app->videoDetail();
+        QCOMPARE(d.value("meta").toMap().value("year").toString(), QString());
+        QCOMPARE(d.value("meta").toMap().value("overview").toString(), QString());
+        QVERIFY(d.value("cast").toList().isEmpty());
+        QVERIFY(!d.value("fileName").toString().isEmpty());
+        QVERIFY(!d.value("played").toBool());
+
+        // Fill some boxes in; they are kept (and trimmed), and a typed title replaces the file name in the grid.
+        m_app->setVideoField(QStringLiteral("year"), QStringLiteral(" 1998 "));
+        m_app->setVideoField(QStringLiteral("director"), QStringLiteral("Frank Coraci"));
+        m_app->setVideoField(QStringLiteral("nonsense"), QStringLiteral("ignored"));   // not a field
+        m_app->setVideoField(QStringLiteral("title"), QStringLiteral("My Title"));
+        d = m_app->videoDetail();
+        QCOMPARE(d.value("meta").toMap().value("year").toString(), QStringLiteral("1998"));
+        QCOMPARE(d.value("meta").toMap().value("director").toString(), QStringLiteral("Frank Coraci"));
+        QCOMPARE(m_app->videos()->data(m_app->videos()->index(0), VideoListModel::TitleRole).toString(), QStringLiteral("My Title"));
+        QVERIFY(m_app->videoDetail().value("fileName").toString() != QStringLiteral("My Title"));   // the file name stays known
+
+        // Cast: add an empty row, name it, remove it.
+        m_app->addCastMember();
+        QCOMPARE(m_app->videoDetail().value("cast").toList().size(), 1);
+        m_app->setCastMember(0, QStringLiteral("  Adam Sandler "), QStringLiteral("Bobby"));
+        const QVariantMap person = m_app->videoDetail().value("cast").toList().first().toMap();
+        QCOMPARE(person.value("name").toString(), QStringLiteral("Adam Sandler"));
+        QCOMPARE(person.value("role").toString(), QStringLiteral("Bobby"));
+
+        // Saved in this profile's database.
+        QVERIFY(m_app->profileDb()->videoMetas().contains(path));
+        QVERIFY(m_app->profileDb()->videoMetas().value(path).contains(QStringLiteral("Adam Sandler")));
+
+        // Watched toggles both ways.
+        m_app->toggleVideoWatched();
+        QVERIFY(m_app->videoDetail().value("played").toBool());
+        m_app->toggleVideoWatched();
+        QVERIFY(!m_app->videoDetail().value("played").toBool());
+
+        // Clearing every box removes the saved details altogether.
+        m_app->removeCastMember(0);
+        for (const char *k : {"year", "director", "title"}) m_app->setVideoField(QString::fromLatin1(k), QString());
+        QVERIFY(!m_app->profileDb()->videoMetas().contains(path));
+        QCOMPARE(m_app->videos()->data(m_app->videos()->index(0), VideoListModel::TitleRole).toString(),
+                 m_app->videoDetail().value("fileName").toString());
+
+        QVERIFY(click("videoDetailBack"));
+        QTRY_COMPARE(m_app->videoDetailRow(), -1);
+        QVERIFY(click("subTab_music"));
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()

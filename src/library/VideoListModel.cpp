@@ -34,7 +34,7 @@ QVariant VideoListModel::data(const QModelIndex &index, int role) const
     const Video &v = m_videos[index.row()];
     switch (role) {
     case Qt::DisplayRole:
-    case TitleRole:            return v.displayTitle();
+    case TitleRole:            return v.shownTitle();
     case VideoIdRole:          return v.id;
     case PathRole:             return v.path;
     case ThumbRole:            return thumbUrl(v.thumb);

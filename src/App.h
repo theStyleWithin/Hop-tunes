@@ -18,6 +18,7 @@
 #include "playback/GstVideoPlayer.h"
 #include "playback/Player.h"
 
+#include <QJsonObject>
 #include <QObject>
 #include <memory>
 #include <QSet>
@@ -108,6 +109,9 @@ class App : public QObject {
     Q_PROPERTY(bool videoScanning READ videoScanning NOTIFY videoScanProgressChanged)
     Q_PROPERTY(int videoScanDone READ videoScanDone NOTIFY videoScanProgressChanged)
     Q_PROPERTY(int videoScanTotal READ videoScanTotal NOTIFY videoScanProgressChanged)
+    // The details page of one video (opened by clicking a tile; nothing plays until Play is pressed).
+    Q_PROPERTY(int videoDetailRow READ videoDetailRow NOTIFY videoDetailChanged)       // -1 = not open
+    Q_PROPERTY(QVariantMap videoDetail READ videoDetail NOTIFY videoDetailChanged)
     Q_PROPERTY(bool videoPlayerOpen READ videoPlayerOpen NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerPath READ videoPlayerPath NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerTitle READ videoPlayerTitle NOTIFY videoPlayerChanged)
@@ -192,6 +196,8 @@ public:
     int videoScanDone() const { return m_videoScanDone; }
     int videoScanTotal() const { return m_videoScanTotal; }
     bool videoPlayerOpen() const { return m_videoPlayerOpen; }
+    int videoDetailRow() const;
+    QVariantMap videoDetail() const;
     QString videoPlayerPath() const { return m_videoPlayerPath; }
     QString videoPlayerTitle() const;
     qint64 videoPlayerResumeMs() const { return m_videoPlayerResumeMs; }
@@ -282,6 +288,15 @@ public:
     Q_INVOKABLE QString formatTime(qint64 ms) const { return TrackListModel::formatDuration(ms); }
 
     // videos (spec §5b)
+    Q_INVOKABLE void openVideoDetail(int row);
+    Q_INVOKABLE void closeVideoDetail();
+    // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
+    Q_INVOKABLE void setVideoField(const QString &key, const QString &value);
+    Q_INVOKABLE void addCastMember();
+    Q_INVOKABLE void setCastMember(int index, const QString &name, const QString &role);
+    Q_INVOKABLE void removeCastMember(int index);
+    Q_INVOKABLE QString setCastPhoto(int index, const QUrl &image);   // "" ok, else a message
+    Q_INVOKABLE void toggleVideoWatched();
     Q_INVOKABLE QString setVideoThumb(int row, const QUrl &image);   // "" ok, else a message
     Q_INVOKABLE void clearVideoThumb(int row);                       // back to the detected frame
     Q_INVOKABLE void playVideo(int row);                                  // opens the player, resumes if we have a position
@@ -308,6 +323,7 @@ signals:
     void appearanceChanged();
     void videoScanProgressChanged();
     void videoPlayerChanged();
+    void videoDetailChanged();
 
 private:
     void reload();
@@ -343,6 +359,9 @@ private:
     QList<Track> m_library;                 // everything under the profile's folders
     QHash<QString, int> m_libraryIndex;     // path -> row in m_library
     Collection m_fullCollection;            // unfiltered, for quickplay
+    QString m_detailPath;                              // the video whose details page is open
+    QHash<QString, QJsonObject> m_videoMeta;           // what this profile filled in per video, by path
+    void saveVideoMeta(const QString &path);
     QHash<QString, QString> m_videoThumbOverrides;   // this profile's picked video thumbnails, by video path
     QHash<QString, AlbumOverride> m_albumOverrides;   // this profile's title/cover edits, by ref
     QStringList m_songOrder;                // this profile's manual order for the songs tab
