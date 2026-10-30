@@ -36,7 +36,9 @@ void VideoScanner::start(const QStringList &folders)
         const Result r = scanFolders(m_index, folders, &m_cancel, [this](int done, int total) {
             QMetaObject::invokeMethod(this, [this, done, total] { emit progress(done, total); },
                                       Qt::QueuedConnection);
-        }, thumbDir);
+        }, thumbDir, [this] {
+            QMetaObject::invokeMethod(this, [this] { emit saved(); }, Qt::QueuedConnection);
+        });
         QMetaObject::invokeMethod(this, [this, r] {
             m_running.storeRelease(0);
             emit finished(r.added, r.updated, r.removed, r.total);
@@ -47,7 +49,8 @@ void VideoScanner::start(const QStringList &folders)
 VideoScanner::Result VideoScanner::scanFolders(VideoIndex *index, const QStringList &folders,
                                                const QAtomicInt *cancelFlag,
                                                const std::function<void(int, int)> &progress,
-                                               const QString &thumbCacheDir)
+                                               const QString &thumbCacheDir,
+                                               const std::function<void()> &saved)
 {
     Result r;
     auto cancelled = [cancelFlag] { return cancelFlag && cancelFlag->loadAcquire(); };
@@ -71,6 +74,23 @@ VideoScanner::Result VideoScanner::scanFolders(VideoIndex *index, const QStringL
         }
         if (cancelled()) break;
 
+        // Phase 1: list every new file at once as a bare row (mtime 0 marks "not probed yet"),
+        // so shows and films appear right away. Closing the app mid-scan then loses nothing:
+        // the next scan sees the mismatch and carries on probing exactly the unfinished files.
+        {
+            QList<Video> stubs;
+            for (const QFileInfo &fi : std::as_const(files)) {
+                if (known.contains(fi.absoluteFilePath())) continue;
+                Video v;
+                v.path = fi.absoluteFilePath();
+                v.size = fi.size();
+                v.container = fi.suffix().toLower();
+                stubs.append(v);
+            }
+            if (!stubs.isEmpty()) { index->upsert(stubs); if (saved) saved(); }
+        }
+        if (cancelled()) break;
+
         QSet<QString> seen;
         seen.reserve(files.size());
         QList<Video> batch;
@@ -83,8 +103,12 @@ VideoScanner::Result VideoScanner::scanFolders(VideoIndex *index, const QStringL
             ++r.scanned;
             const auto k = known.constFind(path);
             const qint64 mtime = fi.lastModified().toSecsSinceEpoch();
-            if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size()) continue;
-            (k == known.constEnd() ? r.added : r.updated)++;
+            // A file that was probed but never got a picture (the frame grab failed that time,
+            // or the cache was cleared) is tried again, so thumbnails fill in on later scans.
+            const bool lostThumb = k != known.constEnd() && !thumbCacheDir.isEmpty() && k->durationMs > 0
+                                   && (k->thumb.isEmpty() || !QFileInfo::exists(k->thumb));
+            if (k != known.constEnd() && k->mtime == mtime && k->size == fi.size() && !lostThumb) continue;
+            (k == known.constEnd() || k->mtime == 0 ? r.added : r.updated)++;
 
             Video v;
             v.path = path;
@@ -103,7 +127,7 @@ VideoScanner::Result VideoScanner::scanFolders(VideoIndex *index, const QStringL
                     v.thumb = VideoThumbnail::grab(path, mtime, v.durationMs, thumbCacheDir);
             }
             batch.append(v);
-            if (batch.size() >= 50) { index->upsert(batch); batch.clear(); }
+            if (batch.size() >= 50) { index->upsert(batch); batch.clear(); if (saved) saved(); }
             if (progress && (i % 10 == 0)) progress(i, total);
         }
         index->upsert(batch);

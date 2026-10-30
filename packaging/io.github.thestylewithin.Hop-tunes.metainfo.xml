@@ -82,6 +82,16 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.1" date="2026-10-30">
+      <description>
+        <p>A small bug fix update for video scanning.</p>
+        <ul>
+          <li>Closing the app during a video scan no longer makes the next scan start over; it resumes where it stopped.</li>
+          <li>New videos show up straight away while the scan is still running.</li>
+          <li>Videos without a thumbnail get one on a later scan.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.0" date="2026-10-30">
       <description>
         <p>Video categories, picture albums and a few personal touches.</p>
