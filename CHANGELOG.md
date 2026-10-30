@@ -11,6 +11,15 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   album. Add several folders and each stays its own album. Slots can be **renamed** ("rename" on the slot
   or in the open album; clearing the name goes back to the folder's name), and the name is remembered per
   profile, across restarts and rescans.
+- **A movie volume that is separate from the music volume.** The video player has its own volume slider
+  (and a mute button) that goes from 0 to **150 %**: past the mark at 100 % it boosts quiet films. It is
+  saved per profile and never touches the music volume. Keys: `↑` / `↓` change it by 5, `m` mutes.
+- **Video categories.** The videos tab now has sub sections like music does: **movies, shows, cartoons**
+  (western animation), **anime** and **other videos** (for things like videos you saved from YouTube to
+  keep). Each has its own folders and its own "choose a folder" button (in the tab and under
+  settings), and a video belongs to the category whose folder is its closest parent, so a folder
+  inside a movies folder can still be added as anime. Your existing video folders are your movies, so
+  nothing moves. The "up next" list while watching follows the category you are in.
 
 ## [1.6.0] - 2026-10-30
 
