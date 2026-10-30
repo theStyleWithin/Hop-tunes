@@ -1,4 +1,4 @@
-# Design: sharing a library with family (draft 3, for review)
+# Design: sharing a library with family (draft 4, for review)
 
 Status: **draft, nothing is built.** Goal: let one person (the *host*) let a few people they trust (the *guests*,
 first of all the host's dad) watch and listen to part of their Hop-tunes library. Not a media server: both sides
@@ -20,7 +20,8 @@ run Hop-tunes, and the host decides, item by item, what each guest may see. **St
 - **Trusted people, not the public.** No public listing, no discovery of strangers, no accounts, no central server.
 - **Plain to see, but quiet.** A visible "sharing" indicator while it is on, and one click to stop or to remove a guest.
 - **No activity indicators, for anyone.** Nobody is shown what the other is watching or listening to, and there is no
-  "last seen", "now playing" or "is watching" anywhere. If you are both connected you are, presumably, watching
+  "last seen", "now playing" or "is watching" anywhere. The only signal is a plain dot on the host's guest list that
+  says whether the guest is connected. If you are both connected you are, presumably, watching
   something together; you can just ask each other.
 
 ## All content types
@@ -30,7 +31,8 @@ rules (pictures and ebooks are stream-to-view: shown, never saved).
 
 ## What the host controls (Settings → Sharing)
 - The master switch (off by default).
-- **Guests:** a list with name and **remove** (no last-seen or activity). Opening a guest shows their approvals, per category.
+- **Guests:** a list with name, a plain **connected dot** (here or not here, nothing more) and **remove**. No last-seen
+  and no activity. Opening a guest shows their approvals, per category.
 - **Approving:** inside the host's own collection, a "share with…" choice on an item (or a selection), or from the
   guest's page: browse a category and tick what that guest may see. Because a library can have thousands of
   items, there are host-side shortcuts, each still an explicit action by the host: approve a whole album, show,
@@ -62,13 +64,28 @@ upload speed for every guest. Not in the first version.
 - The guest app fetches through a small local proxy that checks the fingerprint and hands the player (mpv or
   GStreamer) a plain `127.0.0.1` address. The proxy keeps only a small in-memory buffer, nothing on disk.
 - **Same network:** the host is found automatically (mDNS) and its address is also in the invite.
-- **Over the internet (the hard part):** home routers block incoming connections. Options, in order:
-  1. A VPN both sides install (Tailscale or ZeroTier, free): the two machines look like one network, and no router
-     changes are needed. Recommended for dad.
-  2. Port forwarding on the host's router, with step-by-step instructions in the app.
-  3. UPnP (automatic port opening) later, if it proves reliable.
-  4. A relay or rendezvous server: not planned, because it means someone running a server.
-- By default the server only accepts connections from the local network; "allow internet" is a separate switch.
+- **Over the internet (the hard part), with no accounts and no third-party services:** home routers block incoming
+  connections, so the host's router must forward one port to the host's computer. To make that less painful:
+  1. **Automatic first.** The app can ask the router to open the port itself (UPnP / NAT-PMP / PCP: local
+     conversations with your own router, nothing goes over the internet). If it works, the host just sees "port
+     open". The same conversation also tells the app the router's public address, so the invite can carry it
+     without asking any outside website.
+  2. **Manual with a guide.** If the router will not do it, the app shows plain step-by-step instructions (open the
+     router page, add one forward for TCP port N to this computer's address) and the exact numbers to type.
+  3. **IPv6 where the ISP gives it.** Often there is no NAT at all, so only a firewall rule is needed.
+  4. **The address can change.** Home internet addresses usually change now and then. The guest app remembers the
+     last address, shows a clear "can't reach the host" message, and lets the guest type a new address; the host can
+     see the current address and invite in Sharing and send it however they like. A host who already has a hostname
+     (their own domain or a dynamic-DNS name they set up) can put that in instead, but nothing requires it.
+  5. **The one case with no account-free fix:** some ISPs put customers behind carrier-grade NAT, where no port can
+     be forwarded. The app can tell (the router's "public" address is a private-range one) and says so plainly; the
+     host's options are then to ask the ISP for a public address, or to use IPv6.
+  Third-party VPN services (Tailscale, ZeroTier) are **not** recommended or required, since they need accounts. A
+  guest or host who wants to use one can: Hop-tunes only sees an address.
+- By default the server only accepts connections from the local network; "allow internet" is a separate switch, and
+  turning it on is the moment the app explains the risk in plain words: the port is reachable by anyone who knows the
+  address, so every request needs the guest's key, invites are rate limited and lock after a few wrong tries, and the
+  server code gets a security review before this ships.
 
 ## Honest limits
 - **"No downloading" is a design choice, not a lock.** Hop-tunes will not offer, save or cache a copy. But anything
@@ -88,7 +105,8 @@ upload speed for every guest. Not in the first version.
 ## Phases
 1. **LAN sharing, music and video:** host switch, waiting room, per-guest per-item approvals (remembered), invite
    codes, guest browse and stream, remove, limits.
-2. **Internet use:** the address in the invite, VPN and port-forward instructions, the "allow internet" switch.
+2. **Internet use:** the automatic router setup (UPnP / NAT-PMP / PCP), the manual guide, IPv6, the address in the
+   invite, the "allow internet" switch.
 3. **Other sections:** pictures, audiobooks, ebooks, podcasts, with the same approvals.
 4. **Watch party**, subtitles and audio-track choices, and (maybe) transcoding.
 
@@ -104,11 +122,13 @@ upload speed for every guest. Not in the first version.
 - Approvals are explicit and per guest, remembered, default-deny. Shortcuts (a whole album, show, folder or category,
   or everything matching a search) are fine, as explicit actions by the host.
 - Stream only, no downloads.
-- No activity indicators of any kind, in either direction.
+- No activity indicators, in either direction. The only signal is a plain connected dot on the host's guest list.
 - The same-time feature is called **watch party**.
+- **No accounts, ever.** Internet access is by port forwarding (automatic where the router allows it, otherwise a
+  manual guide), not through a third-party service. Hop-tunes stays open-garden software.
 
 ## Questions that are still open
-1. Tailscale (or ZeroTier) as the recommended way to connect over the internet: acceptable, or would a no-account
-   option (port forwarding, or a self-hosted VPN) be preferred? See the explanation in the review thread.
-2. Should a plain "connected / not connected" dot be allowed on the host's guest list (so you know the guest got in),
-   or nothing at all?
+1. Is it fine for the automatic router setup (UPnP and similar) to be on offer when the host turns on "allow
+   internet"? Some people dislike UPnP, so it would be a button the host presses, never automatic.
+2. For a guest whose host's address has changed: is typing the new address (sent however the host likes) enough, or
+   should the invite be re-issuable as a short code that includes the new address?
