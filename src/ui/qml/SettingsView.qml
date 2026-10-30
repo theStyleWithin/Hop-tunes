@@ -514,13 +514,13 @@ Item {
             wrapMode: Text.WordWrap; Layout.maximumWidth: 640
         }
         Label {
-            visible: !hop.guest && !hop.sharingAvailable
+            visible: root.visible && !hop.guest && !hop.sharingAvailable
             text: "sharing is not available on this computer: it needs the system's encryption library (OpenSSL), which was not found."
             color: Theme.danger; font { family: Theme.font; pixelSize: 14 }
             wrapMode: Text.WordWrap; Layout.maximumWidth: 640
         }
         RowLayout {
-            visible: !hop.guest && hop.sharingAvailable
+            visible: root.visible && !hop.guest && hop.sharingAvailable
             spacing: 16
             Label { text: "sharing"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
             Choice {
