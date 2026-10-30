@@ -648,6 +648,24 @@ private slots:
         shot("m6-about");
     }
 
+    // The movie volume is its own per-profile setting (0-150 %), apart from the music volume.
+    void movieVolumeIsSeparateFromMusicVolume()
+    {
+        QCOMPARE(m_app->videoVolume(), 100);
+        const double music = m_app->player()->volume();
+        m_app->setVideoVolume(130);
+        QCOMPARE(m_app->videoVolume(), 130);
+        m_app->setVideoVolume(999);
+        QCOMPARE(m_app->videoVolume(), 150);
+        m_app->setVideoVolume(-3);
+        QCOMPARE(m_app->videoVolume(), 0);
+        m_app->setVideoVolume(120);
+        QCOMPARE(m_app->player()->volume(), music);   // untouched
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(s.value(QStringLiteral("videoVolume")).toInt(), 120);
+        m_app->setVideoVolume(100);
+    }
+
     // Scanning and the Videos grid only (spec §5b) — not opening the player itself:
     // MpvVideoItem is a QQuickFramebufferObject, which needs a real GL scenegraph, and
     // this whole test suite runs the software backend (no GPU in CI). Opening the player
@@ -674,6 +692,48 @@ private slots:
         // testing, to crash during window teardown under this suite's software Qt Quick
         // backend — see test_robust.cpp's openingAVideoFileOpensThePlayer() instead, which
         // covers the same App-level behaviour with no QML engine involved at all.
+    }
+
+    // The videos tab has movies, shows, cartoons, anime and other videos; each has its own folders,
+    // and a video lands in the category whose folder is its closest parent.
+    void videoCategoriesHaveTheirOwnFolders()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("subTab_videos"));
+        QCOMPARE(m_app->videoCategories(), (QStringList{"movies", "shows", "cartoons", "anime", "other"}));
+        QCOMPARE(m_app->videoCategory(), QStringLiteral("movies"));
+        for (const char *c : {"videoCat_movies", "videoCat_shows", "videoCat_cartoons", "videoCat_anime", "videoCat_other"})
+            QVERIFY2(waitItem(c) != nullptr, c);
+        const int movies = m_app->videos()->count();
+        QVERIFY(movies >= 1);
+
+        const QString dir = m_home.filePath(QStringLiteral("Anime"));
+        QVERIFY(QDir().mkpath(dir));
+        QVERIFY(writeTestVideo(dir + QStringLiteral("/ep1.mkv")));
+        QVERIFY(click("videoCat_anime"));
+        QTRY_COMPARE(m_app->videoCategory(), QStringLiteral("anime"));
+        QCOMPARE(m_app->videos()->count(), 0);
+        QTRY_VERIFY(item("videosChooseFolder_anime") != nullptr && item("videosChooseFolder_anime")->isVisible());   // its own button
+        shot("v-anime-empty");
+        m_app->addVideoCategoryFolder(QStringLiteral("anime"), QUrl::fromLocalFile(dir));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->videos()->count(), 1, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
+        QVERIFY(item("videoTile_0") != nullptr);
+        shot("v-anime");
+        QCOMPARE(m_app->categoryOfVideo(dir + QStringLiteral("/ep1.mkv")), QStringLiteral("anime"));
+        QCOMPARE(m_app->categoryOfVideo(m_home.filePath(QStringLiteral("Library/Alpha/clip.mkv"))), QStringLiteral("movies"));
+        const QJsonObject s = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(s.value("videoCategoryFolders").toObject().value("anime").toArray().size(), 1);
+
+        // Movies are untouched by it.
+        QVERIFY(click("videoCat_movies"));
+        QTRY_COMPARE(m_app->videos()->count(), movies);
+
+        m_app->removeVideoCategoryFolder(QStringLiteral("anime"), m_app->videoCategoryFolders().value("anime").toStringList().first());
+        QVERIFY(m_app->videoCategoryFolders().value("anime").toStringList().isEmpty());
+        QCOMPARE(m_app->videos()->count(), movies);
+        m_app->setVideoCategory(QStringLiteral("nonsense"));   // ignored
+        QCOMPARE(m_app->videoCategory(), QStringLiteral("movies"));
     }
 
     // Clicking a movie opens its details page (empty boxes the user fills in); nothing plays until Play.
@@ -893,7 +953,49 @@ private slots:
         // Not mixed into the music or video folder lists.
         QVERIFY(!m_app->folders().contains(QFileInfo(dir).canonicalFilePath()));
         QVERIFY(!m_app->videoFolders().contains(QFileInfo(dir).canonicalFilePath()));
+        // One slot per folder: the shelf first, the pictures once a slot is opened.
+        QTRY_VERIFY(item("pictureAlbum_0") != nullptr);
+        QCOMPARE(m_app->pictureAlbums().size(), 1);
+        QCOMPARE(m_app->pictureAlbums().first().toMap().value("count").toInt(), 1);
+        QCOMPARE(m_app->pictureAlbums().first().toMap().value("name").toString(), QStringLiteral("Pictures"));
+        // (a click can land before a freshly shown slot has been laid out, so it is repeated until it takes)
+        QTRY_VERIFY_WITH_TIMEOUT((click("pictureAlbum_0"), m_app->pictureAlbum() == QFileInfo(dir).canonicalFilePath()), 8000);
         QTRY_VERIFY(item("pictureTile_0") != nullptr);
+        QCOMPARE(m_app->pictureAlbumItems()->count(), 1);
+        shot("p-album-open");
+        QTRY_VERIFY_WITH_TIMEOUT((click("pictureAlbumBack"), m_app->pictureAlbum().isEmpty()), 8000);
+
+        // A second folder is a second slot, kept apart from the first; slots can be named, and the name is remembered.
+        const QString trip = m_home.filePath(QStringLiteral("Pictures2/Trip"));
+        QVERIFY(QDir().mkpath(trip));
+        QVERIFY(img.save(trip + QStringLiteral("/a.png")));
+        QVERIFY(img.save(trip + QStringLiteral("/b.png")));
+        m_app->addSectionFolder(QStringLiteral("pictures"), QUrl::fromLocalFile(trip));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->pictures()->count(), 3, 15000);
+        QCOMPARE(m_app->pictureAlbums().size(), 2);
+        QTRY_VERIFY(item("pictureAlbum_1") != nullptr);
+        shot("p-albums");
+        const QString tripDir = QFileInfo(trip).canonicalFilePath();
+        m_app->renamePictureAlbum(tripDir, QStringLiteral("  Summer   trip "));
+        QStringList names;
+        for (const QVariant &a : m_app->pictureAlbums()) names << a.toMap().value("name").toString();
+        QVERIFY2(names.contains(QStringLiteral("Summer trip")), qPrintable(names.join(',')));
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(st.value("pictureAlbumNames").toObject().value(tripDir).toString(), QStringLiteral("Summer trip"));
+        m_app->rescan();   // the name survives a rescan
+        QTRY_VERIFY(!m_app->sectionStatus().value("pictures").toMap().value("scanning").toBool());
+        names.clear();
+        for (const QVariant &a : m_app->pictureAlbums()) names << a.toMap().value("name").toString();
+        QVERIFY(names.contains(QStringLiteral("Summer trip")));
+        m_app->openPictureAlbum(tripDir);
+        QCOMPARE(m_app->pictureAlbumItems()->count(), 2);
+        m_app->renamePictureAlbum(tripDir, QString());   // empty: back to the folder's name
+        m_app->closePictureAlbum();
+        names.clear();
+        for (const QVariant &a : m_app->pictureAlbums()) names << a.toMap().value("name").toString();
+        QVERIFY(names.contains(QStringLiteral("Trip")));
+        m_app->removeSectionFolder(QStringLiteral("pictures"), tripDir);
+        QTRY_COMPARE(m_app->pictures()->count(), 1);
 
         m_app->removeSectionFolder(QStringLiteral("pictures"), QFileInfo(dir).canonicalFilePath());
         QTRY_COMPARE(m_app->pictures()->count(), 0);

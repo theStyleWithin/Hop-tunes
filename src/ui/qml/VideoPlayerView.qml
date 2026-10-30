@@ -95,6 +95,7 @@ Rectangle {
                     readonly property string hwdecActive: ""
                     readonly property string error: ""
                     readonly property var subtitleTracks: []
+                    property int volume: 100
                     function play() {}
                     function pause() {}
                     function togglePause() {}
@@ -104,6 +105,16 @@ Rectangle {
                     function setResumePosition(ms) {}
                 }
                 readonly property var surface: mpvLoader.item || gstLoader.item || nullSurface
+
+                // The movie volume: its own setting (hop.videoVolume, 0-150 %), separate from the music volume,
+                // and it can go above 100 for quiet films.
+                Binding { target: page.surface; property: "volume"; value: hop.videoVolume; when: page.surface !== nullSurface }
+                property int volumeBeforeMute: 100
+                function setVolume(v) { hop.videoVolume = Math.max(0, Math.min(150, Math.round(v))) }
+                function toggleMute() {
+                    if (hop.videoVolume > 0) { volumeBeforeMute = hop.videoVolume; setVolume(0) }
+                    else setVolume(volumeBeforeMute > 0 ? volumeBeforeMute : 100)
+                }
                 readonly property var info: hop.videoPlayerInfo
                 readonly property var meta: info.meta || ({})
                 readonly property string shownTitle: (meta.title || "") !== "" ? meta.title : (info.fileName || hop.videoPlayerTitle)
@@ -120,6 +131,9 @@ Rectangle {
                     else if (e.key === Qt.Key_C) { chatOn = !chatOn; e.accepted = true }
                     else if (e.key === Qt.Key_Escape) { stepBack(); e.accepted = true }
                     else if (e.key === Qt.Key_Space) { surface.togglePause(); e.accepted = true }
+                    else if (e.key === Qt.Key_Up) { setVolume(hop.videoVolume + 5); e.accepted = true }
+                    else if (e.key === Qt.Key_Down) { setVolume(hop.videoVolume - 5); e.accepted = true }
+                    else if (e.key === Qt.Key_M) { toggleMute(); e.accepted = true }
                     else e.accepted = false
                 }
 
@@ -271,6 +285,47 @@ Rectangle {
                                 spacing: 12
                                 TransportButton { glyph: surface.paused ? "play" : "pause"; round: true; iconSize: 18; implicitWidth: 48
                                                   onClicked: surface.togglePause(); Accessible.name: surface.paused ? "play" : "pause" }
+                                AbstractButton {
+                                    id: muteBtn
+                                    objectName: "videoMute"
+                                    implicitWidth: 48; implicitHeight: 32
+                                    onClicked: page.toggleMute()
+                                    Accessible.name: hop.videoVolume === 0 ? "unmute" : "mute"
+                                    ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: "mute (m)"
+                                    background: Rectangle { radius: 6; color: muteBtn.hovered ? Theme.fade(0.5) : "transparent" }
+                                    contentItem: Label { text: hop.videoVolume === 0 ? "muted" : "vol"; color: hop.videoVolume === 0 ? "#ff9f43" : "white"
+                                                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                                         font { family: Theme.font; pixelSize: 13 } }
+                                }
+                                Slider {
+                                    id: vol
+                                    objectName: "videoVolume"
+                                    implicitWidth: 120
+                                    from: 0; to: 150; stepSize: 5; snapMode: Slider.SnapAlways
+                                    value: hop.videoVolume
+                                    onMoved: page.setVolume(value)
+                                    Accessible.name: "movie volume"
+                                    ToolTip.visible: hovered || pressed; ToolTip.text: Math.round(hop.videoVolume) + "%" + (hop.videoVolume > 100 ? " (boosted)" : "")
+                                    background: Rectangle {
+                                        x: vol.leftPadding; y: vol.topPadding + vol.availableHeight / 2 - height / 2
+                                        width: vol.availableWidth; height: 4; color: "#404048"
+                                        Rectangle { width: Math.min(vol.visualPosition, 100 / 150) * parent.width; height: parent.height; color: hop.accent }
+                                        // the boost zone, above the normal 100 %
+                                        Rectangle { x: parent.width * 100 / 150; width: Math.max(0, vol.visualPosition - 100 / 150) * parent.width; height: parent.height; color: "#ff9f43" }
+                                        Rectangle { x: parent.width * 100 / 150 - 1; y: -3; width: 2; height: 10; color: "#80808c" }
+                                    }
+                                    handle: Rectangle {
+                                        x: vol.leftPadding + vol.visualPosition * (vol.availableWidth - width)
+                                        y: vol.topPadding + vol.availableHeight / 2 - height / 2
+                                        width: 12; height: 12; radius: 6; color: "white"
+                                    }
+                                }
+                                Label {
+                                    objectName: "videoVolumeLabel"
+                                    text: hop.videoVolume + "%"
+                                    Layout.preferredWidth: 40
+                                    color: hop.videoVolume > 100 ? "#ff9f43" : "white"; font { family: Theme.font; pixelSize: 12 }
+                                }
                                 Label {
                                     visible: surface.hwdecActive !== "" && surface.hwdecActive !== "no"
                                     text: "hw decode: " + surface.hwdecActive

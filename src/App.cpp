@@ -27,6 +27,7 @@
 #include <QStandardPaths>
 #include <QUrl>
 
+#include <QMap>
 #include <algorithm>
 
 namespace hop {
@@ -64,7 +65,7 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_videoScanner, &VideoScanner::finished, this, [this](int added, int updated, int removed, int) {
         emit videoScanProgressChanged();
         if (added || updated || removed || m_videos.count() == 0) reloadVideos();
-        if (m_videoScanRescanPending) { m_videoScanRescanPending = false; m_videoScanner.start(videoFolders()); }
+        if (m_videoScanRescanPending) { m_videoScanRescanPending = false; m_videoScanner.start(allVideoFolders()); }
         m_watcher.setFolders(watchedFolders());
     });
     // The other collection sections: one scanner per kind over the shared SectionIndex.
@@ -328,6 +329,9 @@ void App::activate(const QString &id, bool guest)
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    m_albumNames.clear();
+    m_videoCatFolders.clear();
+    m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) sec->folders.clear();
     if (guest) {
         if (!suggestedFolder().isEmpty()) m_folders << suggestedFolder();
@@ -336,10 +340,15 @@ void App::activate(const QString &id, bool guest)
         for (auto &sec : m_sec)
             for (const QJsonValue &v : s.value(sectionKey(sec->kind) + QStringLiteral("Folders")).toArray())
                 sec->folders << v.toString();
+        const QJsonObject an = s.value(QStringLiteral("pictureAlbumNames")).toObject();
+        for (auto it = an.constBegin(); it != an.constEnd(); ++it) m_albumNames.insert(it.key(), it.value().toString());
         if (s.contains(QStringLiteral("videoFolders"))) {
             m_videoFoldersOwn = true;
             for (const QJsonValue &v : s.value(QStringLiteral("videoFolders")).toArray()) m_videoFolders << v.toString();
         }
+        const QJsonObject cats = s.value(QStringLiteral("videoCategoryFolders")).toObject();
+        for (const QString &c : videoCategories())
+            for (const QJsonValue &v : cats.value(c).toArray()) m_videoCatFolders[c] << v.toString();
     }
     m_loadingSettings = true;
     m_player.setVolume(s.value(QStringLiteral("volume")).toDouble(1.0));
@@ -352,10 +361,13 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
+    m_videoVolume = qBound(0, s.value(QStringLiteral("videoVolume")).toInt(100), 150);
     m_videoChat = s.value(QStringLiteral("videoChat")).toBool(false);
     m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
     m_loadingSettings = false;
     emit videoChatChanged();
+    emit videoVolumeChanged();
+    emit videoCategoryChanged();
     m_videoComments = [&] { const QString m = s.value(QStringLiteral("videoComments")).toString();
                             return m == QLatin1String("mine") || m == QLatin1String("populated") ? m : QStringLiteral("off"); }();
     emit videoCommentsChanged();
@@ -424,9 +436,11 @@ void App::leaveProfile()
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
+    m_videoVolume = 100;
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
+    emit videoVolumeChanged();
     m_videoComments = QStringLiteral("off");
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
@@ -434,6 +448,9 @@ void App::leaveProfile()
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    m_albumNames.clear();
+    m_videoCatFolders.clear();
+    m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) { sec->scanner.cancel(); sec->folders.clear(); }
     reload();
     emit foldersChanged();
@@ -447,6 +464,13 @@ void App::saveProfileSettings()
     QJsonObject s = m_store.settings(m_profileId);
     s.insert(QStringLiteral("folders"), QJsonArray::fromStringList(m_folders));
     if (m_videoFoldersOwn) s.insert(QStringLiteral("videoFolders"), QJsonArray::fromStringList(m_videoFolders));
+    QJsonObject an;
+    for (auto it = m_albumNames.constBegin(); it != m_albumNames.constEnd(); ++it) an.insert(it.key(), it.value());
+    s.insert(QStringLiteral("pictureAlbumNames"), an);
+    QJsonObject cats;
+    for (auto it = m_videoCatFolders.constBegin(); it != m_videoCatFolders.constEnd(); ++it)
+        if (!it.value().isEmpty()) cats.insert(it.key(), QJsonArray::fromStringList(it.value()));
+    s.insert(QStringLiteral("videoCategoryFolders"), cats);
     for (const auto &sec : m_sec)
         s.insert(sectionKey(sec->kind) + QStringLiteral("Folders"), QJsonArray::fromStringList(sec->folders));
     s.insert(QStringLiteral("volume"), m_player.volume());
@@ -458,6 +482,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("videoVolume"), m_videoVolume);
     s.insert(QStringLiteral("videoChat"), m_videoChat);
     s.insert(QStringLiteral("videoChatLook"), m_videoChatLook);
     s.insert(QStringLiteral("videoComments"), m_videoComments);
@@ -532,6 +557,9 @@ QString App::removeProfile()
     m_folders.clear();
     m_videoFolders.clear();
     m_videoFoldersOwn = false;
+    m_albumNames.clear();
+    m_videoCatFolders.clear();
+    m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) sec->folders.clear();
     reload();
     emit foldersChanged();
@@ -731,6 +759,134 @@ void App::reloadSection(int i)
         }
     }
     sec.model.setItems(items, progress, m_played);
+    if (sec.kind == SectionKind::Pictures) rebuildPictureAlbums(items);
+}
+
+// Pictures are shown as albums, one per folder they sit in; clicking one opens its pictures.
+void App::rebuildPictureAlbums(const QList<SectionItem> &items)
+{
+    QMap<QString, QList<SectionItem>> byDir;   // folder -> its pictures, in the index's order
+    for (const SectionItem &it : items) byDir[QFileInfo(it.path).absolutePath()].append(it);
+    QHash<QString, int> names;   // two folders can share a name: those also show their parent
+    for (auto d = byDir.constBegin(); d != byDir.constEnd(); ++d) ++names[QFileInfo(d.key()).fileName().toLower()];
+    QList<QVariantMap> albums;
+    for (auto d = byDir.constBegin(); d != byDir.constEnd(); ++d) {
+        const QFileInfo fi(d.key());
+        QString name = fi.fileName().isEmpty() ? d.key() : fi.fileName();
+        if (names.value(fi.fileName().toLower()) > 1) name += QStringLiteral(" (") + QFileInfo(fi.absolutePath()).fileName() + QLatin1Char(')');
+        const bool named = m_albumNames.contains(d.key());
+        if (named) name = m_albumNames.value(d.key());
+        albums.append({{QStringLiteral("dir"), d.key()}, {QStringLiteral("name"), name}, {QStringLiteral("renamed"), named}, {QStringLiteral("count"), d.value().size()},
+                       {QStringLiteral("cover"), QUrl::fromLocalFile(d.value().first().path).toString()}});
+    }
+    std::sort(albums.begin(), albums.end(), [](const QVariantMap &a, const QVariantMap &b) {
+        return a.value(QStringLiteral("name")).toString().compare(b.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive) < 0;
+    });
+    m_pictureAlbums.clear();
+    for (const QVariantMap &a : albums) m_pictureAlbums.append(a);
+    emit pictureAlbumsChanged();
+    // keep an open album in step with a rescan; if its folder is gone, go back to the list
+    if (!m_pictureAlbum.isEmpty()) {
+        if (byDir.contains(m_pictureAlbum)) m_albumItems.setItems(byDir.value(m_pictureAlbum));
+        else closePictureAlbum();
+    }
+}
+
+void App::openPictureAlbum(const QString &dir)
+{
+    QList<SectionItem> mine;
+    for (const SectionItem &it : m_sec[0]->model.items())
+        if (QFileInfo(it.path).absolutePath() == dir) mine.append(it);
+    if (mine.isEmpty()) return;
+    m_albumItems.setItems(mine);
+    m_pictureAlbum = dir;
+    emit pictureAlbumChanged();
+}
+
+void App::renamePictureAlbum(const QString &dir, const QString &name)
+{
+    if (m_guest) return;
+    const QString n = name.simplified().left(60);
+    if (n.isEmpty()) { if (!m_albumNames.remove(dir)) return; }
+    else if (m_albumNames.value(dir) == n) return;
+    else m_albumNames.insert(dir, n);
+    saveProfileSettings();
+    rebuildPictureAlbums(m_sec[0]->model.items());
+}
+
+void App::closePictureAlbum()
+{
+    if (m_pictureAlbum.isEmpty()) return;
+    m_pictureAlbum.clear();
+    m_albumItems.setItems({});
+    emit pictureAlbumChanged();
+}
+
+QStringList App::videoCategories()
+{
+    return {QStringLiteral("movies"), QStringLiteral("shows"), QStringLiteral("cartoons"), QStringLiteral("anime"), QStringLiteral("other")};
+}
+
+QStringList App::allVideoFolders() const
+{
+    QStringList all = videoFolders();
+    for (const QString &c : videoCategories())
+        for (const QString &f : m_videoCatFolders.value(c)) if (!all.contains(f)) all << f;
+    return all;
+}
+
+QVariantMap App::videoCategoryFolders() const
+{
+    QVariantMap out;
+    for (const QString &c : videoCategories())
+        out.insert(c, c == QLatin1String("movies") ? videoFolders() : m_videoCatFolders.value(c));
+    return out;
+}
+
+// A video belongs to the category whose folder is its closest parent; anything else that is scanned is a movie.
+QString App::categoryOfVideo(const QString &path) const
+{
+    QString best = QStringLiteral("movies");
+    int bestLen = -1;
+    for (const QString &c : videoCategories()) {
+        const QStringList fs = c == QLatin1String("movies") ? videoFolders() : m_videoCatFolders.value(c);
+        for (const QString &f : fs) {
+            QString d = f;
+            while (d.size() > 1 && d.endsWith(QLatin1Char('/'))) d.chop(1);
+            if (path.startsWith(d + QLatin1Char('/')) && d.size() > bestLen) { best = c; bestLen = d.size(); }
+        }
+    }
+    return best;
+}
+
+void App::setVideoCategory(const QString &c)
+{
+    if (!videoCategories().contains(c) || c == m_videoCategory) return;
+    m_videoCategory = c;
+    if (!m_detailPath.isEmpty()) closeVideoDetail();
+    emit videoCategoryChanged();
+    reloadVideos();
+}
+
+void App::addVideoCategoryFolder(const QString &category, const QUrl &folder)
+{
+    if (category == QLatin1String("movies")) { addVideoFolder(folder); return; }
+    if (!videoCategories().contains(category)) return;
+    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString()).canonicalFilePath();
+    if (path.isEmpty() || m_videoCatFolders.value(category).contains(path)) return;
+    m_videoCatFolders[category] << path;
+    saveFolders();
+    emit foldersChanged();
+    rescan();
+}
+
+void App::removeVideoCategoryFolder(const QString &category, const QString &path)
+{
+    if (category == QLatin1String("movies")) { removeVideoFolder(path); return; }
+    if (!m_videoCatFolders[category].removeAll(path)) return;
+    saveFolders();
+    emit foldersChanged();
+    reloadVideos();
 }
 
 void App::removeVideoFolder(const QString &path)
@@ -745,7 +901,7 @@ void App::removeVideoFolder(const QString &path)
 QStringList App::watchedFolders() const
 {
     QStringList all = m_folders;
-    for (const QString &f : videoFolders()) if (!all.contains(f)) all << f;
+    for (const QString &f : allVideoFolders()) if (!all.contains(f)) all << f;
     for (const auto &sec : m_sec)
         for (const QString &f : sec->folders) if (!all.contains(f)) all << f;
     return all;
@@ -758,7 +914,7 @@ void App::rescan()
         if (sec->scanner.isRunning()) sec->rescanPending = true;
         else { sec->done = sec->total = 0; sec->scanner.start(sec->folders); }
     }
-    if (m_folders.isEmpty() && videoFolders().isEmpty()) { m_watcher.setFolders(watchedFolders()); return; }
+    if (m_folders.isEmpty() && allVideoFolders().isEmpty()) { m_watcher.setFolders(watchedFolders()); return; }
     if (!m_folders.isEmpty()) {
         if (m_scanner.isRunning()) m_rescanPending = true;   // e.g. right after a profile switch
         else {
@@ -767,12 +923,12 @@ void App::rescan()
             m_scanner.start(m_folders);
         }
     }
-    if (!videoFolders().isEmpty()) {
+    if (!allVideoFolders().isEmpty()) {
         if (m_videoScanner.isRunning()) m_videoScanRescanPending = true;
         else {
             m_videoScanDone = m_videoScanTotal = 0;
             emit videoScanProgressChanged();
-            m_videoScanner.start(videoFolders());
+            m_videoScanner.start(allVideoFolders());
         }
     }
     m_watcher.setFolders(watchedFolders());
@@ -827,7 +983,12 @@ void App::reload()
 
 void App::reloadVideos()
 {
-    QList<Video> list = m_videoIndex.videosUnder(videoFolders());
+    QList<Video> all = m_videoIndex.videosUnder(allVideoFolders());
+    QList<Video> list;
+    for (Video &v : all) {
+        if (categoryOfVideo(v.path) != m_videoCategory) continue;
+        list.append(v);
+    }
     for (Video &v : list) {
         v.customTitle = m_videoMeta.value(v.path).value(QStringLiteral("title")).toString();
         const auto it = m_videoThumbOverrides.constFind(v.path);
@@ -904,6 +1065,15 @@ void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
     if (row < 0 || row >= m_videos.count()) return;
     saveVideoProgress(positionMs, durationMs);
     openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::setVideoVolume(int percent)
+{
+    const int v = qBound(0, percent, 150);
+    if (v == m_videoVolume) return;
+    m_videoVolume = v;
+    saveProfileSettings();
+    emit videoVolumeChanged();
 }
 
 void App::setVideoChat(bool on)

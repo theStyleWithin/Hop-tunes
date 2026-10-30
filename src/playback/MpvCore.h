@@ -37,7 +37,7 @@ public:
     void togglePause();
     void seek(qint64 ms);     // absolute, clamped to [0, duration]
     void stop();
-    void setVolume(int percent);   // 0-100
+    void setVolume(int percent);   // 0-150 (above 100 is a boost, used by the video player)
     void addSubtitleFile(const QString &path);   // "sub-add", select it
     void setSubtitleTrack(int id);                // mpv "sid"; -1 disables subtitles
 
