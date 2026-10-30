@@ -83,17 +83,7 @@ Item {
                     background: Item {}
                 }
             }
-            Item { Layout.fillWidth: true }
-            Label {
-                visible: hop.scanning && root.collectionTab === "music"
-                text: hop.scanTotal > 0 ? "scanning " + hop.scanDone + " / " + hop.scanTotal : "scanning…"
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            }
-            Label {
-                visible: !hop.scanning && hop.librarySize > 0 && root.collectionTab === "music"
-                text: hop.searchText !== "" ? hop.songs.count + " of " + hop.librarySize : hop.songs.count + (hop.songs.count === 1 ? " song" : " songs")
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            }
+            Item { Layout.preferredWidth: 20 }
             // instant search (spec §4.2)
             TextField {
                 id: search
@@ -128,6 +118,17 @@ Item {
                     background: Item { }
                 }
             }
+            Label {
+                visible: hop.scanning && root.collectionTab === "music"
+                text: hop.scanTotal > 0 ? "scanning " + hop.scanDone + " / " + hop.scanTotal : "scanning…"
+                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            }
+            Label {
+                visible: !hop.scanning && hop.librarySize > 0 && root.collectionTab === "music"
+                text: hop.searchText !== "" ? hop.songs.count + " of " + hop.librarySize : hop.songs.count + (hop.songs.count === 1 ? " song" : " songs")
+                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            }
+            Item { Layout.fillWidth: true }
             Shortcut { sequences: ["Ctrl+F", "/"]; enabled: hop.profileReady && search.visible; onActivated: { root.mode = root.mode === "playlists" ? "songs" : root.mode; search.forceActiveFocus(); search.selectAll() } }
         }
 
