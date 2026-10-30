@@ -6,7 +6,7 @@ import QtQuick.Layouts
 // Now playing (design/screens/5): drifting art mosaic, big type, up next.
 Rectangle {
     id: root
-    color: Theme.bgDeep
+    color: Theme.compact ? Theme.bg : Theme.bgDeep
     clip: true
     readonly property var player: hop.player
     signal back()
@@ -139,7 +139,7 @@ Rectangle {
                 id: upNext
                 anchors { fill: parent; margins: 20 }
                 spacing: 0
-                Label { text: "up next"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(22) } bottomPadding: 8 }
+                Label { text: "up next"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(22) } bottomPadding: 8 }
                 Label {
                     visible: root.player.currentIndex + 1 >= root.player.queueLength
                     text: root.player.repeatMode === 1 ? "the queue starts again" : "nothing after this song"

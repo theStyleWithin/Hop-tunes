@@ -48,7 +48,7 @@ Item {
                 Accessible.name: "back to videos"
                 contentItem: Label {
                     text: "‹  videos"
-                    color: back.hovered ? hop.accent : Theme.muted
+                    color: back.hovered ? Theme.accent : Theme.muted
                     font { family: Theme.font; pixelSize: Theme.fs(17) }
                 }
                 background: Item {}
@@ -90,7 +90,7 @@ Item {
                             hoverEnabled: true
                             implicitHeight: 20
                             onClicked: posterDialog.open()
-                            contentItem: Label { text: "change poster"; color: posterBtn.hovered ? hop.accent : Theme.muted
+                            contentItem: Label { text: "change poster"; color: posterBtn.hovered ? Theme.accent : Theme.muted
                                                  font { family: Theme.font; pixelSize: Theme.fs(13); underline: posterBtn.hovered } }
                             background: Item {}
                         }
@@ -100,7 +100,7 @@ Item {
                             hoverEnabled: true
                             implicitHeight: 20
                             onClicked: hop.clearVideoThumb(root.d.row)
-                            contentItem: Label { text: "reset"; color: posterReset.hovered ? hop.accent : Theme.muted
+                            contentItem: Label { text: "reset"; color: posterReset.hovered ? Theme.accent : Theme.muted
                                                  font { family: Theme.font; pixelSize: Theme.fs(13); underline: posterReset.hovered } }
                             background: Item {}
                         }
@@ -149,14 +149,14 @@ Item {
                             onClicked: hop.playVideo(root.d.row)
                             contentItem: Label { text: playBtn.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(17); weight: Font.Medium }
                                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            background: Rectangle { implicitHeight: 46; implicitWidth: 200; color: playBtn.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
+                            background: Rectangle { implicitHeight: 46; implicitWidth: 200; color: playBtn.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
                         }
                         Button {
                             id: watchedBtn
                             objectName: "videoDetailWatched"
                             text: root.d.played ? "watched ✓" : "mark watched"
                             onClicked: hop.toggleVideoWatched()
-                            contentItem: Label { text: watchedBtn.text; color: root.d.played ? hop.accent : Theme.text
+                            contentItem: Label { text: watchedBtn.text; color: root.d.played ? Theme.accent : Theme.text
                                                  font { family: Theme.font; pixelSize: Theme.fs(15) }
                                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             background: Rectangle { implicitHeight: 46; implicitWidth: 150; color: "transparent"; border { width: 2; color: Theme.border } }
@@ -212,7 +212,7 @@ Item {
                     hoverEnabled: true
                     implicitHeight: 26
                     onClicked: hop.addCastMember()
-                    contentItem: Label { text: "+ add person"; color: addPerson.hovered ? hop.accent : Theme.muted
+                    contentItem: Label { text: "+ add person"; color: addPerson.hovered ? Theme.accent : Theme.muted
                                          font { family: Theme.font; pixelSize: Theme.fs(15); underline: addPerson.hovered } }
                     background: Item {}
                 }
@@ -265,7 +265,7 @@ Item {
                             leftPadding: 8; rightPadding: 8; topPadding: 5; bottomPadding: 5
                             onEditingFinished: hop.setCastMember(card.index, text, roleField.text)
                             background: Rectangle { color: nameField.activeFocus ? Theme.panel : "transparent"; radius: 3
-                                                    border { width: 1; color: nameField.activeFocus ? hop.accent : Theme.borderSoft } }
+                                                    border { width: 1; color: nameField.activeFocus ? Theme.accent : Theme.borderSoft } }
                         }
                         TextField {
                             id: roleField
@@ -278,7 +278,7 @@ Item {
                             leftPadding: 8; rightPadding: 8; topPadding: 4; bottomPadding: 4
                             onEditingFinished: hop.setCastMember(card.index, nameField.text, text)
                             background: Rectangle { color: roleField.activeFocus ? Theme.panel : "transparent"; radius: 3
-                                                    border { width: 1; color: roleField.activeFocus ? hop.accent : Theme.borderSoft } }
+                                                    border { width: 1; color: roleField.activeFocus ? Theme.accent : Theme.borderSoft } }
                         }
                         RowLayout {
                             spacing: 12
@@ -287,7 +287,7 @@ Item {
                                 visible: !hop.guest
                                 hoverEnabled: true; implicitHeight: 18
                                 onClicked: { castDialog.index = card.index; castDialog.open() }
-                                contentItem: Label { text: "photo"; color: photoBtn.hovered ? hop.accent : Theme.muted
+                                contentItem: Label { text: "photo"; color: photoBtn.hovered ? Theme.accent : Theme.muted
                                                      font { family: Theme.font; pixelSize: Theme.fs(12); underline: photoBtn.hovered } }
                                 background: Item {}
                             }

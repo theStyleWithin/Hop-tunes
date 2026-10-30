@@ -17,7 +17,7 @@ Button {
     }
     background: Rectangle {
         implicitWidth: Math.max(120, b.contentItem.implicitWidth + 36); implicitHeight: 44
-        color: b.primary ? (b.enabled ? hop.accent : Theme.line) : (b.hovered ? Theme.hover : "transparent")
+        color: b.primary ? (b.enabled ? Theme.accent : Theme.line) : (b.hovered ? Theme.hover : "transparent")
         border { width: b.primary ? 0 : 2; color: b.danger ? Theme.dangerLine : Theme.border }
     }
 }

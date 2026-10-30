@@ -52,8 +52,8 @@ Item {
                 }
                 background: Rectangle {
                     implicitWidth: Math.max(90, ob.contentItem.implicitWidth + 28); implicitHeight: 40
-                    color: ob.on ? hop.accent : (ob.hovered ? Theme.hover : "transparent")
-                    border { width: 1; color: ob.on ? hop.accent : Theme.border }
+                    color: ob.on ? Theme.accent : (ob.hovered ? Theme.hover : "transparent")
+                    border { width: 1; color: ob.on ? Theme.accent : Theme.border }
                 }
             }
             }
@@ -91,13 +91,13 @@ Item {
                 onClicked: root.back()
                 Accessible.name: "back to profile"
                 background: Item {}
-                contentItem: Label { text: "‹  profile"; color: hop.accent; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 18 } }
+                contentItem: Label { text: "‹  profile"; color: Theme.accent; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 18 } }
             }
         }
-        Label { visible: Theme.compact; text: "settings"; color: Theme.strong; font { family: Theme.font; pixelSize: 40; weight: Font.Light } }
+        Label { visible: Theme.compact; text: "settings"; color: Theme.strong; font { family: Theme.font; pixelSize: 46; weight: Font.Light } }
 
         // ---- profile ------------------------------------------------------------
-        Label { text: hop.guest ? "guest mode" : "profile"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+        Label { text: hop.guest ? "guest mode" : "profile"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
         Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true
             visible: hop.guest
@@ -133,7 +133,7 @@ Item {
                         font { family: Theme.font; pixelSize: Theme.fs(20) }
                         implicitWidth: Theme.compact ? 120 : 300
                         Accessible.name: "profile name"
-                        background: Rectangle { implicitHeight: 46; color: Theme.panel; border { width: nameEdit.activeFocus ? 2 : 1; color: nameEdit.activeFocus ? hop.accent : Theme.line } }
+                        background: Rectangle { implicitHeight: 46; color: Theme.panel; border { width: nameEdit.activeFocus ? 2 : 1; color: nameEdit.activeFocus ? Theme.accent : Theme.line } }
                         onAccepted: root.profileMsg = hop.renameProfile(text)
                     }
                     PlainButton { text: "rename"; enabled: nameEdit.text.trim() !== "" && nameEdit.text !== hop.profile.name; onClicked: root.profileMsg = hop.renameProfile(nameEdit.text) }
@@ -148,7 +148,7 @@ Item {
                             width: 32; height: 32
                             onClicked: root.profileMsg = hop.setProfileAccent(modelData)
                             Accessible.name: "colour " + modelData
-                            background: Rectangle { color: modelData; border { width: hop.accent === modelData ? 3 : 0; color: Theme.strong } }
+                            background: Rectangle { color: modelData; border { width: Theme.accent === modelData ? 3 : 0; color: Theme.strong } }
                         }
                     }
                     Item { width: 14; height: 1 }
@@ -202,7 +202,7 @@ Item {
         Label { visible: root.profileMsg !== ""; text: root.profileMsg; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
         // ---- playback (spec §5) ------------------------------------------------------
-        Label { text: "playback"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        Label { text: "playback"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         SRow {
             spacing: 16
             Label { text: "crossfade"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } Layout.preferredWidth: Theme.compact ? -1 : 140 }
@@ -217,7 +217,7 @@ Item {
                 background: Rectangle {
                     x: xfade.leftPadding; y: xfade.topPadding + xfade.availableHeight / 2 - height / 2
                     width: xfade.availableWidth; height: 4; color: Theme.track
-                    Rectangle { width: xfade.visualPosition * parent.width; height: parent.height; color: hop.accent }
+                    Rectangle { width: xfade.visualPosition * parent.width; height: parent.height; color: Theme.accent }
                 }
                 handle: Rectangle {
                     x: xfade.leftPadding + xfade.visualPosition * (xfade.availableWidth - width)
@@ -263,7 +263,7 @@ Item {
         }
 
         // ---- appearance (spec §4.5) ---------------------------------------------------
-        Label { text: "appearance"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        Label { text: "appearance"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         SRow {
             spacing: 16
             Label { text: "theme"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } Layout.preferredWidth: Theme.compact ? -1 : 140 }
@@ -301,7 +301,7 @@ Item {
         }
 
         // ---- video settings ----------------------------------------------------------
-        Label { text: "video settings"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        Label { text: "video settings"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         SRow {
             spacing: 16
             Label { text: "viewing style"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } Layout.preferredWidth: Theme.compact ? -1 : 140 }
@@ -372,7 +372,7 @@ Item {
         // The music scanner's list. Videos use their own list below once one is added; until
         // then they scan these same folders, so existing libraries keep working.
 
-        Label { text: "music folders"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        Label { text: "music folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true
             text: "hop-tunes reads these folders and never changes or uploads your files."
@@ -420,7 +420,7 @@ Item {
 
         // ---- video folders ---------------------------------------------------------
         // The movies in the videos tab. Until one is added here it uses the media folders above.
-        Label { text: "movies folders"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        Label { text: "movies folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         Label {
             visible: hop.videoFolders.length === 0
             text: "no movies folders yet."
@@ -463,7 +463,7 @@ Item {
                 readonly property var paths: hop.videoCategoryFolders[modelData] || []
                 Layout.fillWidth: true
                 spacing: 8
-                Label { text: vc.label + " folders"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+                Label { text: vc.label + " folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
                 Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true
                     visible: vc.paths.length === 0
@@ -509,7 +509,7 @@ Item {
                 readonly property var paths: hop.sectionFolders[modelData] || []
                 Layout.fillWidth: true
                 spacing: 8
-                Label { text: sec.modelData + " folders"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+                Label { text: sec.modelData + " folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
                 Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true
                     visible: sec.paths.length === 0
@@ -563,7 +563,7 @@ Item {
         }
 
         // ---- about -------------------------------------------------------------------
-        Label { text: "about"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 28 }
+        Label { text: "about"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 28 }
         Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true
             objectName: "aboutVersion"

@@ -10,7 +10,7 @@ Rectangle {
     implicitWidth: 460
     implicitHeight: 56
     color: Theme.panel
-    border { width: edit.activeFocus ? 2 : 1; color: edit.activeFocus ? hop.accent : Theme.line }
+    border { width: edit.activeFocus ? 2 : 1; color: edit.activeFocus ? Theme.accent : Theme.line }
 
     Flickable {
         id: flick

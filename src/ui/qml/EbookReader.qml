@@ -117,7 +117,7 @@ Popup {
                 textFormat: Text.RichText
                 wrapMode: Text.WordWrap
                 color: Theme.text
-                linkColor: hop.accent
+                linkColor: Theme.accent
                 font { family: Theme.font; pixelSize: root.fontSize }
                 lineHeight: 1.05
             }
@@ -173,7 +173,7 @@ Popup {
                     background: Rectangle { color: hovered ? Theme.hover : "transparent" }
                     contentItem: Label {
                         text: (index + 1) + ".  " + modelData
-                        color: index === hop.bookChapterIndex ? hop.accent : Theme.text
+                        color: index === hop.bookChapterIndex ? Theme.accent : Theme.text
                         elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
                         font { family: Theme.font; pixelSize: Theme.fs(16) }
                     }

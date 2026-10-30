@@ -43,7 +43,7 @@ ItemDelegate {
         Label {
             text: row.draggable && (row.hovered || handle.pressed) ? "≡" : (row.current ? "▶" : (row.trackNo > 0 ? row.trackNo : ""))
             Layout.preferredWidth: Theme.compact ? 22 : 28
-            color: row.current ? hop.accent : Theme.tabIdle; font { family: Theme.font; pixelSize: Theme.fs(row.draggable && row.hovered ? 18 : 14) }
+            color: row.current ? Theme.accent : Theme.tabIdle; font { family: Theme.font; pixelSize: Theme.fs(row.draggable && row.hovered ? 18 : 14) }
             MouseArea {
                 id: handle
                 enabled: row.draggable
@@ -61,12 +61,12 @@ ItemDelegate {
             Layout.fillWidth: true
             spacing: 0
             Label { text: row.title; Layout.fillWidth: true; elide: Text.ElideRight
-                    color: row.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                    color: row.current ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
             Label { visible: row.artist !== ""; text: row.artist; Layout.fillWidth: true; elide: Text.ElideRight
                     color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
         }
         Label { visible: !Theme.compact; text: row.title; Layout.fillWidth: true; Layout.preferredWidth: 4; elide: Text.ElideRight
-                color: row.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                color: row.current ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
         Label { visible: row.wide && !Theme.compact; text: row.artist; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
                 color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } }
         Label { visible: row.wide && !Theme.compact; text: row.album; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight

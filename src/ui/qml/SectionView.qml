@@ -50,7 +50,7 @@ Item {
                 hoverEnabled: true
                 onClicked: hop.closePictureAlbum()
                 Accessible.name: "back to albums"
-                contentItem: Label { text: "‹ albums"; color: albumBack.hovered ? hop.accent : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                contentItem: Label { text: "‹ albums"; color: albumBack.hovered ? Theme.accent : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
                 background: Item {}
             }
             Label {
@@ -71,7 +71,7 @@ Item {
                 onAccepted: { hop.renamePictureAlbum(hop.pictureAlbum, text); visible = false }
                 Keys.onEscapePressed: visible = false
                 onActiveFocusChanged: if (!activeFocus) visible = false
-                background: Rectangle { color: Theme.panel; border { width: 2; color: hop.accent } }
+                background: Rectangle { color: Theme.panel; border { width: 2; color: Theme.accent } }
             }
             AbstractButton {
                 id: headRename
@@ -80,7 +80,7 @@ Item {
                 hoverEnabled: true
                 onClicked: { headEdit.text = root.openAlbum.name; headEdit.visible = true; headEdit.forceActiveFocus(); headEdit.selectAll() }
                 Accessible.name: "rename album"
-                contentItem: Label { text: "rename"; color: headRename.hovered ? hop.accent : Theme.muted
+                contentItem: Label { text: "rename"; color: headRename.hovered ? Theme.accent : Theme.muted
                                      font { family: Theme.font; pixelSize: Theme.fs(13); underline: headRename.hovered } }
                 background: Item {}
             }
@@ -103,7 +103,7 @@ Item {
                 onClicked: root.addFolderRequested(root.kind)
                 contentItem: Label {
                     text: "+ add folder"
-                    color: addMore.hovered ? hop.accent : Theme.muted
+                    color: addMore.hovered ? Theme.accent : Theme.muted
                     font { family: Theme.font; pixelSize: Theme.fs(14); underline: addMore.hovered }
                 }
                 background: Item {}
@@ -130,7 +130,7 @@ Item {
                 text: "choose a " + root.meta.noun + " folder…"
                 onClicked: root.addFolderRequested(root.kind)
                 contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(18); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                background: Rectangle { implicitHeight: 52; implicitWidth: 300; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
+                background: Rectangle { implicitHeight: 52; implicitWidth: 300; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
             }
             Item { Layout.fillHeight: true }
         }
@@ -184,7 +184,7 @@ Item {
                         Layout.fillWidth: true
                         spacing: 8
                         Label { visible: !slotEdit.visible; text: slot.modelData.name; Layout.fillWidth: true; elide: Text.ElideRight
-                                color: slot.hovered ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                                color: slot.hovered ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
                         TextField {
                             id: slotEdit
                             objectName: "pictureAlbumEdit_" + slot.index
@@ -197,7 +197,7 @@ Item {
                             onAccepted: { hop.renamePictureAlbum(slot.modelData.dir, text); visible = false }
                             Keys.onEscapePressed: visible = false
                             onActiveFocusChanged: if (!activeFocus) visible = false
-                            background: Rectangle { color: Theme.panel; border { width: 2; color: hop.accent } }
+                            background: Rectangle { color: Theme.panel; border { width: 2; color: Theme.accent } }
                         }
                         AbstractButton {
                             id: slotRename
@@ -206,7 +206,7 @@ Item {
                             hoverEnabled: true
                             onClicked: { slotEdit.text = slot.modelData.name; slotEdit.visible = true; slotEdit.forceActiveFocus(); slotEdit.selectAll() }
                             Accessible.name: "rename album"
-                            contentItem: Label { text: "rename"; color: slotRename.hovered ? hop.accent : Theme.muted
+                            contentItem: Label { text: "rename"; color: slotRename.hovered ? Theme.accent : Theme.muted
                                                  font { family: Theme.font; pixelSize: Theme.fs(12); underline: slotRename.hovered } }
                             background: Item {}
                         }
@@ -301,7 +301,7 @@ Item {
                             onClicked: hop.toggleItemPlayed(row.path)
                             contentItem: Label {
                                 text: row.played ? "played ✓" : "mark played"
-                                color: playedBtn.hovered ? hop.accent : Theme.muted
+                                color: playedBtn.hovered ? Theme.accent : Theme.muted
                                 font { family: Theme.font; pixelSize: Theme.fs(12); underline: playedBtn.hovered }
                             }
                             background: Item {}
@@ -315,13 +315,13 @@ Item {
                                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                         Label { visible: row.progress > 0
                                 text: Math.round(row.progress * 100) + "%"
-                                color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                                color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     }
                     Rectangle {
                         Layout.fillWidth: true; Layout.preferredHeight: 2
                         color: Theme.border
                         visible: row.progress > 0
-                        Rectangle { width: parent.width * Math.min(1, row.progress); height: parent.height; color: hop.accent }
+                        Rectangle { width: parent.width * Math.min(1, row.progress); height: parent.height; color: Theme.accent }
                     }
                     Item { Layout.fillHeight: true }
                 }

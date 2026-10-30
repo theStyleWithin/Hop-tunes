@@ -18,7 +18,7 @@ ApplicationWindow {
     minimumHeight: mobileNav ? 0 : 600
     visible: true
     title: hop.player.hasTrack ? hop.player.title + " · Hop-tunes" : "Hop-tunes"
-    color: view === "now playing" ? Theme.bgDeep : Theme.bg
+    color: view === "now playing" && !Theme.compact ? Theme.bgDeep : Theme.bg
 
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
     // phones and tablets: the bottom bar / drawer shows these four, as in the mockups; quickplay and settings are reached from profile
@@ -168,14 +168,14 @@ ApplicationWindow {
             onOpenNowPlaying: win.view = "now playing"
         }
         Item {   // room for the phone's bottom bar
-            visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer"
+            visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer" && win.view !== "now playing"
             implicitHeight: 72
         }
     }
 
     MobileNav {
         anchors.fill: parent
-        visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen
+        visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen && !(win.view === "now playing" && !win.tablet)
         views: win.navViews
         view: win.view === "quickplay" || win.view === "settings" ? "profile" : win.view
         tablet: win.tablet

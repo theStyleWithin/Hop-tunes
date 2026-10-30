@@ -15,7 +15,7 @@ Item {
     Connections { target: root.player; function onQueueChanged() { root.queueRev++ } }
 
     ColumnLayout {
-        anchors { fill: parent; leftMargin: 28; rightMargin: 28; topMargin: 10; bottomMargin: 12 }
+        anchors { fill: parent; leftMargin: 40; rightMargin: 40; topMargin: 10; bottomMargin: 20 }
         spacing: 8
 
         RowLayout {
@@ -33,13 +33,15 @@ Item {
         }
 
         Item {   // the cover, or the up-next list
-            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.fillWidth: true
+            Layout.fillHeight: root.showQueue
+            Layout.preferredHeight: Math.min(width, 340) + 12
             Layout.minimumHeight: 120
             AlbumArt {
                 visible: !root.showQueue
-                anchors.centerIn: parent
-                width: Math.min(parent.width, parent.height); height: width
-                key: root.player.album; source: root.player.artUrl
+                anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: 6 }
+                width: Math.min(parent.width, parent.height - 6, 340); height: width
+                key: root.player.album; source: root.player.artUrl; radius: 10; cornerColor: Theme.bg
             }
             ListView {
                 id: queueList
@@ -57,7 +59,7 @@ Item {
                     contentItem: Label {
                         text: { root.queueRev; return hop.player.queueTitle(index) }
                         elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
-                        color: index === root.player.currentIndex ? hop.accent : Theme.text
+                        color: index === root.player.currentIndex ? Theme.accent : Theme.text
                         font { family: Theme.font; pixelSize: 17 }
                     }
                 }
@@ -66,6 +68,7 @@ Item {
 
         Label {
             text: root.player.hasTrack ? root.player.title : "nothing playing"
+            Layout.topMargin: 14
             color: Theme.strong; elide: Text.ElideRight; Layout.fillWidth: true
             font { family: Theme.font; pixelSize: 30; weight: Font.Light }
         }
@@ -87,12 +90,9 @@ Item {
             background: Rectangle {
                 x: seek.leftPadding; y: seek.topPadding + seek.availableHeight / 2 - height / 2
                 width: seek.availableWidth; height: 5; radius: 2; color: Theme.track
-                Rectangle { width: seek.visualPosition * parent.width; height: parent.height; radius: 2; color: hop.accent }
+                Rectangle { width: seek.visualPosition * parent.width; height: parent.height; radius: 2; color: Theme.accent }
             }
-            handle: Rectangle {
-                x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width); y: seek.topPadding + seek.availableHeight / 2 - height / 2
-                width: 16; height: 16; radius: 8; color: Theme.strong
-            }
+            handle: Item { width: 0; height: 0 }   // the design has no knob, only the filled track
         }
         RowLayout {
             Layout.fillWidth: true
@@ -138,6 +138,7 @@ Item {
                               onClicked: root.showVolume = !root.showVolume; Accessible.name: "volume" }
             Item { Layout.fillWidth: true }
         }
+        Item { Layout.fillHeight: true }
         Slider {
             visible: root.showVolume
             objectName: "phoneVolume"

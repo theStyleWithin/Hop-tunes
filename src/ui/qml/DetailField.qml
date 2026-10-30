@@ -25,7 +25,7 @@ TextField {
     background: Rectangle {
         implicitHeight: root.pixel + 18
         color: root.activeFocus ? Theme.panel : "transparent"
-        border { width: 1; color: root.activeFocus ? hop.accent : Theme.borderSoft }
+        border { width: 1; color: root.activeFocus ? Theme.accent : Theme.borderSoft }
         radius: 3
     }
 }

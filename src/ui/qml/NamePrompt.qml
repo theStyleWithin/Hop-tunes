@@ -30,7 +30,7 @@ Popup {
             color: Theme.text
             font { family: Theme.font; pixelSize: Theme.fs(20) }
             Accessible.name: p.title
-            background: Rectangle { implicitHeight: 48; color: Theme.bg; border { width: field.activeFocus ? 2 : 1; color: field.activeFocus ? hop.accent : Theme.line } }
+            background: Rectangle { implicitHeight: 48; color: Theme.bg; border { width: field.activeFocus ? 2 : 1; color: field.activeFocus ? Theme.accent : Theme.line } }
             onAccepted: ok.clicked()
         }
         RowLayout {

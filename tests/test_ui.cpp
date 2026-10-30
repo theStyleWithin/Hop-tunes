@@ -1099,6 +1099,47 @@ private slots:
         QVERIFY2(failures.isEmpty(), qPrintable(QStringLiteral("overflowing: ") + failures.join(QStringLiteral(", "))));
     }
 
+    // Design renders against the saved phone mockups, with a richer library than the other tests have:
+    // set HOPTUNES_FIXTURE_DIR to a folder holding music/ (tagged albums) and shows/ (clips).
+    void phoneMockupRenders()
+    {
+        const QString fx = qEnvironmentVariable("HOPTUNES_FIXTURE_DIR");
+        if (fx.isEmpty() || qEnvironmentVariable("HOPTUNES_UI_SHOTS").isEmpty()) QSKIP("set HOPTUNES_FIXTURE_DIR and HOPTUNES_UI_SHOTS");
+        auto *w = window();
+        const QSize before = w->size();
+        w->setProperty("forceMobile", true);
+        w->resize(420, 880);
+        m_app->addFolder(QUrl::fromLocalFile(fx + QStringLiteral("/music")));
+        m_app->addVideoCategoryFolder(QStringLiteral("shows"), QUrl::fromLocalFile(fx + QStringLiteral("/shows")));
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->librarySize() >= 12 && !m_app->scanning(), 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 30000);
+        w->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("pillTab_music"));
+        QVERIFY(click("pillMode_albums"));
+        QTRY_VERIFY(m_app->allAlbums()->rowCount() >= 6);
+        shot("mock-collection-music");
+        QVERIFY(click("pillTab_videos"));
+        QVERIFY(click("pillCat_shows"));
+        QTest::qWait(1500);
+        shot("mock-collection-videos");
+        QVERIFY(click("pillTab_music"));
+        m_app->playSongs(0);
+        QTest::qWait(1200);
+        w->setProperty("view", QStringLiteral("now playing"));
+        shot("mock-nowplaying");
+        w->setProperty("view", QStringLiteral("collection"));
+        shot("mock-collection-miniplayer");
+        w->setProperty("view", QStringLiteral("profile"));
+        shot("mock-profile");
+        w->setProperty("view", QStringLiteral("settings"));
+        shot("mock-settings");
+        m_app->player()->stop();
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        QTest::qWait(400);
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()

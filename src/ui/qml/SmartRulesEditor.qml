@@ -71,7 +71,7 @@ Popup {
         implicitWidth: 180
         font { family: Theme.font; pixelSize: Theme.fs(15) }
         contentItem: Label { text: cb.displayText; leftPadding: 10; color: Theme.text; font: cb.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-        background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: cb.activeFocus ? hop.accent : Theme.line } }
+        background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: cb.activeFocus ? Theme.accent : Theme.line } }
         popup.background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
         delegate: Component {
             ItemDelegate {
@@ -97,7 +97,7 @@ Popup {
             maximumLength: 80
             color: Theme.text
             font { family: Theme.font; pixelSize: Theme.fs(20) }
-            background: Rectangle { implicitHeight: 46; color: Theme.bg; border { width: nameField.activeFocus ? 2 : 1; color: nameField.activeFocus ? hop.accent : Theme.line } }
+            background: Rectangle { implicitHeight: 46; color: Theme.bg; border { width: nameField.activeFocus ? 2 : 1; color: nameField.activeFocus ? Theme.accent : Theme.line } }
         }
         RowLayout {
             spacing: 10
@@ -131,7 +131,7 @@ Popup {
                     color: Theme.text
                     font { family: Theme.font; pixelSize: Theme.fs(16) }
                     onTextEdited: ed.setRule(rr.index, "value", text)
-                    background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: parent.activeFocus ? hop.accent : Theme.line } }
+                    background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: parent.activeFocus ? Theme.accent : Theme.line } }
                 }
                 PlainButton { text: "−"; implicitWidth: 44; enabled: ed.rules.length > 1; onClicked: { var r = ed.rules.slice(); r.splice(rr.index, 1); ed.rules = r } }
             }
@@ -152,7 +152,7 @@ Popup {
                 color: Theme.text
                 font { family: Theme.font; pixelSize: Theme.fs(16) }
                 onTextEdited: ed.limit = parseInt(text) || 0
-                background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: parent.activeFocus ? hop.accent : Theme.line } }
+                background: Rectangle { implicitHeight: 40; color: Theme.bg; border { width: 1; color: parent.activeFocus ? Theme.accent : Theme.line } }
             }
             Label { text: "songs"; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
         }
@@ -163,7 +163,7 @@ Popup {
                 objectName: "smartPreview"
                 Layout.fillWidth: true
                 text: { ed.rev; var n = hop.smartPreviewCount(ed.json()); return n + (n === 1 ? " song matches" : " songs match") }
-                color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(16) }
+                color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(16) }
             }
             PlainButton { text: "cancel"; onClicked: ed.close() }
             PlainButton {

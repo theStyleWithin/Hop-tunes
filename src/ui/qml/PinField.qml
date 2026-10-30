@@ -18,5 +18,5 @@ TextField {
     implicitWidth: 220
     Layout.fillWidth: true; Layout.maximumWidth: 280
     Accessible.name: hint
-    background: Rectangle { implicitHeight: 48; color: Theme.panel; border { width: f.activeFocus ? 2 : 1; color: f.activeFocus ? hop.accent : Theme.line } }
+    background: Rectangle { implicitHeight: 48; color: Theme.panel; border { width: f.activeFocus ? 2 : 1; color: f.activeFocus ? Theme.accent : Theme.line } }
 }

@@ -41,7 +41,7 @@ Item {
             visible: Theme.compact
             Layout.fillWidth: true
             namePrefix: "pillCat_"
-            items: hop.videoCategories.map(function (c) { return [root.labels[c], c] })
+            items: hop.videoCategories.map(function (c) { return [c === "other" ? "other" : root.labels[c], c] })
             current: root.cat
             onPicked: function (v) { hop.videoCategory = v }
         }
@@ -59,7 +59,7 @@ Item {
                     onClicked: hop.videoCategory = modelData
                     Accessible.name: root.labels[modelData]
                     contentItem: Label { text: root.labels[catTab.modelData]
-                                         color: root.cat === catTab.modelData ? hop.accent : (catTab.hovered ? Theme.text2 : Theme.dim)
+                                         color: root.cat === catTab.modelData ? Theme.accent : (catTab.hovered ? Theme.text2 : Theme.dim)
                                          font { family: Theme.font; pixelSize: Theme.fs(17) } }
                     background: Item {}
                 }
@@ -71,7 +71,7 @@ Item {
                 hoverEnabled: true
                 visible: !hop.guest && (hop.videoCategoryFolders[root.cat] || []).length > 0
                 onClicked: root.addFolderRequested(root.cat)
-                contentItem: Label { text: "+ add folder"; color: addCatFolder.hovered ? hop.accent : Theme.muted
+                contentItem: Label { text: "+ add folder"; color: addCatFolder.hovered ? Theme.accent : Theme.muted
                                      font { family: Theme.font; pixelSize: Theme.fs(14); underline: addCatFolder.hovered } }
                 background: Item {}
             }
@@ -79,15 +79,6 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
-            AbstractButton {   // phones: the add-folder link sits with the count
-                visible: Theme.compact && !hop.guest && (hop.videoCategoryFolders[root.cat] || []).length > 0
-                objectName: "videoCatAddFolderPhone"
-                implicitHeight: 40
-                onClicked: root.addFolderRequested(root.cat)
-                Accessible.name: "add folder"
-                background: Item {}
-                contentItem: Label { text: "+ add folder"; verticalAlignment: Text.AlignVCenter; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(15) } }
-            }
             Label {
                 visible: hop.videoScanning
                 text: hop.videoScanTotal > 0 ? "scanning videos " + hop.videoScanDone + " / " + hop.videoScanTotal : "scanning videos…"
@@ -95,7 +86,7 @@ Item {
             }
             Item { Layout.fillWidth: true }
             Label {
-                visible: !hop.videoScanning && hop.videos.count > 0
+                visible: !hop.videoScanning && hop.videos.count > 0 && !Theme.compact
                 text: hop.videos.count + (hop.videos.count === 1 ? " video" : " videos")
                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
@@ -120,7 +111,7 @@ Item {
                 text: "choose a folder for " + root.labels[root.cat] + "…"
                 onClicked: root.addFolderRequested(root.cat)
                 contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(18); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
+                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
             }
             Item { Layout.fillHeight: true }
         }
@@ -132,7 +123,7 @@ Item {
             clip: true
             model: hop.videos
             readonly property int columns: Theme.compact ? 2 : Math.max(2, Math.floor(width / 260))
-            cellWidth: width / columns; cellHeight: cellWidth * 9 / 16 + 70
+            cellWidth: width / columns; cellHeight: cellWidth * 9 / 16 + (Theme.compact ? 44 : 70)
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
             delegate: AbstractButton {
@@ -165,8 +156,8 @@ Item {
                             color: "white"; font { family: Theme.font; pixelSize: Theme.fs(11) }
                         }
                     }
-                    Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight
-                            color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    Label { text: tile.title; Layout.fillWidth: true; Layout.topMargin: Theme.compact ? 2 : 0; elide: Text.ElideRight
+                            color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 17 : Theme.fs(14) } }
                     RowLayout {
                         visible: !hop.guest && !Theme.compact
                         spacing: 12
@@ -179,7 +170,7 @@ Item {
                             onClicked: { thumbDialog.row = tile.index; thumbDialog.open() }
                             contentItem: Label {
                                 text: "image"
-                                color: imageBtn.hovered ? hop.accent : Theme.muted
+                                color: imageBtn.hovered ? Theme.accent : Theme.muted
                                 font { family: Theme.font; pixelSize: Theme.fs(12); underline: imageBtn.hovered }
                             }
                             background: Item {}
@@ -194,7 +185,7 @@ Item {
                             onClicked: hop.clearVideoThumb(tile.index)
                             contentItem: Label {
                                 text: "reset"
-                                color: resetBtn.hovered ? hop.accent : Theme.muted
+                                color: resetBtn.hovered ? Theme.accent : Theme.muted
                                 font { family: Theme.font; pixelSize: Theme.fs(12); underline: resetBtn.hovered }
                             }
                             background: Item {}

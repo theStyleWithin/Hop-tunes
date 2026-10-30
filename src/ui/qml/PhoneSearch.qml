@@ -10,7 +10,7 @@ Item {
     ColumnLayout {
         anchors { fill: parent; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 12 }
         spacing: 10
-        Label { text: "search"; color: Theme.strong; font { family: Theme.font; pixelSize: 40; weight: Font.Light } }
+        Label { text: "search"; color: Theme.strong; font { family: Theme.font; pixelSize: 46; weight: Font.Light } }
         TextField {
             id: field
             objectName: "phoneSearchField"
@@ -26,7 +26,7 @@ Item {
             Connections { target: hop; function onSearchChanged() { if (field.text !== hop.searchText) field.text = hop.searchText } }
             background: Rectangle {
                 implicitHeight: 48; radius: 24; color: Theme.panel
-                border { width: field.activeFocus ? 2 : 1; color: field.activeFocus ? hop.accent : Theme.line }
+                border { width: field.activeFocus ? 2 : 1; color: field.activeFocus ? Theme.accent : Theme.line }
                 Label { x: 14; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.dim; font.pixelSize: 20 }
             }
         }

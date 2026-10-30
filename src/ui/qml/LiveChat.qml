@@ -51,7 +51,7 @@ Item {
         for (let i = 0; i < ps.length; i++) {
             const p = ps[i]
             if (p.t === "emote") body += emoteHtml(p.v)
-            else if (p.t === "mention") body += '<font color="' + hop.accent + '"><b>' + Gen.esc(p.v) + '</b></font>'
+            else if (p.t === "mention") body += '<font color="' + Theme.accent + '"><b>' + Gen.esc(p.v) + '</b></font>'
             else body += Gen.esc(p.v)
         }
         if (kind === "notice") return '<i>' + body + '</i>'
@@ -60,9 +60,9 @@ Item {
             if (mine) head += chip("YOU", "#f0c040")
             else if (badge === "mod") head += chip("MOD", "#3fb950")
             else if (badge === "vip") head += chip("VIP", "#b388ff")
-            else if (badge === "member") head += chip("MEMBER", hop.accent)
+            else if (badge === "member") head += chip("MEMBER", Theme.accent)
         } else if (badge === "mod") head += '<font color="' + dim + '">(mod) </font>'
-        head += '<font color="' + (mine ? hop.accent : color) + '"><b>' + Gen.esc(name) + '</b></font>' + (lively ? ': ' : '&nbsp;&nbsp;')
+        head += '<font color="' + (mine ? Theme.accent : color) + '"><b>' + Gen.esc(name) + '</b></font>' + (lively ? ': ' : '&nbsp;&nbsp;')
         return head + body
     }
 
@@ -110,7 +110,7 @@ Item {
         const now = Date.now()
         if (t === "" || now - lastSent < 1200) return false   // slow mode, like a real stream
         lastSent = now
-        append({ name: me, color: hop.accent, me: true, parts: Gen.parts(t) })
+        append({ name: me, color: Theme.accent, me: true, parts: Gen.parts(t) })
         const answers = Gen.replies(seed, me, t, nonce++, ctx)
         const list = pending.slice()
         for (let i = 0; i < answers.length; i++)
@@ -185,7 +185,7 @@ Item {
                     anchors.fill: parent
                     visible: row.kind === "highlight" || row.mine
                     color: root.lively ? Qt.rgba(1, 1, 1, 0.07) : Qt.rgba(1, 1, 1, 0.05)
-                    Rectangle { visible: root.lively; width: 3; height: parent.height; color: row.mine ? "#f0c040" : hop.accent }
+                    Rectangle { visible: root.lively; width: 3; height: parent.height; color: row.mine ? "#f0c040" : Theme.accent }
                 }
                 RowLayout {
                     anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 12; rightMargin: 12 }
@@ -194,7 +194,7 @@ Item {
                         visible: !root.lively && row.kind !== "notice"
                         Layout.alignment: Qt.AlignTop
                         Layout.preferredWidth: 22; Layout.preferredHeight: 22; radius: 11
-                        color: row.mine ? hop.accent : row.color
+                        color: row.mine ? Theme.accent : row.color
                         opacity: 0.85
                         Label { anchors.centerIn: parent; text: row.name.charAt(0).toUpperCase(); color: "#101014"
                                 font { family: Theme.font; pixelSize: Theme.fs(12); weight: Font.Bold } }
@@ -238,7 +238,7 @@ Item {
                 background: Rectangle {
                     color: root.overlay ? "#30ffffff" : (input.activeFocus ? Theme.bg : "transparent")
                     radius: root.lively ? 16 : 3
-                    border { width: 1; color: input.activeFocus ? hop.accent : (root.overlay ? "#50ffffff" : Theme.borderSoft) }
+                    border { width: 1; color: input.activeFocus ? Theme.accent : (root.overlay ? "#50ffffff" : Theme.borderSoft) }
                 }
             }
             AbstractButton {
@@ -247,7 +247,7 @@ Item {
                 implicitWidth: 56; implicitHeight: 34
                 onClicked: if (root.send(input.text)) input.text = ""
                 Accessible.name: "send"
-                background: Rectangle { radius: root.lively ? 17 : 3; color: sendBtn.hovered ? Qt.lighter(hop.accent, 1.1) : hop.accent }
+                background: Rectangle { radius: root.lively ? 17 : 3; color: sendBtn.hovered ? Qt.lighter(Theme.accent, 1.1) : Theme.accent }
                 contentItem: Label { text: "chat"; color: Theme.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                      font { family: Theme.font; pixelSize: Theme.fs(14); weight: Font.Medium } }
             }

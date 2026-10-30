@@ -60,7 +60,7 @@ ColumnLayout {
                 objectName: "commentSort_" + modelData[0]
                 hoverEnabled: true
                 onClicked: root.sort = modelData[0]
-                contentItem: Label { text: sortBtn.modelData[1]; color: root.sort === sortBtn.modelData[0] ? hop.accent : (sortBtn.hovered ? Theme.text : Theme.muted)
+                contentItem: Label { text: sortBtn.modelData[1]; color: root.sort === sortBtn.modelData[0] ? Theme.accent : (sortBtn.hovered ? Theme.text : Theme.muted)
                                      font { family: Theme.font; pixelSize: Theme.fs(14) } }
                 background: Item {}
             }
@@ -79,7 +79,7 @@ ColumnLayout {
         leftPadding: 10; rightPadding: 10; topPadding: 8; bottomPadding: 8
         onAccepted: { if (text.trim() !== "") { hop.addVideoComment(text); text = "" } }
         Keys.onEscapePressed: root.leaveRequested()
-        background: Rectangle { radius: 6; color: Theme.hover; border { width: input.activeFocus ? 2 : 0; color: hop.accent } }
+        background: Rectangle { radius: 6; color: Theme.hover; border { width: input.activeFocus ? 2 : 0; color: Theme.accent } }
     }
 
     // what you wrote
@@ -94,7 +94,7 @@ ColumnLayout {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 12
-                Rectangle { Layout.alignment: Qt.AlignTop; width: 36; height: 36; radius: 18; color: hop.accent
+                Rectangle { Layout.alignment: Qt.AlignTop; width: 36; height: 36; radius: 18; color: Theme.accent
                             Label { anchors.centerIn: parent; text: root.me.charAt(0).toUpperCase(); color: "white"; font { family: Theme.font; pixelSize: Theme.fs(16) } } }
                 ColumnLayout {
                     Layout.fillWidth: true
@@ -155,7 +155,7 @@ ColumnLayout {
                         hoverEnabled: true
                         onClicked: gcm.open = !gcm.open
                         contentItem: Label { text: (gcm.open ? "hide " : "show ") + gcm.modelData.replies.length + (gcm.modelData.replies.length === 1 ? " reply" : " replies")
-                                             color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(13); underline: tog.hovered } }
+                                             color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(13); underline: tog.hovered } }
                         background: Item {}
                     }
                 }
@@ -183,7 +183,7 @@ ColumnLayout {
         visible: root.populated
         hoverEnabled: true
         onClicked: root.shown += 10
-        contentItem: Label { text: "show more comments"; color: more.hovered ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14); underline: more.hovered } }
+        contentItem: Label { text: "show more comments"; color: more.hovered ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14); underline: more.hovered } }
         background: Item {}
     }
     Label { visible: !root.populated; text: "pretend comments: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }

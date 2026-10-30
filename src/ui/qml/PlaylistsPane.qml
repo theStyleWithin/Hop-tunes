@@ -75,7 +75,7 @@ Item {
                         contentItem: Label {
                             text: (pdc.modelData.key === "auto:hearted" ? "♥ " : "") + pdc.modelData.name
                             elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
-                            color: pd.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) }
+                            color: pd.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) }
                         }
                     }
                 }
@@ -109,7 +109,7 @@ Item {
                     enabled: hop.playlistSongs.count > 0
                     onClicked: hop.playPlaylist(0)
                     contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(15); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    background: Rectangle { implicitWidth: 100; implicitHeight: 40; color: parent.enabled ? (parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent) : Theme.line }
+                    background: Rectangle { implicitWidth: 100; implicitHeight: 40; color: parent.enabled ? (parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent) : Theme.line }
                 }
                 PlainButton {
                     visible: root.info.kind === "manual" || root.info.kind === "smart"

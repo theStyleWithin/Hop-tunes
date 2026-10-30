@@ -19,7 +19,7 @@ AbstractButton {
 
     background: Rectangle {
         radius: root.round ? width / 2 : 0
-        color: root.filled ? hop.accent : (root.round ? "transparent" : (root.hovered ? Theme.hover : "transparent"))
+        color: root.filled ? Theme.accent : (root.round ? "transparent" : (root.hovered ? Theme.hover : "transparent"))
         border.width: root.filled ? 0 : (root.round ? 2 : (root.visualFocus ? 1 : 0))
         border.color: root.round && root.hovered ? Theme.strong : Theme.text
     }
@@ -27,7 +27,7 @@ AbstractButton {
     contentItem: Canvas {
         id: c
         property string kind: root.glyph
-        property color ink: root.filled ? Theme.ink : (root.active ? hop.accent : (root.enabled ? Theme.text : Theme.dim))
+        property color ink: root.filled ? Theme.ink : (root.active ? Theme.accent : (root.enabled ? Theme.text : Theme.dim))
         onKindChanged: requestPaint()
         onInkChanged: requestPaint()
         onPaint: {

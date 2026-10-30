@@ -269,7 +269,7 @@ Rectangle {
                                     background: Rectangle {
                                         x: seek.leftPadding; y: seek.topPadding + seek.availableHeight / 2 - height / 2
                                         width: seek.availableWidth; height: 4; color: "#404048"
-                                        Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: hop.accent }
+                                        Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: Theme.accent }
                                     }
                                     handle: Rectangle {
                                         x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width)
@@ -309,7 +309,7 @@ Rectangle {
                                     background: Rectangle {
                                         x: vol.leftPadding; y: vol.topPadding + vol.availableHeight / 2 - height / 2
                                         width: vol.availableWidth; height: 4; color: "#404048"
-                                        Rectangle { width: Math.min(vol.visualPosition, 100 / 150) * parent.width; height: parent.height; color: hop.accent }
+                                        Rectangle { width: Math.min(vol.visualPosition, 100 / 150) * parent.width; height: parent.height; color: Theme.accent }
                                         // the boost zone, above the normal 100 %
                                         Rectangle { x: parent.width * 100 / 150; width: Math.max(0, vol.visualPosition - 100 / 150) * parent.width; height: parent.height; color: "#ff9f43" }
                                         Rectangle { x: parent.width * 100 / 150 - 1; y: -3; width: 2; height: 10; color: "#80808c" }
@@ -353,8 +353,8 @@ Rectangle {
                                     onClicked: page.chatOn = !page.chatOn
                                     Accessible.name: "live chat"
                                     ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: "pretend live chat (c)"
-                                    background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.chatOn ? 1 : 0; color: hop.accent } }
-                                    contentItem: Label { text: "chat"; color: page.chatOn ? hop.accent : "white"
+                                    background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.chatOn ? 1 : 0; color: Theme.accent } }
+                                    contentItem: Label { text: "chat"; color: page.chatOn ? Theme.accent : "white"
                                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                                          font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 }
@@ -366,8 +366,8 @@ Rectangle {
                                     Accessible.name: "theater mode"
                                     ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: "theater mode (t)"
                                     visible: !page.full
-                                    background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.style === "theater" ? 1 : 0; color: hop.accent } }
-                                    contentItem: Label { text: "theater"; color: page.style === "theater" ? hop.accent : "white"
+                                    background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.style === "theater" ? 1 : 0; color: Theme.accent } }
+                                    contentItem: Label { text: "theater"; color: page.style === "theater" ? Theme.accent : "white"
                                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                                          font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 }
@@ -480,7 +480,7 @@ Rectangle {
                             hoverEnabled: true
                             implicitHeight: 28
                             onClicked: { const r = page.info.row; hop.closeVideoPlayer(surface.position, surface.duration); hop.openVideoDetail(r) }
-                            contentItem: Label { text: "edit details"; color: editBtn.hovered ? hop.accent : Theme.muted
+                            contentItem: Label { text: "edit details"; color: editBtn.hovered ? Theme.accent : Theme.muted
                                                  font { family: Theme.font; pixelSize: Theme.fs(14); underline: editBtn.hovered } }
                             background: Item {}
                         }
@@ -536,7 +536,7 @@ Rectangle {
                                 onClicked: if (!current) hop.switchVideo(it.index, page.surface.position, page.surface.duration)
                                 Accessible.name: title
                                 background: Rectangle { color: it.hovered ? Theme.hover : "transparent"
-                                                        Rectangle { visible: it.current; width: 3; height: parent.height; color: hop.accent } }
+                                                        Rectangle { visible: it.current; width: 3; height: parent.height; color: Theme.accent } }
                                 contentItem: RowLayout {
                                     spacing: 12
                                     Rectangle {
@@ -555,7 +555,7 @@ Rectangle {
                                         Layout.fillWidth: true
                                         spacing: 2
                                         Label { text: it.title; Layout.fillWidth: true; elide: Text.ElideRight; maximumLineCount: 2; wrapMode: Text.WordWrap
-                                                color: it.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                                                color: it.current ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                                         Label { text: it.current ? "now playing" : it.duration; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                                     }
                                 }

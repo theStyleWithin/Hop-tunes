@@ -77,7 +77,7 @@ Item {
         readonly property bool hasAny: strip.effectiveGroups.some(g => g.tiles.length > 0)
         spacing: 12
         Layout.fillWidth: true
-        Label { text: strip.title; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+        Label { text: strip.title; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
         Label { visible: !strip.hasAny; text: strip.empty; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(15) } }
         Repeater {
             model: strip.effectiveGroups
@@ -148,7 +148,7 @@ Item {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 6
-                        Label { text: "smart dj"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+                        Label { text: "smart dj"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
                         Label {
                             text: hop.djSeed !== "" ? "playing an endless mix around " + hop.djSeed + "."
                                                     : "pick an artist and hop-tunes keeps playing music like it, from your own library. nothing goes online."
@@ -165,7 +165,7 @@ Item {
                         enabled: hop.djArtists.length > 0
                         font { family: Theme.font; pixelSize: Theme.fs(16) }
                         contentItem: Label { text: djPick.displayText; leftPadding: 12; color: Theme.text; font: djPick.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
-                        background: Rectangle { implicitHeight: 44; color: Theme.bg; border { width: 1; color: djPick.activeFocus ? hop.accent : Theme.line } }
+                        background: Rectangle { implicitHeight: 44; color: Theme.bg; border { width: 1; color: djPick.activeFocus ? Theme.accent : Theme.line } }
                         popup.background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
                         delegate: ItemDelegate {
                             required property int index
@@ -182,7 +182,7 @@ Item {
                         enabled: hop.djArtists.length > 0
                         onClicked: hop.startDj(djPick.currentText)
                         contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(16); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                        background: Rectangle { implicitWidth: 130; implicitHeight: 44; color: parent.enabled ? (parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent) : Theme.line }
+                        background: Rectangle { implicitWidth: 130; implicitHeight: 44; color: parent.enabled ? (parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent) : Theme.line }
                     }
                     PlainButton { text: "shuffle all"; enabled: hop.librarySize > 0; onClicked: hop.shuffleAll() }
                 }

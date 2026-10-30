@@ -18,7 +18,7 @@ Item {
             x: Theme.pad; y: 12
             width: parent.width - 2 * Theme.pad
             spacing: 10
-            Label { text: "profile"; color: Theme.strong; font { family: Theme.font; pixelSize: 40; weight: Font.Light } }
+            Label { text: "profile"; color: Theme.strong; font { family: Theme.font; pixelSize: 46; weight: Font.Light } }
             Label { text: "status · only you see this"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
                     Layout.topMargin: 6; visible: !hop.guest }
             StatusNote {

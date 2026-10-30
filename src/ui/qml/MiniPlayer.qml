@@ -15,12 +15,6 @@ Rectangle {
     implicitHeight: compact ? 68 : 78
 
     Rectangle { visible: !root.compact; anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: Theme.line }
-    Rectangle {   // phones: how far into the song
-        visible: root.compact && player.hasTrack
-        anchors { left: parent.left; bottom: parent.bottom }
-        height: 3; color: hop.accent
-        width: parent.width * Math.min(1, player.position / Math.max(1, player.duration))
-    }
 
     RowLayout {
         anchors { fill: parent; leftMargin: root.compact ? 12 : 48; rightMargin: root.compact ? 12 : 48 }
@@ -38,12 +32,18 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.width
                 spacing: 14
-                AlbumArt { key: player.album; source: player.artUrl; Layout.preferredWidth: 48; Layout.preferredHeight: 48; visible: player.hasTrack }
+                AlbumArt { key: player.album; source: player.artUrl; cornerColor: Theme.panel; Layout.preferredWidth: root.compact ? 46 : 48; Layout.preferredHeight: root.compact ? 46 : 48; visible: player.hasTrack }
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true
                     Label { text: player.hasTrack ? player.title : "nothing playing"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideRight; Layout.fillWidth: true }
                     Label { text: player.artist; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack }
+                    Rectangle {   // phones: how far into the song, under the text
+                        visible: root.compact && player.hasTrack
+                        Layout.fillWidth: true; Layout.topMargin: 6; implicitHeight: 3; radius: 2; color: Theme.track
+                        Rectangle { height: parent.height; radius: 2; color: Theme.accent
+                                    width: parent.width * Math.min(1, player.position / Math.max(1, player.duration)) }
+                    }
                 }
             }
         }
@@ -66,7 +66,7 @@ Rectangle {
                 ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: player.shuffle ? "shuffle: on" : "shuffle: off"
             }
             TransportButton { visible: !root.compact; glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
-            TransportButton { glyph: player.playing ? "pause" : "play"; round: true; iconSize: 16; enabled: player.hasTrack || hop.songs.count > 0
+            TransportButton { glyph: player.playing ? "pause" : "play"; round: !root.compact; iconSize: root.compact ? 18 : 16; enabled: player.hasTrack || hop.songs.count > 0
                               onClicked: player.hasTrack ? player.toggle() : hop.playSongs(0); Accessible.name: player.playing ? "pause" : "play" }
             TransportButton { visible: !root.compact; glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
             TransportButton {
@@ -95,7 +95,7 @@ Rectangle {
                 background: Rectangle {
                     x: seek.leftPadding; y: seek.topPadding + seek.availableHeight / 2 - height / 2
                     width: seek.availableWidth; height: 4; color: Theme.track
-                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: hop.accent }
+                    Rectangle { width: seek.visualPosition * parent.width; height: parent.height; color: Theme.accent }
                 }
                 handle: Rectangle {
                     x: seek.leftPadding + seek.visualPosition * (seek.availableWidth - width)
@@ -143,7 +143,7 @@ Rectangle {
         Label {
             visible: !root.compact
             text: hop.djSeed !== "" ? "smart dj" : (player.fading ? "crossfading" : (player.crossfadeMs > 0 ? "crossfade " + Math.round(player.crossfadeMs / 1000) + " s" : "gapless"))
-            color: hop.djSeed !== "" || player.fading ? hop.accent : Theme.muted
+            color: hop.djSeed !== "" || player.fading ? Theme.accent : Theme.muted
             font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
     }
