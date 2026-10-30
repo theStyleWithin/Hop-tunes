@@ -4,6 +4,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+- **Search moved next to the tabs, and your profile moved down.** In the collection view the search box now
+  sits right after "podcasts" in the music · videos · pictures row (with the song count after it), and
+  the profile name and picture moved down to the right end of that row, where search used to be. In
+  settings, quickplay and the other views the profile stays in the top bar.
+
 ## [1.6.0] - 2026-10-30
 
 ### Added
