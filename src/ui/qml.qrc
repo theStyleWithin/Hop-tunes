@@ -24,6 +24,9 @@
     <file>qml/VideoThumb.qml</file>
     <file>qml/VideosView.qml</file>
     <file>qml/SectionView.qml</file>
+    <file>qml/VideoDetailView.qml</file>
+    <file>qml/DetailField.qml</file>
+    <file>qml/DetailArea.qml</file>
     <file>qml/PictureViewer.qml</file>
     <file>qml/EbookReader.qml</file>
     <file>qml/VideoPlayerView.qml</file>

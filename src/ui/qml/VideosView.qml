@@ -24,6 +24,7 @@ Item {
     ColumnLayout {
         anchors.fill: parent
         spacing: 10
+        visible: hop.videoDetailRow < 0   // the grid; a movie's page replaces it while open
 
         RowLayout {
             Layout.fillWidth: true
@@ -88,7 +89,7 @@ Item {
                 objectName: "videoTile_" + index
                 width: grid.cellWidth - 16; height: grid.cellHeight
                 hoverEnabled: true
-                onClicked: hop.playVideo(tile.index)
+                onClicked: hop.openVideoDetail(tile.index)
                 Accessible.name: title
                 background: Item {}
                 contentItem: ColumnLayout {
@@ -142,5 +143,11 @@ Item {
                 }
             }
         }
+    }
+
+    VideoDetailView {
+        objectName: "videoDetailView"
+        anchors.fill: parent
+        visible: hop.videoDetailRow >= 0
     }
 }

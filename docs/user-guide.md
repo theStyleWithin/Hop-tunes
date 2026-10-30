@@ -80,6 +80,10 @@ media folders (`.mkv`, `.mp4`, `.m4v`, `.webm`, `.mov`, `.avi`, `.wmv`, `.asf`, 
   music. Either way the Videos grid works the same; if truly neither is available,
   opening a video shows a plain message instead of a crash.
 
+## Movie pages
+
+Click a movie in `collection → videos` to open its page; **nothing plays until you press play** (or "resume"). The page is a set of empty boxes for you to fill in (title, year, rating, score, tagline, description, genre, director, writers, studio, tags, and cast & crew with an optional photo each) plus "change poster" and "mark watched". Hop-tunes never looks anything up online; the only things it fills in itself are facts from the file (length, resolution, codec, size). It is saved in your profile.
+
 ## Videos have their own folders
 
 `collection → videos` can have its own folders, separate from your music. Until you add one,

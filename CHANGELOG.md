@@ -2,6 +2,18 @@
 
 All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+- **A page for every movie.** Clicking a tile in `collection › videos` now opens the movie's page instead
+  of playing it; playing is a button on that page ("play", or "resume from 12:30"). The page has empty
+  boxes for you to fill in: title, year, rating, score, tagline, description, genre, director,
+  writers, studio and tags, a cast and crew list (name, role and an optional photo for each person), a
+  poster (the same picture as the grid tile; "change poster" / "reset") and a "mark watched" toggle.
+  Nothing is looked up or detected for you; only facts from the file itself are shown (length,
+  resolution, codec, size). A title you type replaces the file name in the grid and the player.
+  Everything is saved per profile and private to it. Finishing a movie marks it watched.
+
 ## [1.5.0] - 2026-10-30
 
 ### Added
