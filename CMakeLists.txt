@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
-project(hop-tunes VERSION 1.7.0 LANGUAGES CXX)
+project(hop-tunes VERSION 1.8.0 LANGUAGES CXX)
+set(HOPTUNES_VERSION_TEXT "${PROJECT_VERSION}-beta.1")   # what About shows: Party Watch beta
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -128,7 +129,7 @@ if(HOPTUNES_BUILD_APP)
     if(WIN32)
         target_sources(hop-tunes PRIVATE src/platform/WinRuntime.h src/platform/WinRuntime.cpp ${CMAKE_BINARY_DIR}/hop-tunes.rc)
     endif()
-    target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${HOPTUNES_VERSION_TEXT}")
     target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
     target_compile_options(hop-tunes PRIVATE -Wall -Wextra)
 
@@ -213,7 +214,7 @@ if(HOPTUNES_BUILD_TESTS)
     if(HOPTUNES_BUILD_APP)
         add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/MpvVideoItem.cpp src/ui/qml.qrc assets/assets.qrc)
         target_link_libraries(test_ui PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL Qt6::Test)
-        target_compile_definitions(test_ui PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
+        target_compile_definitions(test_ui PRIVATE HOPTUNES_VERSION="${HOPTUNES_VERSION_TEXT}")
         target_compile_definitions(test_ui PRIVATE HOPTUNES_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
         # Damaged files, odd names, broken databases and playlists must never crash or block startup.

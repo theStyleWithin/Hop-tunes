@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.8.0-beta.1] - 2026-10-30 (pre-release: Party Watch beta)
+
 ### Added
 - **Party Watch (beta), a demo of sharing your library with guests.** Off by default and off every time Hop-tunes
   starts. Settings › sharing: switch it on, make a one-time invite code (valid 10 minutes, 1 hour or 1 day) and
