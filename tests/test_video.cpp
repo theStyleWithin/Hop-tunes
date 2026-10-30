@@ -148,6 +148,37 @@ private slots:
         QCOMPARE(idx.count(), 0);
     }
 
+    // A scan cut short (the app closed mid-scan) must show what it had and resume at the
+    // files it had not finished, never start over or lose rows.
+    void interruptedScanResumes()
+    {
+        QTemporaryDir dir;
+        const QString root = dir.path();
+        for (const char *n : {"a", "b", "c"})
+            QVERIFY(writeTestClip(root + QStringLiteral("/%1.mkv").arg(QLatin1String(n)), 160, 120, 500));
+
+        VideoIndex idx;
+        QVERIFY(idx.open(QStringLiteral(":memory:")));
+
+        QAtomicInt cancel{0};
+        int stage = 0;
+        // Cancel as soon as the first rows are listed, before any file is probed.
+        auto r = VideoScanner::scanFolders(&idx, {root}, &cancel, {}, {}, [&] {
+            if (++stage == 1) cancel.storeRelease(1);
+        });
+        QCOMPARE(idx.count(), 3);   // all listed straight away
+        const auto early = idx.videosUnder({root});
+        for (const Video &v : early) QCOMPARE(v.durationMs, qint64(0));
+
+        r = VideoScanner::scanFolders(&idx, {root});   // the "next launch"
+        QCOMPARE(r.added, 3);
+        QCOMPARE(idx.count(), 3);
+        for (const Video &v : idx.videosUnder({root})) QVERIFY(v.durationMs > 0);
+
+        r = VideoScanner::scanFolders(&idx, {root});
+        QCOMPARE(r.added + r.updated, 0);   // finished: nothing left to resume
+    }
+
     // Regression test for a real-hardware bug (Steam Deck running CachyOS Handheld
     // Edition, v1.1.0): libmpv's own sanity check in mpv_create() rejects a process whose
     // LC_NUMERIC isn't "C" (it parses its own option values assuming '.' as the decimal

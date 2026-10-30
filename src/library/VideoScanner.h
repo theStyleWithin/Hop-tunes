@@ -33,11 +33,13 @@ public:
     static Result scanFolders(VideoIndex *index, const QStringList &folders,
                               const QAtomicInt *cancelFlag = nullptr,
                               const std::function<void(int done, int total)> &progress = {},
-                              const QString &thumbCacheDir = {});
+                              const QString &thumbCacheDir = {},
+                              const std::function<void()> &saved = {});
 
 signals:
     void started();
     void progress(int done, int total);
+    void saved();   // new rows reached the index mid-scan, so the lists can refresh
     void finished(int added, int updated, int removed, int total);
 
 private:

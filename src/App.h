@@ -19,6 +19,7 @@
 #include "playback/Player.h"
 
 #include <QJsonObject>
+#include <QElapsedTimer>
 #include <QObject>
 #include <memory>
 #include <QSet>
@@ -507,6 +508,7 @@ private:
     int m_videoScanDone = 0;
     int m_videoScanTotal = 0;
     bool m_videoScanRescanPending = false;
+    QElapsedTimer m_videoReloadClock;
     bool m_videoPlayerOpen = false;
     QString m_videoPlayerPath;
     qint64 m_videoPlayerResumeMs = 0;
