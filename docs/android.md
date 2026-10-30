@@ -26,3 +26,13 @@ ninja -C build-android apk
 The build defines no `HOPTUNES_HAVE_GST`: the GStreamer-only code (probing, thumbnails, the GStreamer video
 player, MPRIS) compiles to small stubs, and `src/platform/android/gst/gst.h` stands in for GStreamer so `Player`
 plays through Qt Multimedia (`src/platform/android/GstShim.cpp`). Desktop builds are unchanged.
+
+## Keeping the desktop and phone UIs apart
+
+The phone layout and the desktop layout are two designs that share one program. To keep them from mixing:
+
+- **Phone-only screens live in their own files:** `Phone*.qml` and `MobileNav.qml`. The desktop never loads them.
+- **A screen both share switches on `Theme.compact`**, which is true only for a phone-sized window (the shorter side is under 600 dp). The phone version is a separate branch of that screen; the desktop branch keeps its sizes. `Theme.fs(px)` is the identity on desktop, so type sizes there do not change.
+- **Tablets (600 dp and wider on the short side) use the desktop layouts**, plus the side rail or permanent drawer.
+- **A change for one side never changes the other.** A new feature touches the shared code first and then gets its phone version in the matching `Phone*` file or `Theme.compact` branch. A pull request says which side it touches: desktop, phone or both.
+- **Checks that guard it:** the desktop UI tests must all pass, and `phoneScreensFitTheScreen` fails when anything runs past the edge of a phone screen (412 and 320 dp wide). Anything you can see on a phone gets a render next to the saved mockups (`docs/design/android-ui.md`) before it counts as done.
