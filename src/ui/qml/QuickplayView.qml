@@ -42,22 +42,22 @@ Item {
                             visible: t.modelData.kind === "artist"
                             anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
                             color: Theme.fade(0.8); width: kindLabel.implicitWidth + 12; height: 22
-                            Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                            Label { id: kindLabel; anchors.centerIn: parent; text: "ARTIST"; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(11); letterSpacing: 1 } }
                         }
                         Rectangle {
                             visible: t.modelData.kind === "playlist"
                             anchors { left: parent.left; bottom: parent.bottom; margins: 8 }
                             color: Theme.fade(0.8); width: plLabel.implicitWidth + 12; height: 22
-                            Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: 11; letterSpacing: 1 } }
+                            Label { id: plLabel; anchors.centerIn: parent; text: "PLAYLIST"; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(11); letterSpacing: 1 } }
                         }
                         Label {
                             visible: t.hovered
                             anchors.centerIn: parent
-                            text: "▶"; color: "white"; font.pixelSize: 34
+                            text: "▶"; color: "white"; font.pixelSize: Theme.fs(34)
                         }
                     }
-                    Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: 15 } elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: t.modelData.title; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: t.modelData.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } elide: Text.ElideRight; Layout.fillWidth: true }
                 }
                 background: Item { }
             }
@@ -77,8 +77,8 @@ Item {
         readonly property bool hasAny: strip.effectiveGroups.some(g => g.tiles.length > 0)
         spacing: 12
         Layout.fillWidth: true
-        Label { text: strip.title; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
-        Label { visible: !strip.hasAny; text: strip.empty; color: Theme.dim; font { family: Theme.font; pixelSize: 15 } }
+        Label { text: strip.title; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+        Label { visible: !strip.hasAny; text: strip.empty; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(15) } }
         Repeater {
             model: strip.effectiveGroups
             delegate: ColumnLayout {
@@ -90,7 +90,7 @@ Item {
                 Label {
                     visible: strip.groups !== null
                     text: groupCol.modelData.label
-                    color: Theme.muted; font { family: Theme.font; pixelSize: 13; letterSpacing: 1 }
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 }
                 }
                 TileRow { rowLabel: strip.title + "_" + groupCol.modelData.label; model: groupCol.modelData.tiles }
             }
@@ -103,7 +103,7 @@ Item {
         background: Rectangle { implicitWidth: 230; color: Theme.panel; border { width: 1; color: Theme.line } }
         component TItem: MenuItem {
             id: mi
-            contentItem: Label { text: mi.text; leftPadding: 6; color: Theme.text; font { family: Theme.font; pixelSize: 15 } }
+            contentItem: Label { text: mi.text; leftPadding: 6; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } }
             background: Rectangle { implicitHeight: 36; color: mi.highlighted ? Theme.hover : "transparent" }
         }
         TItem { text: "play"; onTriggered: hop.playTile(tileMenu.tile.kind, tileMenu.tile.ref) }
@@ -131,8 +131,8 @@ Item {
 
         ColumnLayout {
             id: col
-            x: 48; y: 24
-            width: parent.width - 96
+            x: Theme.pad; y: Theme.compact ? 12 : 24
+            width: parent.width - 2 * Theme.pad
             spacing: 30
 
             // ---- smart DJ ----
@@ -140,18 +140,19 @@ Item {
                 Layout.fillWidth: true
                 implicitHeight: dj.implicitHeight + 40
                 color: Theme.panel
-                RowLayout {
+                GridLayout {   // phones: the controls go under the text
                     id: dj
                     anchors { fill: parent; margins: 20 }
-                    spacing: 20
+                    columns: Theme.compact ? 1 : 4
+                    columnSpacing: 20; rowSpacing: 12
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 6
-                        Label { text: "smart dj"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
+                        Label { text: "smart dj"; color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
                         Label {
                             text: hop.djSeed !== "" ? "playing an endless mix around " + hop.djSeed + "."
                                                     : "pick an artist and hop-tunes keeps playing music like it, from your own library. nothing goes online."
-                            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
                             wrapMode: Text.WordWrap; Layout.fillWidth: true
                         }
                     }
@@ -160,8 +161,9 @@ Item {
                         objectName: "djArtist"
                         model: hop.djArtists
                         implicitWidth: 260
+                        Layout.fillWidth: Theme.compact
                         enabled: hop.djArtists.length > 0
-                        font { family: Theme.font; pixelSize: 16 }
+                        font { family: Theme.font; pixelSize: Theme.fs(16) }
                         contentItem: Label { text: djPick.displayText; leftPadding: 12; color: Theme.text; font: djPick.font; verticalAlignment: Text.AlignVCenter; elide: Text.ElideRight }
                         background: Rectangle { implicitHeight: 44; color: Theme.bg; border { width: 1; color: djPick.activeFocus ? hop.accent : Theme.line } }
                         popup.background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
@@ -179,7 +181,7 @@ Item {
                         text: "start mix"
                         enabled: hop.djArtists.length > 0
                         onClicked: hop.startDj(djPick.currentText)
-                        contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 16; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(16); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         background: Rectangle { implicitWidth: 130; implicitHeight: 44; color: parent.enabled ? (parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent) : Theme.line }
                     }
                     PlainButton { text: "shuffle all"; enabled: hop.librarySize > 0; onClicked: hop.shuffleAll() }

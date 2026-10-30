@@ -9,6 +9,7 @@ AbstractButton {
     property string glyph: "play"         // prev | next | play | pause | shuffle | repeat | repeat1 | volume | mute
     property bool active: false
     property bool round: false
+    property bool filled: false           // a solid accent circle with a dark icon (the phone's big play button)
     property real iconSize: 18
     implicitWidth: round ? 48 : 44
     implicitHeight: implicitWidth
@@ -18,15 +19,15 @@ AbstractButton {
 
     background: Rectangle {
         radius: root.round ? width / 2 : 0
-        color: root.round ? "transparent" : (root.hovered ? Theme.hover : "transparent")
-        border.width: root.round ? 2 : (root.visualFocus ? 1 : 0)
+        color: root.filled ? hop.accent : (root.round ? "transparent" : (root.hovered ? Theme.hover : "transparent"))
+        border.width: root.filled ? 0 : (root.round ? 2 : (root.visualFocus ? 1 : 0))
         border.color: root.round && root.hovered ? Theme.strong : Theme.text
     }
 
     contentItem: Canvas {
         id: c
         property string kind: root.glyph
-        property color ink: root.active ? hop.accent : (root.enabled ? Theme.text : Theme.dim)
+        property color ink: root.filled ? Theme.ink : (root.active ? hop.accent : (root.enabled ? Theme.text : Theme.dim))
         onKindChanged: requestPaint()
         onInkChanged: requestPaint()
         onPaint: {
@@ -60,6 +61,9 @@ AbstractButton {
                     g.font = Math.round(s * 0.42) + "px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"
                     g.fillText("1", x0 + s * 0.5, y0 + s * 0.52)
                 }
+            } else if (kind === "queue") {   // three lines: the up-next list
+                for (var q = 0; q < 3; ++q) { g.moveTo(x0, y0 + s * (0.2 + 0.3 * q)); g.lineTo(x0 + s, y0 + s * (0.2 + 0.3 * q)) }
+                g.lineWidth = 2.5; g.stroke()
             } else if (kind === "volume" || kind === "mute") {
                 g.moveTo(x0, y0 + s * 0.35); g.lineTo(x0 + s * 0.25, y0 + s * 0.35); g.lineTo(x0 + s * 0.5, y0 + s * 0.1)
                 g.lineTo(x0 + s * 0.5, y0 + s * 0.9); g.lineTo(x0 + s * 0.25, y0 + s * 0.65); g.lineTo(x0, y0 + s * 0.65); g.closePath(); g.fill()

@@ -16,7 +16,7 @@ Item {
     readonly property bool drawerOpen: drawer.opened
     function closeDrawer() { drawer.close() }
     signal picked(string v)
-    readonly property var glyphs: ({ "collection": "♪", "now playing": "◎", "quickplay": "★", "settings": "⚙" })
+    readonly property var glyphs: ({ "collection": "♪", "now playing": "◎", "search": "⌕", "profile": "☺", "quickplay": "★", "settings": "⚙" })
 
     // ---- bottom bar (phones) -----------------------------------------------------------
     Rectangle {
@@ -46,9 +46,9 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 56; height: 30; radius: 15
                             color: tab.on ? Theme.hover : "transparent"
-                            Label { anchors.centerIn: parent; text: root.glyphs[tab.modelData] || "•"; color: tab.on ? Theme.strong : Theme.dim; font.pixelSize: 18 }
+                            Label { anchors.centerIn: parent; text: root.glyphs[tab.modelData] || "•"; color: tab.on ? Theme.strong : Theme.dim; font.pixelSize: Theme.fs(18) }
                         }
-                        Label { anchors.horizontalCenter: parent.horizontalCenter; text: tab.modelData; color: tab.on ? Theme.strong : Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                        Label { anchors.horizontalCenter: parent.horizontalCenter; text: tab.modelData; color: tab.on ? Theme.strong : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     }
                 }
             }
@@ -67,9 +67,9 @@ Item {
             Accessible.name: "menu"
             onClicked: drawer.open()
             background: Item { }
-            contentItem: Label { text: "☰"; color: Theme.strong; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+            contentItem: Label { text: "☰"; color: Theme.strong; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
         }
-        Label { anchors { left: parent.left; leftMargin: 64; verticalCenter: parent.verticalCenter } text: root.view; color: Theme.strong; font { family: Theme.font; pixelSize: 26; weight: Font.Light } }
+        Label { anchors { left: parent.left; leftMargin: 64; verticalCenter: parent.verticalCenter } text: root.view; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(26); weight: Font.Light } }
     }
     Drawer {
         id: drawer
@@ -82,7 +82,7 @@ Item {
         ColumnLayout {
             anchors { fill: parent; margins: 12 }
             spacing: 4
-            Label { text: "hop-tunes"; color: Theme.strong; font { family: Theme.font; pixelSize: 30; weight: Font.Light }
+            Label { text: "hop-tunes"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(30); weight: Font.Light }
                    Layout.margins: 12 }
             Repeater {
                 model: root.views
@@ -102,7 +102,7 @@ Item {
         ColumnLayout {
             anchors { fill: parent; margins: root.bar ? 6 : 12; topMargin: 18 }
             spacing: root.bar ? 14 : 4
-            Label { visible: !root.bar; text: "hop-tunes"; color: Theme.strong; font { family: Theme.font; pixelSize: 28; weight: Font.Light }
+            Label { visible: !root.bar; text: "hop-tunes"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(28); weight: Font.Light }
                    Layout.margins: 12 }
             Repeater {
                 model: root.views
@@ -125,15 +125,15 @@ Item {
                 visible: !it.rail
                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 14 }
                 spacing: 14
-                Label { text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.muted; font.pixelSize: 18 }
-                Label { text: it.modelData; color: it.on ? Theme.strong : Theme.muted; font { family: Theme.font; pixelSize: 18 } }
+                Label { text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.muted; font.pixelSize: Theme.fs(18) }
+                Label { text: it.modelData; color: it.on ? Theme.strong : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(18) } }
             }
             Column {
                 visible: it.rail
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 2
-                Label { anchors.horizontalCenter: parent.horizontalCenter; text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.dim; font.pixelSize: 18 }
-                Label { anchors.horizontalCenter: parent.horizontalCenter; text: it.modelData; color: it.on ? Theme.strong : Theme.dim; font { family: Theme.font; pixelSize: 11 } }
+                Label { anchors.horizontalCenter: parent.horizontalCenter; text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.dim; font.pixelSize: Theme.fs(18) }
+                Label { anchors.horizontalCenter: parent.horizontalCenter; text: it.modelData; color: it.on ? Theme.strong : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(11) } }
             }
         }
     }

@@ -12,7 +12,7 @@ Button {
     contentItem: Label {
         text: b.text
         color: !b.enabled ? Theme.dim : (b.primary ? Theme.ink : (b.danger ? Theme.danger : Theme.text))
-        font { family: Theme.font; pixelSize: 16 }
+        font { family: Theme.font; pixelSize: Theme.fs(16) }
         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
     }
     background: Rectangle {

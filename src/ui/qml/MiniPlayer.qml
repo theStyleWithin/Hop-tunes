@@ -9,14 +9,16 @@ Rectangle {
     signal openNowPlaying()
     readonly property var player: hop.player
     property bool compact: false   // phones: song, play button and a thin progress line only
-    color: Theme.bar
-    implicitHeight: compact ? 64 : 78
+    color: compact ? Theme.panel : Theme.bar
+    radius: compact ? 14 : 0
+    clip: compact
+    implicitHeight: compact ? 68 : 78
 
-    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: Theme.line }
+    Rectangle { visible: !root.compact; anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: Theme.line }
     Rectangle {   // phones: how far into the song
         visible: root.compact && player.hasTrack
-        anchors { left: parent.left; top: parent.top }
-        height: 2; color: hop.accent
+        anchors { left: parent.left; bottom: parent.bottom }
+        height: 3; color: hop.accent
         width: parent.width * Math.min(1, player.position / Math.max(1, player.duration))
     }
 
@@ -40,8 +42,8 @@ Rectangle {
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true
-                    Label { text: player.hasTrack ? player.title : "nothing playing"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: player.artist; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack }
+                    Label { text: player.hasTrack ? player.title : "nothing playing"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: player.artist; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack }
                 }
             }
         }
@@ -81,7 +83,7 @@ Rectangle {
             visible: !root.compact
             Layout.fillWidth: true
             spacing: 12
-            Label { text: player.hasTrack ? hop.formatTime(Math.max(1, player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+            Label { text: player.hasTrack ? hop.formatTime(Math.max(1, player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
             Slider {
                 id: seek
                 Layout.fillWidth: true
@@ -102,7 +104,7 @@ Rectangle {
                     visible: seek.hovered || seek.pressed
                 }
             }
-            Label { text: player.hasTrack ? hop.formatTime(player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+            Label { text: player.hasTrack ? hop.formatTime(player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
         }
 
         // volume (spec §4.6)
@@ -142,7 +144,7 @@ Rectangle {
             visible: !root.compact
             text: hop.djSeed !== "" ? "smart dj" : (player.fading ? "crossfading" : (player.crossfadeMs > 0 ? "crossfade " + Math.round(player.crossfadeMs / 1000) + " s" : "gapless"))
             color: hop.djSeed !== "" || player.fading ? hop.accent : Theme.muted
-            font { family: Theme.font; pixelSize: 13 }
+            font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
     }
 }

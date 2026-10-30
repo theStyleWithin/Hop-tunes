@@ -49,7 +49,7 @@ ColumnLayout {
         spacing: 14
         Label {
             text: root.populated ? "comments" : "your comments"
-            color: Theme.text; font { family: Theme.font; pixelSize: 18 }
+            color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) }
         }
         Item { Layout.fillWidth: true }
         Repeater {
@@ -61,7 +61,7 @@ ColumnLayout {
                 hoverEnabled: true
                 onClicked: root.sort = modelData[0]
                 contentItem: Label { text: sortBtn.modelData[1]; color: root.sort === sortBtn.modelData[0] ? hop.accent : (sortBtn.hovered ? Theme.text : Theme.muted)
-                                     font { family: Theme.font; pixelSize: 14 } }
+                                     font { family: Theme.font; pixelSize: Theme.fs(14) } }
                 background: Item {}
             }
         }
@@ -75,7 +75,7 @@ ColumnLayout {
         maximumLength: 500
         color: Theme.text; placeholderTextColor: Theme.muted
         selectByMouse: true
-        font { family: Theme.font; pixelSize: 14 }
+        font { family: Theme.font; pixelSize: Theme.fs(14) }
         leftPadding: 10; rightPadding: 10; topPadding: 8; bottomPadding: 8
         onAccepted: { if (text.trim() !== "") { hop.addVideoComment(text); text = "" } }
         Keys.onEscapePressed: root.leaveRequested()
@@ -95,19 +95,19 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 12
                 Rectangle { Layout.alignment: Qt.AlignTop; width: 36; height: 36; radius: 18; color: hop.accent
-                            Label { anchors.centerIn: parent; text: root.me.charAt(0).toUpperCase(); color: "white"; font { family: Theme.font; pixelSize: 16 } } }
+                            Label { anchors.centerIn: parent; text: root.me.charAt(0).toUpperCase(); color: "white"; font { family: Theme.font; pixelSize: Theme.fs(16) } } }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 2
-                    Label { text: "@" + root.me + "   " + root.mineAgo(mc.modelData); color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
-                    Label { text: mc.modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font { family: Theme.font; pixelSize: 15 } }
+                    Label { text: "@" + root.me + "   " + root.mineAgo(mc.modelData); color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                    Label { text: mc.modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; font { family: Theme.font; pixelSize: Theme.fs(15) } }
                     AbstractButton {
                         id: delBtn
                         objectName: "commentDelete"
                         hoverEnabled: true
                         onClicked: hop.removeVideoComment(mc.modelData.id)
                         Accessible.name: "delete comment"
-                        contentItem: Label { text: "delete"; color: delBtn.hovered ? Theme.danger : Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                        contentItem: Label { text: "delete"; color: delBtn.hovered ? Theme.danger : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                         background: Item {}
                     }
                 }
@@ -121,8 +121,8 @@ ColumnLayout {
                     Rectangle { Layout.alignment: Qt.AlignTop; width: 26; height: 26; radius: 13; color: modelData.color }
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 1
-                        Label { text: "@" + modelData.name; color: Theme.muted; font { family: Theme.font; pixelSize: 12 } }
-                        Label { text: modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: 14 } }
+                        Label { text: "@" + modelData.name; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                        Label { text: modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     }
                 }
             }
@@ -142,20 +142,20 @@ ColumnLayout {
                 Layout.fillWidth: true
                 spacing: 12
                 Rectangle { Layout.alignment: Qt.AlignTop; width: 36; height: 36; radius: 18; color: gcm.modelData.color
-                            Label { anchors.centerIn: parent; text: gcm.modelData.name.charAt(0).toUpperCase(); color: "#202024"; font { family: Theme.font; pixelSize: 16 } } }
+                            Label { anchors.centerIn: parent; text: gcm.modelData.name.charAt(0).toUpperCase(); color: "#202024"; font { family: Theme.font; pixelSize: Theme.fs(16) } } }
                 ColumnLayout {
                     Layout.fillWidth: true
                     spacing: 2
-                    Label { text: "@" + gcm.modelData.name + "   " + gcm.modelData.ago; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
-                    Label { text: gcm.modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: 15 } }
-                    Label { text: "♥ " + gcm.modelData.likes; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                    Label { text: "@" + gcm.modelData.name + "   " + gcm.modelData.ago; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                    Label { text: gcm.modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                    Label { text: "♥ " + gcm.modelData.likes; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     AbstractButton {
                         id: tog
                         visible: gcm.modelData.replies.length > 0
                         hoverEnabled: true
                         onClicked: gcm.open = !gcm.open
                         contentItem: Label { text: (gcm.open ? "hide " : "show ") + gcm.modelData.replies.length + (gcm.modelData.replies.length === 1 ? " reply" : " replies")
-                                             color: hop.accent; font { family: Theme.font; pixelSize: 13; underline: tog.hovered } }
+                                             color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(13); underline: tog.hovered } }
                         background: Item {}
                     }
                 }
@@ -169,8 +169,8 @@ ColumnLayout {
                     Rectangle { Layout.alignment: Qt.AlignTop; width: 26; height: 26; radius: 13; color: modelData.color }
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 1
-                        Label { text: "@" + modelData.name + "   " + modelData.ago; color: Theme.muted; font { family: Theme.font; pixelSize: 12 } }
-                        Label { text: modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: 14 } }
+                        Label { text: "@" + modelData.name + "   " + modelData.ago; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                        Label { text: modelData.text; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     }
                 }
             }
@@ -183,9 +183,9 @@ ColumnLayout {
         visible: root.populated
         hoverEnabled: true
         onClicked: root.shown += 10
-        contentItem: Label { text: "show more comments"; color: more.hovered ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: 14; underline: more.hovered } }
+        contentItem: Label { text: "show more comments"; color: more.hovered ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14); underline: more.hovered } }
         background: Item {}
     }
-    Label { visible: !root.populated; text: "pretend comments: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: 12 } }
-    Label { visible: root.populated; text: "pretend comments: nobody here is real, and they never end"; color: Theme.dim; font { family: Theme.font; pixelSize: 12 } }
+    Label { visible: !root.populated; text: "pretend comments: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+    Label { visible: root.populated; text: "pretend comments: nobody here is real, and they never end"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
 }

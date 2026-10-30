@@ -21,6 +21,9 @@ ApplicationWindow {
     color: view === "now playing" ? Theme.bgDeep : Theme.bg
 
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
+    // phones and tablets: the bottom bar / drawer shows these four, as in the mockups; quickplay and settings are reached from profile
+    readonly property var navViews: ["collection", "now playing", "search", "profile"]
+    readonly property var allViews: views.concat(["search", "profile"])
     property string view: {
         var v = String(initialView || "").replace("nowplaying", "now playing")
         if (v === "albums" || v === "songs" || v === "artists" || v === "playlists") v = "collection"
@@ -122,7 +125,7 @@ ApplicationWindow {
                     contentItem: Label {
                         text: pivot.modelData
                         color: pivot.on ? Theme.strong : (pivot.hovered ? Theme.text2 : Theme.dim)
-                        font { family: Theme.font; pixelSize: 44; weight: pivot.on ? Font.Normal : Font.Light }
+                        font { family: Theme.font; pixelSize: Theme.fs(44); weight: pivot.on ? Font.Normal : Font.Light }
                     }
                     background: Item { }
                 }
@@ -138,7 +141,7 @@ ApplicationWindow {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.leftMargin: win.railWidth
-            currentIndex: win.views.indexOf(win.view)
+            currentIndex: win.allViews.indexOf(win.view)
             // Slide-and-fade between pivots (spec §4.5: ≤ 200 ms, off with "reduce motion").
             transform: Translate { id: slide }
             onCurrentIndexChanged: if (Theme.motion > 0) pivotAnim.restart()
@@ -150,13 +153,17 @@ ApplicationWindow {
             CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
-            SettingsView { onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            SettingsView { objectName: "settingsView"; onBack: win.view = "profile"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            PhoneSearch { }
+            PhoneProfile { onGo: function (v) { win.view = v } }
         }
 
         MiniPlayer {
             compact: win.mobileNav && !win.tablet
             Layout.fillWidth: true
-            Layout.leftMargin: win.railWidth
+            Layout.leftMargin: win.railWidth + (compact ? 12 : 0)
+            Layout.rightMargin: compact ? 12 : 0
+            Layout.bottomMargin: compact ? 6 : 0
             visible: win.view !== "now playing"
             onOpenNowPlaying: win.view = "now playing"
         }
@@ -169,8 +176,8 @@ ApplicationWindow {
     MobileNav {
         anchors.fill: parent
         visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen
-        views: win.views
-        view: win.view
+        views: win.navViews
+        view: win.view === "quickplay" || win.view === "settings" ? "profile" : win.view
         tablet: win.tablet
         onPicked: function (v) { win.view = v }
     }

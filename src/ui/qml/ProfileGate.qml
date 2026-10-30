@@ -28,13 +28,17 @@ Rectangle {
     // ---- picker --------------------------------------------------------------------
     ColumnLayout {
         visible: gate.mode === "pick"
-        anchors { fill: parent; leftMargin: 72; rightMargin: 72; topMargin: 64; bottomMargin: 48 }
+        anchors { fill: parent; leftMargin: Theme.compact ? 20 : 72; rightMargin: Theme.compact ? 20 : 72; topMargin: Theme.compact ? 32 : 64; bottomMargin: Theme.compact ? 24 : 48 }
         spacing: 12
-        Label { text: "who's listening?"; color: Theme.strong; font { family: Theme.font; pixelSize: 52; weight: Font.Light } }
-        Label { text: "profiles live on this computer only. no accounts, no sign-in."; color: Theme.muted; font { family: Theme.font; pixelSize: 16 } }
+        Label { text: "who's listening?"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(52); weight: Font.Light }
+                wrapMode: Text.WordWrap; Layout.fillWidth: true }
+        Label { text: "profiles live on this computer only. no accounts, no sign-in."; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) }
+                wrapMode: Text.WordWrap; Layout.fillWidth: true }
         Flow {
-            Layout.fillWidth: true; Layout.topMargin: 36
-            spacing: 28
+            id: tiles
+            readonly property real tileSize: Theme.compact ? Math.floor((width - 16) / 2) : 176
+            Layout.fillWidth: true; Layout.topMargin: Theme.compact ? 16 : 36
+            spacing: Theme.compact ? 16 : 28
             Repeater {
                 model: hop.profiles
                 delegate: AbstractButton {
@@ -42,19 +46,19 @@ Rectangle {
                     objectName: "tile_" + modelData.name
                     required property var modelData
                     hoverEnabled: true
-                    width: 176; height: 236
+                    width: tiles.tileSize; height: tiles.tileSize + 60
                     onClicked: gate.choose(modelData)
                     Accessible.name: "open profile " + modelData.name
                     contentItem: Column {
                         spacing: 12
                         ProfileAvatar {
-                            profile: tile.modelData; size: 176
+                            profile: tile.modelData; size: tiles.tileSize
                             border { width: tile.hovered || tile.activeFocus ? 3 : 0; color: Theme.strong }
                         }
                         Row {
                             spacing: 8
-                            Label { text: tile.modelData.name; color: Theme.text; font { family: Theme.font; pixelSize: 20 } elide: Text.ElideRight; width: Math.min(implicitWidth, 150) }
-                            Label { visible: tile.modelData.hasPin; text: "PIN"; color: Theme.dim; font { family: Theme.font; pixelSize: 12; letterSpacing: 1 } anchors.verticalCenter: parent.verticalCenter }
+                            Label { text: tile.modelData.name; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(20) } elide: Text.ElideRight; width: Math.min(implicitWidth, tiles.tileSize - 30) }
+                            Label { visible: tile.modelData.hasPin; text: "PIN"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 1 } anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
                     background: Item { }
@@ -64,28 +68,29 @@ Rectangle {
                 id: addTile
                 objectName: "addProfile"
                 hoverEnabled: true
-                width: 176; height: 236
+                width: tiles.tileSize; height: tiles.tileSize + 60
                 onClicked: { nameField.text = ""; gate.show("create"); nameField.forceActiveFocus() }
                 Accessible.name: "add profile"
                 contentItem: Column {
                     spacing: 12
                     Rectangle {
-                        width: 176; height: 176; color: "transparent"
+                        width: tiles.tileSize; height: tiles.tileSize; color: "transparent"
                         border { width: 2; color: addTile.hovered ? Theme.text2 : Theme.borderSoft }
-                        Label { anchors.centerIn: parent; text: "+"; color: Theme.muted; font { family: Theme.font; pixelSize: 64; weight: Font.Light } }
+                        Label { anchors.centerIn: parent; text: "+"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(64); weight: Font.Light } }
                     }
-                    Label { text: "add profile"; color: Theme.muted; font { family: Theme.font; pixelSize: 20 } }
+                    Label { text: "add profile"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(20) } }
                 }
                 background: Item { }
             }
         }
         Item { Layout.fillHeight: true }
-        RowLayout {
+        Flow {
             spacing: 16
+            Layout.fillWidth: true
             PlainButton { objectName: "guestButton"; text: "listen as guest"; onClicked: hop.openGuest() }
-            Label { text: "guest mode keeps no history and saves nothing."; color: Theme.dim; font { family: Theme.font; pixelSize: 14 } }
+            Label { text: "guest mode keeps no history and saves nothing."; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) } }
         }
-        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: 15 } }
+        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) } }
     }
 
     // ---- PIN curtain -----------------------------------------------------------------
@@ -94,7 +99,7 @@ Rectangle {
         anchors.centerIn: parent
         spacing: 18
         ProfileAvatar { profile: gate.pinProfile; size: 140; Layout.alignment: Qt.AlignHCenter }
-        Label { text: gate.pinProfile.name || ""; color: Theme.strong; font { family: Theme.font; pixelSize: 34; weight: Font.Light } Layout.alignment: Qt.AlignHCenter }
+        Label { text: gate.pinProfile.name || ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(34); weight: Font.Light } Layout.alignment: Qt.AlignHCenter }
         PinField {
             id: pinEntry
             objectName: "pinEntry"
@@ -102,7 +107,7 @@ Rectangle {
             Layout.alignment: Qt.AlignHCenter
             onAccepted: unlock.clicked()
         }
-        Label { objectName: "pinError"; text: gate.error; visible: text !== ""; color: Theme.danger; font { family: Theme.font; pixelSize: 15 } Layout.alignment: Qt.AlignHCenter }
+        Label { objectName: "pinError"; text: gate.error; visible: text !== ""; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) } Layout.alignment: Qt.AlignHCenter }
         RowLayout {
             Layout.alignment: Qt.AlignHCenter
             spacing: 12
@@ -133,23 +138,27 @@ Rectangle {
 
         Label {
             text: hop.profiles.length === 0 ? "welcome to hop-tunes" : "add a profile"
-            color: Theme.strong; font { family: Theme.font; pixelSize: 52; weight: Font.Light }
+            color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(52); weight: Font.Light }
+            wrapMode: Text.WordWrap; Layout.fillWidth: true
         }
         Label {
             text: "a profile keeps your folders, settings and (soon) playlists separate. it stays on this computer."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) }
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 720
         }
 
-        RowLayout {
-            Layout.topMargin: 24
-            spacing: 28
+        GridLayout {   // phones: the avatar sits above the name
+            Layout.topMargin: Theme.compact ? 12 : 24
+            Layout.fillWidth: true
+            columns: Theme.compact ? 1 : 2
+            columnSpacing: 28; rowSpacing: 14
             ProfileAvatar {
-                size: 132
+                size: Theme.compact ? 96 : 132
                 profile: ({ initial: nameField.text.trim().charAt(0).toUpperCase() || "?", accent: createForm.accent })
             }
             ColumnLayout {
                 spacing: 14
+                Layout.fillWidth: true
                 TextField {
                     id: nameField
                     objectName: "profileName"
@@ -157,19 +166,21 @@ Rectangle {
                     placeholderTextColor: Theme.dim
                     maximumLength: 40
                     color: Theme.text
-                    font { family: Theme.font; pixelSize: 24 }
+                    font { family: Theme.font; pixelSize: Theme.fs(24) }
                     implicitWidth: 360
+                    Layout.fillWidth: true; Layout.maximumWidth: 480
                     focus: gate.mode === "create"
                     Accessible.name: "profile name"
                     background: Rectangle { implicitHeight: 52; color: Theme.panel; border { width: nameField.activeFocus ? 2 : 1; color: nameField.activeFocus ? createForm.accent : Theme.line } }
                 }
-                Row {
+                Flow {
                     spacing: 10
+                    Layout.fillWidth: true
                     Repeater {
                         model: hop.accents
                         delegate: AbstractButton {
                             required property string modelData
-                            width: 36; height: 36
+                            width: Theme.compact ? 44 : 36; height: width
                             onClicked: createForm.accent = modelData
                             Accessible.name: "colour " + modelData
                             background: Rectangle {
@@ -182,14 +193,15 @@ Rectangle {
             }
         }
 
-        Label { text: "music folder"; color: createForm.accent; font { family: Theme.font; pixelSize: 20 } Layout.topMargin: 18 }
+        Label { text: "music folder"; color: createForm.accent; font { family: Theme.font; pixelSize: Theme.fs(20) } Layout.topMargin: 18 }
         RowLayout {
             spacing: 14
+            Layout.fillWidth: true
             Label {
                 text: createForm.folder.toString() ? decodeURIComponent(createForm.folder.toString().replace(/^file:\/\//, "")) : "no folder yet"
                 color: createForm.folder.toString() ? Theme.text : Theme.dim
-                font { family: Theme.font; pixelSize: 17 }
-                elide: Text.ElideMiddle; Layout.maximumWidth: 520
+                font { family: Theme.font; pixelSize: Theme.fs(17) }
+                elide: Text.ElideMiddle; Layout.maximumWidth: 520; Layout.fillWidth: true
             }
             PlainButton { text: "choose…"; onClicked: createFolderDialog.open() }
         }
@@ -205,27 +217,30 @@ Rectangle {
                 x: usePin.leftPadding; y: (usePin.height - height) / 2
                 color: usePin.checked ? createForm.accent : "transparent"
                 border { width: 2; color: usePin.checked ? createForm.accent : Theme.border }
-                Label { anchors.centerIn: parent; visible: usePin.checked; text: "✓"; color: Theme.ink; font { pixelSize: 16; weight: Font.Bold } }
+                Label { anchors.centerIn: parent; visible: usePin.checked; text: "✓"; color: Theme.ink; font { pixelSize: Theme.fs(16); weight: Font.Bold } }
             }
-            contentItem: Label { text: usePin.text; leftPadding: usePin.indicator.width + 12; color: Theme.text2; font { family: Theme.font; pixelSize: 16 } verticalAlignment: Text.AlignVCenter }
+            contentItem: Label { text: usePin.text; leftPadding: usePin.indicator.width + 12; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } verticalAlignment: Text.AlignVCenter }
         }
-        RowLayout {
+        GridLayout {
             visible: usePin.checked
-            spacing: 12
+            columns: Theme.compact ? 1 : 2
+            columnSpacing: 12; rowSpacing: 10
+            Layout.fillWidth: true
             PinField { id: pin1; objectName: "pin1"; hint: "PIN (4–8 digits)" }
             PinField { id: pin2; objectName: "pin2"; hint: "repeat PIN" }
         }
         Label {
             visible: usePin.checked
             text: "a PIN is a privacy curtain, not a lock: anyone who can use this computer account can still read hop-tunes files."
-            color: Theme.dim; font { family: Theme.font; pixelSize: 14 }
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) }
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 720
         }
 
-        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: 15 } }
+        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) } }
         Item { Layout.fillHeight: true }
-        RowLayout {
+        Flow {
             spacing: 12
+            Layout.fillWidth: true
             PlainButton { visible: hop.profiles.length > 0; text: "cancel"; onClicked: gate.show("pick") }
             PlainButton {
                 objectName: "createButton"

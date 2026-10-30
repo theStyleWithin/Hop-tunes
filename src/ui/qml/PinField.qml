@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 // 4–8 digit PIN entry, shown as dots.
 TextField {
@@ -13,8 +14,9 @@ TextField {
     placeholderText: hint
     placeholderTextColor: Theme.dim
     color: Theme.text
-    font { family: Theme.font; pixelSize: 20; letterSpacing: f.text.length ? 4 : 0 }
+    font { family: Theme.font; pixelSize: Theme.fs(20); letterSpacing: f.text.length ? 4 : 0 }
     implicitWidth: 220
+    Layout.fillWidth: true; Layout.maximumWidth: 280
     Accessible.name: hint
     background: Rectangle { implicitHeight: 48; color: Theme.panel; border { width: f.activeFocus ? 2 : 1; color: f.activeFocus ? hop.accent : Theme.line } }
 }

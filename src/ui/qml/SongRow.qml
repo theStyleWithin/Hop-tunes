@@ -25,7 +25,7 @@ ItemDelegate {
     transform: Translate { y: row.dragY }
 
     readonly property bool current: hop.player.hasTrack && hop.player.currentTrackId === trackId
-    height: 44
+    height: Theme.compact ? 56 : 44
     leftPadding: 8; rightPadding: 8
     onDoubleClicked: row.play()
     Keys.onReturnPressed: row.play()
@@ -39,11 +39,11 @@ ItemDelegate {
         Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 1; color: Theme.rowLine }
     }
     contentItem: RowLayout {
-        spacing: 16
+        spacing: Theme.compact ? 10 : 16
         Label {
             text: row.draggable && (row.hovered || handle.pressed) ? "≡" : (row.current ? "▶" : (row.trackNo > 0 ? row.trackNo : ""))
-            Layout.preferredWidth: 28
-            color: row.current ? hop.accent : Theme.tabIdle; font { family: Theme.font; pixelSize: row.draggable && row.hovered ? 18 : 14 }
+            Layout.preferredWidth: Theme.compact ? 22 : 28
+            color: row.current ? hop.accent : Theme.tabIdle; font { family: Theme.font; pixelSize: Theme.fs(row.draggable && row.hovered ? 18 : 14) }
             MouseArea {
                 id: handle
                 enabled: row.draggable
@@ -56,19 +56,28 @@ ItemDelegate {
                 onCanceled: row.dragY = 0
             }
         }
-        Label { text: row.title; Layout.fillWidth: true; Layout.preferredWidth: 4; elide: Text.ElideRight
-                color: row.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 16 } }
-        Label { visible: row.wide; text: row.artist; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
-                color: Theme.text2; font { family: Theme.font; pixelSize: 15 } }
-        Label { visible: row.wide; text: row.album; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
-                color: Theme.text2; font { family: Theme.font; pixelSize: 15 } }
+        ColumnLayout {   // phones: the artist sits under the title
+            visible: Theme.compact
+            Layout.fillWidth: true
+            spacing: 0
+            Label { text: row.title; Layout.fillWidth: true; elide: Text.ElideRight
+                    color: row.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+            Label { visible: row.artist !== ""; text: row.artist; Layout.fillWidth: true; elide: Text.ElideRight
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+        }
+        Label { visible: !Theme.compact; text: row.title; Layout.fillWidth: true; Layout.preferredWidth: 4; elide: Text.ElideRight
+                color: row.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+        Label { visible: row.wide && !Theme.compact; text: row.artist; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
+                color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+        Label { visible: row.wide && !Theme.compact; text: row.album; Layout.fillWidth: true; Layout.preferredWidth: 3; elide: Text.ElideRight
+                color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } }
         HeartButton {
             size: 15
             on: row.hearted
-            opacity: row.hearted || row.hovered ? 1 : 0
+            opacity: row.hearted || row.hovered || Theme.compact ? 1 : 0
             onClicked: hop.toggleHeart(row.path)
         }
-        Label { text: row.duration; Layout.preferredWidth: 56; horizontalAlignment: Text.AlignRight
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+        Label { text: row.duration; Layout.preferredWidth: Theme.compact ? 44 : 56; horizontalAlignment: Text.AlignRight
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
     }
 }

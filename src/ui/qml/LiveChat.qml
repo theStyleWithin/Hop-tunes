@@ -145,12 +145,12 @@ Item {
                 Label {
                     text: root.lively ? "stream chat" : "live chat"
                     color: root.fg
-                    font { family: Theme.font; pixelSize: 15; weight: root.lively ? Font.Medium : Font.Normal }
+                    font { family: Theme.font; pixelSize: Theme.fs(15); weight: root.lively ? Font.Medium : Font.Normal }
                 }
                 Item { Layout.fillWidth: true }
                 Label {
                     text: Gen.viewerCount(root.seed, Math.floor(root.position / 1000)) + " watching"
-                    color: root.dim; font { family: Theme.font; pixelSize: 13 }
+                    color: root.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
                 }
             }
             Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 1; color: root.overlay ? "#30ffffff" : Theme.borderSoft; visible: !root.lively }
@@ -197,7 +197,7 @@ Item {
                         color: row.mine ? hop.accent : row.color
                         opacity: 0.85
                         Label { anchors.centerIn: parent; text: row.name.charAt(0).toUpperCase(); color: "#101014"
-                                font { family: Theme.font; pixelSize: 12; weight: Font.Bold } }
+                                font { family: Theme.font; pixelSize: Theme.fs(12); weight: Font.Bold } }
                     }
                     Text {
                         id: line
@@ -205,7 +205,7 @@ Item {
                         textFormat: Text.RichText
                         wrapMode: Text.Wrap
                         color: row.kind === "notice" ? root.dim : root.fg
-                        font { family: Theme.font; pixelSize: 14 }
+                        font { family: Theme.font; pixelSize: Theme.fs(14) }
                         text: root.htmlOf(row.partsJson, row.kind, row.name, row.color, row.badge, row.mine)
                         horizontalAlignment: row.kind === "notice" && root.lively ? Text.AlignHCenter : Text.AlignLeft
                     }
@@ -217,7 +217,7 @@ Item {
             text: "pretend chat: nobody here is real"
             color: root.dim
             Layout.leftMargin: 12; Layout.topMargin: 4
-            font { family: Theme.font; pixelSize: 11 }
+            font { family: Theme.font; pixelSize: Theme.fs(11) }
         }
         RowLayout {
             Layout.fillWidth: true
@@ -231,7 +231,7 @@ Item {
                 maximumLength: 160
                 color: root.fg; placeholderTextColor: root.dim
                 selectByMouse: true
-                font { family: Theme.font; pixelSize: 14 }
+                font { family: Theme.font; pixelSize: Theme.fs(14) }
                 leftPadding: 10; rightPadding: 10; topPadding: 6; bottomPadding: 6
                 onAccepted: if (root.send(text)) text = ""
                 Keys.onEscapePressed: root.leaveRequested()
@@ -249,7 +249,7 @@ Item {
                 Accessible.name: "send"
                 background: Rectangle { radius: root.lively ? 17 : 3; color: sendBtn.hovered ? Qt.lighter(hop.accent, 1.1) : hop.accent }
                 contentItem: Label { text: "chat"; color: Theme.ink; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                     font { family: Theme.font; pixelSize: 14; weight: Font.Medium } }
+                                     font { family: Theme.font; pixelSize: Theme.fs(14); weight: Font.Medium } }
             }
         }
     }

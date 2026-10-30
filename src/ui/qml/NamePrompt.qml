@@ -21,14 +21,14 @@ Popup {
 
     contentItem: ColumnLayout {
         spacing: 18
-        Label { text: p.title; color: Theme.strong; font { family: Theme.font; pixelSize: 30; weight: Font.Light } }
+        Label { text: p.title; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(30); weight: Font.Light } }
         TextField {
             id: field
             objectName: "namePromptField"
             implicitWidth: 380
             maximumLength: 80
             color: Theme.text
-            font { family: Theme.font; pixelSize: 20 }
+            font { family: Theme.font; pixelSize: Theme.fs(20) }
             Accessible.name: p.title
             background: Rectangle { implicitHeight: 48; color: Theme.bg; border { width: field.activeFocus ? 2 : 1; color: field.activeFocus ? hop.accent : Theme.line } }
             onAccepted: ok.clicked()

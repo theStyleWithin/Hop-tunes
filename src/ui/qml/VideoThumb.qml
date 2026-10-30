@@ -53,7 +53,7 @@ Item {
         width: 40; height: 40; radius: 20
         color: Theme.fade(0.55)
         visible: root.hovered
-        Label { anchors.centerIn: parent; text: "▶"; color: "white"; font.pixelSize: 16 }
+        Label { anchors.centerIn: parent; text: "▶"; color: "white"; font.pixelSize: Theme.fs(16) }
     }
 
     Row {
@@ -66,7 +66,7 @@ Item {
                 radius: 3; color: Theme.fade(0.7)
                 width: lbl.implicitWidth + 8; height: 16
                 Label { id: lbl; anchors.centerIn: parent; text: modelData; color: "white"
-                        font { family: Theme.font; pixelSize: 10; weight: Font.Medium } }
+                        font { family: Theme.font; pixelSize: Theme.fs(10); weight: Font.Medium } }
             }
         }
     }

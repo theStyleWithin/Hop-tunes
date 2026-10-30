@@ -209,7 +209,7 @@ Rectangle {
                         visible: hop.videoEngine === "none" || gstLoader.status === Loader.Error
                         anchors.centerIn: parent
                         text: "no video engine is available in this build"
-                        color: "white"; font { family: Theme.font; pixelSize: 18 }
+                        color: "white"; font { family: Theme.font; pixelSize: Theme.fs(18) }
                     }
 
                     MouseArea {
@@ -231,12 +231,12 @@ Rectangle {
                             onClicked: page.stepBack()
                             Accessible.name: "back"
                             background: Rectangle { radius: 22; color: Theme.fade(0.5); border { width: 2; color: Theme.border } }
-                            contentItem: Label { text: "‹"; color: "white"; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
+                            contentItem: Label { text: "‹"; color: "white"; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
                         }
-                        Label { text: page.shownTitle; color: "white"; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: 18 } }
+                        Label { text: page.shownTitle; color: "white"; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(18) } }
                         Label {
                             visible: surface.error !== ""
-                            text: surface.error; color: Theme.danger; font { family: Theme.font; pixelSize: 13 }
+                            text: surface.error; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(13) }
                         }
                     }
 
@@ -258,7 +258,7 @@ Rectangle {
                             RowLayout {
                                 Layout.fillWidth: true
                                 spacing: 12
-                                Label { text: hop.formatTime(Math.max(1, surface.position)); color: "white"; font { family: Theme.font; pixelSize: 13 } }
+                                Label { text: hop.formatTime(Math.max(1, surface.position)); color: "white"; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 Slider {
                                     id: seek
                                     Layout.fillWidth: true
@@ -278,7 +278,7 @@ Rectangle {
                                         visible: seek.hovered || seek.pressed
                                     }
                                 }
-                                Label { text: hop.formatTime(surface.duration); color: "white"; font { family: Theme.font; pixelSize: 13 } }
+                                Label { text: hop.formatTime(surface.duration); color: "white"; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                             }
 
                             RowLayout {
@@ -295,7 +295,7 @@ Rectangle {
                                     background: Rectangle { radius: 6; color: muteBtn.hovered ? Theme.fade(0.5) : "transparent" }
                                     contentItem: Label { text: hop.videoVolume === 0 ? "muted" : "vol"; color: hop.videoVolume === 0 ? "#ff9f43" : "white"
                                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                                         font { family: Theme.font; pixelSize: 13 } }
+                                                         font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 }
                                 Slider {
                                     id: vol
@@ -324,16 +324,16 @@ Rectangle {
                                     objectName: "videoVolumeLabel"
                                     text: hop.videoVolume + "%"
                                     Layout.preferredWidth: 40
-                                    color: hop.videoVolume > 100 ? "#ff9f43" : "white"; font { family: Theme.font; pixelSize: 12 }
+                                    color: hop.videoVolume > 100 ? "#ff9f43" : "white"; font { family: Theme.font; pixelSize: Theme.fs(12) }
                                 }
                                 Label {
                                     visible: surface.hwdecActive !== "" && surface.hwdecActive !== "no"
                                     text: "hw decode: " + surface.hwdecActive
-                                    color: "#b0b0b8"; font { family: Theme.font; pixelSize: 12 }
+                                    color: "#b0b0b8"; font { family: Theme.font; pixelSize: Theme.fs(12) }
                                 }
                                 Label {
                                     visible: surface.error !== "" && !page.full
-                                    text: surface.error; color: Theme.danger; font { family: Theme.font; pixelSize: 12 }
+                                    text: surface.error; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(12) }
                                 }
                                 Item { Layout.fillWidth: true }
                                 AbstractButton {
@@ -345,7 +345,7 @@ Rectangle {
                                     Accessible.name: "subtitles"
                                     background: Rectangle { radius: 6; color: Theme.fade(0.5) }
                                     contentItem: Label { text: "CC"; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                                         font { family: Theme.font; pixelSize: 13; weight: Font.Medium } }
+                                                         font { family: Theme.font; pixelSize: Theme.fs(13); weight: Font.Medium } }
                                 }
                                 AbstractButton {
                                     objectName: "videoChatToggle"
@@ -356,7 +356,7 @@ Rectangle {
                                     background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.chatOn ? 1 : 0; color: hop.accent } }
                                     contentItem: Label { text: "chat"; color: page.chatOn ? hop.accent : "white"
                                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                                         font { family: Theme.font; pixelSize: 13 } }
+                                                         font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 }
                                 AbstractButton {
                                     id: theaterBtn
@@ -369,7 +369,7 @@ Rectangle {
                                     background: Rectangle { radius: 6; color: Theme.fade(0.5); border { width: page.style === "theater" ? 1 : 0; color: hop.accent } }
                                     contentItem: Label { text: "theater"; color: page.style === "theater" ? hop.accent : "white"
                                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                                         font { family: Theme.font; pixelSize: 13 } }
+                                                         font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 }
                                 AbstractButton {
                                     objectName: "videoStyleFullscreen"
@@ -380,7 +380,7 @@ Rectangle {
                                     background: Rectangle { radius: 6; color: Theme.fade(0.5) }
                                     contentItem: Label { text: page.full ? "exit" : "fullscreen"; color: "white"
                                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                                                         font { family: Theme.font; pixelSize: 13 } }
+                                                         font { family: Theme.font; pixelSize: Theme.fs(13) } }
                                 }
                             }
                         }
@@ -403,10 +403,10 @@ Rectangle {
                         onClicked: page.closeAndBack()
                         Accessible.name: "back"
                         background: Rectangle { radius: 20; color: parent.hovered ? Theme.hover : "transparent"; border { width: 2; color: Theme.border } }
-                        contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: 24; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 3 }
+                        contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: Theme.fs(24); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 3 }
                     }
                     Label { text: page.shownTitle; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true
-                            font { family: Theme.font; pixelSize: 20 } }
+                            font { family: Theme.font; pixelSize: Theme.fs(20) } }
                 }
 
                 // details underneath: what the user filled in on the movie's page
@@ -430,22 +430,22 @@ Rectangle {
                         spacing: 8
 
                         Label { text: page.shownTitle; color: Theme.text; Layout.fillWidth: true; wrapMode: Text.WordWrap
-                                font { family: Theme.font; pixelSize: 26; weight: Font.Light } }
+                                font { family: Theme.font; pixelSize: Theme.fs(26); weight: Font.Light } }
                         Label {
                             readonly property var bits: [page.meta.year, page.meta.rating, page.meta.score ? "★ " + page.meta.score : "", page.info.length].filter(function (s) { return !!s })
                             visible: bits.length > 0
                             text: bits.join("   ·   ")
-                            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
                         }
                         Label {
                             text: [page.info.resolution, page.info.codec, page.info.hdr ? "HDR" : "", page.info.container, page.info.size].filter(function (s) { return !!s }).join("  ·  ")
                             visible: text !== ""
-                            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+                            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
                         }
                         Label { visible: !!page.meta.tagline; text: page.meta.tagline || ""; color: Theme.text2; Layout.fillWidth: true
-                                wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: 16; italic: true } }
+                                wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(16); italic: true } }
                         Label { visible: !!page.meta.overview; text: page.meta.overview || ""; color: Theme.text; Layout.fillWidth: true
-                                wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: 15 } }
+                                wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
                         Repeater {
                             model: [["genre", "genre"], ["director", "director"], ["writers", "writers"], ["studio", "studio"], ["tags", "tags"]]
@@ -454,16 +454,16 @@ Rectangle {
                                 visible: !!page.meta[modelData[0]]
                                 Layout.fillWidth: true
                                 spacing: 14
-                                Label { text: modelData[1]; color: Theme.muted; Layout.preferredWidth: 80; font { family: Theme.font; pixelSize: 14 } }
+                                Label { text: modelData[1]; color: Theme.muted; Layout.preferredWidth: 80; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                                 Label { text: page.meta[modelData[0]] || ""; color: Theme.text; Layout.fillWidth: true
-                                        wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: 14 } }
+                                        wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                             }
                         }
                         Label {
                             visible: !!page.info.cast && page.info.cast.length > 0
                             text: "cast   " + (page.info.cast || []).map(function (c) { return c.name + (c.role ? " (" + c.role + ")" : "") }).filter(function (s) { return s.trim() !== "" }).join(",  ")
                             color: Theme.text2; Layout.fillWidth: true; wrapMode: Text.WordWrap
-                            font { family: Theme.font; pixelSize: 14 }
+                            font { family: Theme.font; pixelSize: Theme.fs(14) }
                         }
 
                         // nothing filled in yet: point at the boxes
@@ -471,7 +471,7 @@ Rectangle {
                             readonly property bool empty: !page.meta.title && !page.meta.year && !page.meta.overview && !page.meta.genre && !page.meta.director
                             visible: empty
                             text: "no details yet. open the movie's page to fill them in."
-                            color: Theme.dim; font { family: Theme.font; pixelSize: 14 }
+                            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) }
                         }
                         AbstractButton {
                             id: editBtn
@@ -481,7 +481,7 @@ Rectangle {
                             implicitHeight: 28
                             onClicked: { const r = page.info.row; hop.closeVideoPlayer(surface.position, surface.duration); hop.openVideoDetail(r) }
                             contentItem: Label { text: "edit details"; color: editBtn.hovered ? hop.accent : Theme.muted
-                                                 font { family: Theme.font; pixelSize: 14; underline: editBtn.hovered } }
+                                                 font { family: Theme.font; pixelSize: Theme.fs(14); underline: editBtn.hovered } }
                             background: Item {}
                         }
 
@@ -514,7 +514,7 @@ Rectangle {
                     ColumnLayout {
                         anchors.fill: parent
                         spacing: 8
-                        Label { text: "your videos"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } }
+                        Label { text: "your videos"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } }
                         ListView {
                             id: sideList
                             objectName: "videoUpNext"
@@ -555,8 +555,8 @@ Rectangle {
                                         Layout.fillWidth: true
                                         spacing: 2
                                         Label { text: it.title; Layout.fillWidth: true; elide: Text.ElideRight; maximumLineCount: 2; wrapMode: Text.WordWrap
-                                                color: it.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 14 } }
-                                        Label { text: it.current ? "now playing" : it.duration; color: Theme.muted; font { family: Theme.font; pixelSize: 12 } }
+                                                color: it.current ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                                        Label { text: it.current ? "now playing" : it.duration; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                                     }
                                 }
                             }

@@ -143,6 +143,34 @@ class TestUi : public QObject {
         i->setProperty("text", QString());
         for (const QChar c : text) QTest::keyClick(window(), c.toLatin1());
     }
+    // Phones: everything you can see must fit the screen's width. An item counts as overflowing when its
+    // visible part (cut only by a scrolling row of pills, which is meant to pan) reaches past the right edge.
+    QStringList overflowing()
+    {
+        QStringList out;
+        const qreal W = window()->width();
+        std::function<void(QQuickItem *, QRectF)> walk = [&](QQuickItem *it, QRectF clip) {
+            if (!it->isVisible() || it->opacity() <= 0.01) return;
+            QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+            if ((it->clip() && !it->inherits("QQuickFlickable")) || it->property("namePrefix").isValid())
+                clip = clip.intersected(r);   // a clipped picture is cut; scrolling pill rows may pan; other scrolling content may not
+
+            const QRectF vis = r.intersected(clip);
+            const bool leaf = it->childItems().isEmpty();
+            if (leaf && it->width() > 0 && vis.right() > W + 1)
+                {
+                QString label = it->objectName();
+                for (QQuickItem *p = it; label.isEmpty() && p; p = p->parentItem()) {
+                    const QString t = p->property("text").toString();
+                    label = !t.isEmpty() ? QStringLiteral("\"%1\"").arg(t.left(30)) : p->objectName();
+                }
+                out << QStringLiteral("%1 %2 right=%3").arg(QLatin1String(it->metaObject()->className()), label).arg(vis.right());
+            }
+            for (QQuickItem *c : it->childItems()) walk(c, clip);
+        };
+        walk(window()->contentItem(), QRectF(-1e6, -1e6, 2e6, 2e6));
+        return out;
+    }
     // HOPTUNES_UI_SHOTS=<dir> saves design renders of each screen while the test runs.
     void shot(const char *name)
     {
@@ -1006,6 +1034,69 @@ private slots:
         QTRY_COMPARE(w->size(), before);   // the desktop layout is back before the next test looks at it
         QTRY_VERIFY(!item("navTab_collection") || !item("navTab_collection")->isVisible());
         QTest::qWait(400);
+    }
+
+    // Every screen fits a phone (412 and 320 wide): nothing visible runs past the right edge.
+    void phoneScreensFitTheScreen()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setNavStyle(QStringLiteral("bar")); w->setProperty("forceMobile", false); w->resize(size); }
+        } restore{w, before, m_app.get()};
+        w->setProperty("forceMobile", true);
+        m_app->setNavStyle(QStringLiteral("bar"));
+        QStringList failures;
+        const QList<QSize> sizes{QSize(412, 892), QSize(320, 640)};
+        for (const QSize &sz : sizes) {
+            w->resize(sz);
+            QTRY_COMPARE(w->width(), sz.width());
+            const QString tag = QString::number(sz.width());
+            auto check = [&](const char *name, const QString &what) {
+                QTest::qWait(250);
+                shot((QStringLiteral("phone%1-").arg(tag) + QLatin1String(name)).toLatin1().constData());
+                const QStringList bad = overflowing();
+                if (!bad.isEmpty()) {
+                    qWarning("%s (%s) overflows: %s", name, qPrintable(tag), qPrintable(bad.mid(0, 4).join(QStringLiteral(" | "))));
+                    failures << what + QStringLiteral(" at ") + tag;
+                }
+            };
+            w->setProperty("view", QStringLiteral("collection"));
+            QTRY_VERIFY(item("pillTab_music") != nullptr);
+            QVERIFY(click("pillTab_music"));
+            QVERIFY(click("pillMode_artists"));
+            check("music-artists", QStringLiteral("artists"));
+            QVERIFY(click("pillMode_albums"));
+            check("music-albums", QStringLiteral("albums"));
+            QVERIFY(click("pillMode_songs"));
+            check("music-songs", QStringLiteral("songs"));
+            QVERIFY(click("pillMode_playlists"));
+            check("music-playlists", QStringLiteral("playlists"));
+            QVERIFY(click("pillTab_videos"));
+            check("videos", QStringLiteral("videos"));
+            QVERIFY(click("pillTab_pictures"));
+            check("pictures", QStringLiteral("pictures"));
+            QVERIFY(click("pillTab_music"));
+            w->setProperty("view", QStringLiteral("now playing"));
+            check("nowplaying", QStringLiteral("now playing"));
+            w->setProperty("view", QStringLiteral("quickplay"));
+            check("quickplay", QStringLiteral("quickplay"));
+            w->setProperty("view", QStringLiteral("search"));
+            check("search", QStringLiteral("search"));
+            w->setProperty("view", QStringLiteral("profile"));
+            check("profile", QStringLiteral("profile"));
+            w->setProperty("view", QStringLiteral("settings"));
+            check("settings", QStringLiteral("settings"));
+        }
+        m_app->setNavStyle(QStringLiteral("bar"));
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_COMPARE(w->size(), before);
+        QTRY_VERIFY(!item("pillTab_music") || !item("pillTab_music")->isVisible());
+        QTest::qWait(400);
+        QVERIFY2(failures.isEmpty(), qPrintable(QStringLiteral("overflowing: ") + failures.join(QStringLiteral(", "))));
     }
 
     // Pictures (and the other new sections) have their own folder list and their own

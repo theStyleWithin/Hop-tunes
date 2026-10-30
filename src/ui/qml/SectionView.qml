@@ -41,7 +41,7 @@ Item {
             Label {
                 visible: root.status.scanning
                 text: root.status.total > 0 ? "scanning " + root.status.done + " / " + root.status.total : "scanning…"
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             AbstractButton {
                 id: albumBack
@@ -50,13 +50,13 @@ Item {
                 hoverEnabled: true
                 onClicked: hop.closePictureAlbum()
                 Accessible.name: "back to albums"
-                contentItem: Label { text: "‹ albums"; color: albumBack.hovered ? hop.accent : Theme.text2; font { family: Theme.font; pixelSize: 16 } }
+                contentItem: Label { text: "‹ albums"; color: albumBack.hovered ? hop.accent : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
                 background: Item {}
             }
             Label {
                 visible: root.albumOpen && !headEdit.visible
                 text: root.openAlbum.name
-                color: Theme.text; elide: Text.ElideRight; font { family: Theme.font; pixelSize: 20 }
+                color: Theme.text; elide: Text.ElideRight; font { family: Theme.font; pixelSize: Theme.fs(20) }
             }
             TextField {
                 id: headEdit
@@ -66,7 +66,7 @@ Item {
                 maximumLength: 60
                 selectByMouse: true
                 color: Theme.text
-                font { family: Theme.font; pixelSize: 18 }
+                font { family: Theme.font; pixelSize: Theme.fs(18) }
                 placeholderText: "album name"; placeholderTextColor: Theme.dim
                 onAccepted: { hop.renamePictureAlbum(hop.pictureAlbum, text); visible = false }
                 Keys.onEscapePressed: visible = false
@@ -81,19 +81,19 @@ Item {
                 onClicked: { headEdit.text = root.openAlbum.name; headEdit.visible = true; headEdit.forceActiveFocus(); headEdit.selectAll() }
                 Accessible.name: "rename album"
                 contentItem: Label { text: "rename"; color: headRename.hovered ? hop.accent : Theme.muted
-                                     font { family: Theme.font; pixelSize: 13; underline: headRename.hovered } }
+                                     font { family: Theme.font; pixelSize: Theme.fs(13); underline: headRename.hovered } }
                 background: Item {}
             }
             Item { Layout.fillWidth: true }
             Label {
                 visible: !root.status.scanning && root.albumList && root.model.count > 0
                 text: hop.pictureAlbums.length + (hop.pictureAlbums.length === 1 ? " album, " : " albums, ") + root.model.count + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             Label {
                 visible: !root.status.scanning && root.model.count > 0 && !root.albumList
                 text: (root.albumOpen ? root.openAlbum.count : root.model.count) + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             AbstractButton {
                 id: addMore
@@ -104,7 +104,7 @@ Item {
                 contentItem: Label {
                     text: "+ add folder"
                     color: addMore.hovered ? hop.accent : Theme.muted
-                    font { family: Theme.font; pixelSize: 14; underline: addMore.hovered }
+                    font { family: Theme.font; pixelSize: Theme.fs(14); underline: addMore.hovered }
                 }
                 background: Item {}
             }
@@ -118,18 +118,18 @@ Item {
             spacing: 18
             Label {
                 text: root.folders.length === 0 ? "add a folder to find " + root.meta.plural : "no " + root.meta.plural + " found yet"
-                color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light }
+                color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(40); weight: Font.Light }
             }
             Label {
                 text: root.meta.hint
-                color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) }
                 wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }
             Button {
                 objectName: "sectionChooseFolder_" + root.kind
                 text: "choose a " + root.meta.noun + " folder…"
                 onClicked: root.addFolderRequested(root.kind)
-                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 18; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(18); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { implicitHeight: 52; implicitWidth: 300; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
             }
             Item { Layout.fillHeight: true }
@@ -177,14 +177,14 @@ Item {
                             width: countLabel.implicitWidth + 16; height: 24; radius: 12
                             color: Theme.fade(0.6)
                             Label { id: countLabel; anchors.centerIn: parent; text: slot.modelData.count
-                                    color: "white"; font { family: Theme.font; pixelSize: 13 } }
+                                    color: "white"; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                         }
                     }
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
                         Label { visible: !slotEdit.visible; text: slot.modelData.name; Layout.fillWidth: true; elide: Text.ElideRight
-                                color: slot.hovered ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 16 } }
+                                color: slot.hovered ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } }
                         TextField {
                             id: slotEdit
                             objectName: "pictureAlbumEdit_" + slot.index
@@ -193,7 +193,7 @@ Item {
                             maximumLength: 60
                             selectByMouse: true
                             color: Theme.text
-                            font { family: Theme.font; pixelSize: 15 }
+                            font { family: Theme.font; pixelSize: Theme.fs(15) }
                             onAccepted: { hop.renamePictureAlbum(slot.modelData.dir, text); visible = false }
                             Keys.onEscapePressed: visible = false
                             onActiveFocusChanged: if (!activeFocus) visible = false
@@ -207,7 +207,7 @@ Item {
                             onClicked: { slotEdit.text = slot.modelData.name; slotEdit.visible = true; slotEdit.forceActiveFocus(); slotEdit.selectAll() }
                             Accessible.name: "rename album"
                             contentItem: Label { text: "rename"; color: slotRename.hovered ? hop.accent : Theme.muted
-                                                 font { family: Theme.font; pixelSize: 12; underline: slotRename.hovered } }
+                                                 font { family: Theme.font; pixelSize: Theme.fs(12); underline: slotRename.hovered } }
                             background: Item {}
                         }
                     }
@@ -254,7 +254,7 @@ Item {
                         }
                     }
                     Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight
-                            color: Theme.text; font { family: Theme.font; pixelSize: 13 } }
+                            color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                 }
             }
         }
@@ -290,7 +290,7 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         Label { text: row.title; Layout.fillWidth: true; elide: Text.ElideRight
-                                color: row.played ? Theme.muted : Theme.text; font { family: Theme.font; pixelSize: 17 } }
+                                color: row.played ? Theme.muted : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } }
                         AbstractButton {
                             id: playedBtn
                             objectName: "sectionPlayed_" + root.kind + "_" + row.index
@@ -302,20 +302,20 @@ Item {
                             contentItem: Label {
                                 text: row.played ? "played ✓" : "mark played"
                                 color: playedBtn.hovered ? hop.accent : Theme.muted
-                                font { family: Theme.font; pixelSize: 12; underline: playedBtn.hovered }
+                                font { family: Theme.font; pixelSize: Theme.fs(12); underline: playedBtn.hovered }
                             }
                             background: Item {}
                         }
                         Label { text: row.duration !== "" ? row.duration : row.sizeText
-                                color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+                                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     }
                     RowLayout {
                         Layout.fillWidth: true
                         Label { text: row.group; Layout.fillWidth: true; elide: Text.ElideRight
-                                color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+                                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                         Label { visible: row.progress > 0
                                 text: Math.round(row.progress * 100) + "%"
-                                color: hop.accent; font { family: Theme.font; pixelSize: 13 } }
+                                color: hop.accent; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     }
                     Rectangle {
                         Layout.fillWidth: true; Layout.preferredHeight: 2

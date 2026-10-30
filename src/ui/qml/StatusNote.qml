@@ -29,7 +29,7 @@ Rectangle {
             color: Theme.text
             placeholderText: "a lyric, a quote, how you feel… only you see this"
             placeholderTextColor: Theme.dim
-            font { family: Theme.font; pixelSize: 15 }
+            font { family: Theme.font; pixelSize: Theme.fs(15) }
             leftPadding: 10; rightPadding: 10; topPadding: 6; bottomPadding: 6
             background: Item { }
             Accessible.name: "status note (only you see it)"

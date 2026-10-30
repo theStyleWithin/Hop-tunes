@@ -49,7 +49,7 @@ Item {
                 contentItem: Label {
                     text: "‹  videos"
                     color: back.hovered ? hop.accent : Theme.muted
-                    font { family: Theme.font; pixelSize: 17 }
+                    font { family: Theme.font; pixelSize: Theme.fs(17) }
                 }
                 background: Item {}
             }
@@ -78,7 +78,7 @@ Item {
                             anchors.centerIn: parent
                             visible: !root.d.thumb
                             text: "no poster"
-                            color: Theme.dim; font { family: Theme.font; pixelSize: 16 }
+                            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(16) }
                         }
                     }
                     RowLayout {
@@ -91,7 +91,7 @@ Item {
                             implicitHeight: 20
                             onClicked: posterDialog.open()
                             contentItem: Label { text: "change poster"; color: posterBtn.hovered ? hop.accent : Theme.muted
-                                                 font { family: Theme.font; pixelSize: 13; underline: posterBtn.hovered } }
+                                                 font { family: Theme.font; pixelSize: Theme.fs(13); underline: posterBtn.hovered } }
                             background: Item {}
                         }
                         AbstractButton {
@@ -101,7 +101,7 @@ Item {
                             implicitHeight: 20
                             onClicked: hop.clearVideoThumb(root.d.row)
                             contentItem: Label { text: "reset"; color: posterReset.hovered ? hop.accent : Theme.muted
-                                                 font { family: Theme.font; pixelSize: 13; underline: posterReset.hovered } }
+                                                 font { family: Theme.font; pixelSize: Theme.fs(13); underline: posterReset.hovered } }
                             background: Item {}
                         }
                     }
@@ -128,7 +128,7 @@ Item {
                         Label {
                             visible: !!root.d.length
                             text: root.d.length || ""
-                            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
                             Layout.leftMargin: 6
                         }
                     }
@@ -136,7 +136,7 @@ Item {
                     // facts already known from the file itself
                     Label {
                         text: [root.d.resolution, root.d.codec, root.d.hdr ? "HDR" : "", root.d.container, root.d.size].filter(function (s) { return !!s }).join("  ·  ")
-                        color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+                        color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
                     }
 
                     RowLayout {
@@ -147,7 +147,7 @@ Item {
                             objectName: "videoDetailPlay"
                             text: root.d.resumeText ? "▶  resume from " + root.d.resumeText : "▶  play"
                             onClicked: hop.playVideo(root.d.row)
-                            contentItem: Label { text: playBtn.text; color: Theme.ink; font { family: Theme.font; pixelSize: 17; weight: Font.Medium }
+                            contentItem: Label { text: playBtn.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(17); weight: Font.Medium }
                                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             background: Rectangle { implicitHeight: 46; implicitWidth: 200; color: playBtn.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
                         }
@@ -157,7 +157,7 @@ Item {
                             text: root.d.played ? "watched ✓" : "mark watched"
                             onClicked: hop.toggleVideoWatched()
                             contentItem: Label { text: watchedBtn.text; color: root.d.played ? hop.accent : Theme.text
-                                                 font { family: Theme.font; pixelSize: 15 }
+                                                 font { family: Theme.font; pixelSize: Theme.fs(15) }
                                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                             background: Rectangle { implicitHeight: 46; implicitWidth: 150; color: "transparent"; border { width: 2; color: Theme.border } }
                         }
@@ -188,7 +188,7 @@ Item {
                                 Layout.fillWidth: true
                                 spacing: 18
                                 Label { text: modelData[0]; color: Theme.muted; Layout.preferredWidth: 90
-                                        font { family: Theme.font; pixelSize: 15 } }
+                                        font { family: Theme.font; pixelSize: Theme.fs(15) } }
                                 DetailField {
                                     objectName: "videoDetail_" + modelData[0]
                                     key: modelData[0]; placeholderText: modelData[1]
@@ -204,7 +204,7 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Layout.topMargin: 10
-                Label { text: "cast & crew"; color: Theme.text; font { family: Theme.font; pixelSize: 22 } }
+                Label { text: "cast & crew"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(22) } }
                 Item { Layout.fillWidth: true }
                 AbstractButton {
                     id: addPerson
@@ -213,14 +213,14 @@ Item {
                     implicitHeight: 26
                     onClicked: hop.addCastMember()
                     contentItem: Label { text: "+ add person"; color: addPerson.hovered ? hop.accent : Theme.muted
-                                         font { family: Theme.font; pixelSize: 15; underline: addPerson.hovered } }
+                                         font { family: Theme.font; pixelSize: Theme.fs(15); underline: addPerson.hovered } }
                     background: Item {}
                 }
             }
             Label {
                 visible: root.cast.length === 0
                 text: "nobody added yet. add the people you want to remember, with a role and a photo if you like."
-                color: Theme.dim; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             Flow {
                 Layout.fillWidth: true
@@ -251,7 +251,7 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !card.person.photo
                                 text: (card.person.name || "?").charAt(0).toUpperCase()
-                                color: Theme.dim; font { family: Theme.font; pixelSize: 54; weight: Font.Light }
+                                color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(54); weight: Font.Light }
                             }
                         }
                         TextField {
@@ -261,7 +261,7 @@ Item {
                             placeholderText: "name"
                             text: card.person.name
                             selectByMouse: true; color: Theme.text; placeholderTextColor: Theme.dim
-                            font { family: Theme.font; pixelSize: 15 }
+                            font { family: Theme.font; pixelSize: Theme.fs(15) }
                             leftPadding: 8; rightPadding: 8; topPadding: 5; bottomPadding: 5
                             onEditingFinished: hop.setCastMember(card.index, text, roleField.text)
                             background: Rectangle { color: nameField.activeFocus ? Theme.panel : "transparent"; radius: 3
@@ -274,7 +274,7 @@ Item {
                             placeholderText: "role"
                             text: card.person.role
                             selectByMouse: true; color: Theme.muted; placeholderTextColor: Theme.dim
-                            font { family: Theme.font; pixelSize: 13 }
+                            font { family: Theme.font; pixelSize: Theme.fs(13) }
                             leftPadding: 8; rightPadding: 8; topPadding: 4; bottomPadding: 4
                             onEditingFinished: hop.setCastMember(card.index, nameField.text, text)
                             background: Rectangle { color: roleField.activeFocus ? Theme.panel : "transparent"; radius: 3
@@ -288,7 +288,7 @@ Item {
                                 hoverEnabled: true; implicitHeight: 18
                                 onClicked: { castDialog.index = card.index; castDialog.open() }
                                 contentItem: Label { text: "photo"; color: photoBtn.hovered ? hop.accent : Theme.muted
-                                                     font { family: Theme.font; pixelSize: 12; underline: photoBtn.hovered } }
+                                                     font { family: Theme.font; pixelSize: Theme.fs(12); underline: photoBtn.hovered } }
                                 background: Item {}
                             }
                             AbstractButton {
@@ -297,7 +297,7 @@ Item {
                                 hoverEnabled: true; implicitHeight: 18
                                 onClicked: hop.removeCastMember(card.index)
                                 contentItem: Label { text: "remove"; color: removeBtn.hovered ? Theme.danger : Theme.muted
-                                                     font { family: Theme.font; pixelSize: 12; underline: removeBtn.hovered } }
+                                                     font { family: Theme.font; pixelSize: Theme.fs(12); underline: removeBtn.hovered } }
                                 background: Item {}
                             }
                         }
