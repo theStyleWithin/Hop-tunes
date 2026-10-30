@@ -54,10 +54,20 @@ QList<ShareItem> GrantLibrary::items(qint64 guestId) const
     for (const QString &p : m_db.shareGrants(guestId)) {
         const QFileInfo fi(p);
         if (!fi.isFile()) continue;
-        out.append(ShareItem{idFor(guestId, p), fi.completeBaseName(), kindOf(p), fi.size()});
+        ShareItem it{idFor(guestId, p), fi.completeBaseName(), kindOf(p), fi.size()};
+        if (m_describe) m_describe(p, it);
+        out.append(it);
     }
+    // films by title; music by artist, album and track number, so an album plays in order
     std::sort(out.begin(), out.end(), [](const ShareItem &a, const ShareItem &b) {
-        const int c = a.title.compare(b.title, Qt::CaseInsensitive);
+        if (a.kind != b.kind) return a.kind < b.kind;
+        int c = 0;
+        if (a.kind == QLatin1String("audio")) {
+            c = a.artist.compare(b.artist, Qt::CaseInsensitive);
+            if (!c) c = a.album.compare(b.album, Qt::CaseInsensitive);
+            if (!c) c = a.trackNo - b.trackNo;
+        }
+        if (!c) c = a.title.compare(b.title, Qt::CaseInsensitive);
         return c ? c < 0 : a.id < b.id;
     });
     return out;
@@ -178,7 +188,8 @@ private:
         } else if (path == QLatin1String("/v1/library")) {
             QJsonArray items;
             for (const ShareItem &it : m_server->m_lib.items(m_guestId))
-                items.append(QJsonObject{{"id", it.id}, {"title", it.title}, {"kind", it.kind}, {"size", double(it.size)}});
+                items.append(QJsonObject{{"id", it.id}, {"title", it.title}, {"kind", it.kind}, {"size", double(it.size)},
+                                         {"artist", it.artist}, {"album", it.album}, {"duration", double(it.durationMs)}, {"trackNo", it.trackNo}});
             json(200, QJsonObject{{"items", items}});
         } else if (path.startsWith(QLatin1String("/v1/stream/"))) {
             stream(path.mid(11), headers.value("range"), head);

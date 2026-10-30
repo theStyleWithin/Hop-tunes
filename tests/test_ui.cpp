@@ -1109,6 +1109,8 @@ private slots:
         QVERIFY(click("joinButton"));
         QTRY_COMPARE_WITH_TIMEOUT(m_app->sharedHosts().size(), 1, 8000);
         QTRY_VERIFY(item("joinMessage")->property("text").toString().contains(QStringLiteral("you joined")));
+        ensureVisible(item("joinMessage"));
+        shot("sharing-join");
         const qint64 hostId = m_app->sharedHosts().first().toMap().value("id").toLongLong();
         QCOMPARE(m_app->shareGuests().size(), 1);                              // the host side sees the guest too
 
@@ -1123,18 +1125,50 @@ private slots:
 
         // the host ticks a film; the guest refreshes and sees exactly that
         const QString film = m_app->videos()->videos().first().path;
+        const Track song = m_app->songs()->tracks().first();
         m_app->setShareMode(true);
         QVERIFY(m_app->shareMode());
         m_app->toggleShare({film});
+        m_app->toggleShare({song.path});
         m_app->setShareMode(false);
         QVERIFY(click("sharedRefresh"));
-        QTRY_COMPARE(m_app->sharedItems().size(), 1);
+        QTRY_COMPARE(m_app->sharedItems().size(), 2);
+        QString songId, filmId;
+        for (const QVariant &v : m_app->sharedItems()) {
+            const QVariantMap m = v.toMap();
+            if (m.value("kind").toString() == QLatin1String("audio")) songId = m.value("id").toString();
+            else filmId = m.value("id").toString();
+        }
+        QVERIFY(!songId.isEmpty() && !filmId.isEmpty());
+        // a song comes with its tags, so the guest sees a title, artist, album and length rather than a file name
+        for (const QVariant &v : m_app->sharedItems()) {
+            const QVariantMap m = v.toMap();
+            if (m.value("id").toString() != songId) continue;
+            QCOMPARE(m.value("title").toString(), song.displayTitle());
+            QCOMPARE(m.value("artist").toString(), song.displayArtist());
+            QCOMPARE(m.value("album").toString(), song.displayAlbum());
+            QVERIFY(m.value("durationMs").toLongLong() > 0);
+            QVERIFY(m.value("playable").toBool());
+        }
         QTRY_VERIFY(item("sharedItem_0") != nullptr && item("sharedItem_0")->isVisible());
-        QCOMPARE(m_app->sharedItems().first().toMap().value("kind").toString(), QStringLiteral("video"));
         shot("shared-library");
 
-        // the player reads it from the local address, byte for byte
-        const QString itemId = m_app->sharedItems().first().toMap().value("id").toString();
+        // a shared song plays through the music player from the local address, and is not counted as one of my own
+        m_app->playShared(songId);
+        QTRY_VERIFY(m_app->player()->hasTrack());
+        QCOMPARE(m_app->player()->queueLength(), 1);
+        QCOMPARE(m_app->player()->title(), song.displayTitle());
+        QVERIFY(m_app->player()->currentTrack()->path.startsWith(QStringLiteral("http://127.0.0.1:")));
+        if (GstElementFactory *f = gst_element_factory_find("souphttpsrc")) {   // the stream really arrives (where GStreamer can read http)
+            gst_object_unref(f);
+            QTRY_VERIFY_WITH_TIMEOUT(m_app->player()->position() > 0 || m_app->player()->duration() > 0, 10000);
+        }
+        m_app->toggleHeartCurrent();   // a shared song is not mine to heart
+        QVERIFY(!m_app->currentHearted());
+        m_app->player()->setQueue({}, 0);
+
+        // the player reads the film from the local address, byte for byte
+        const QString itemId = filmId;
         const QUrl url(m_app->sharedStreamUrl(itemId));
         QCOMPARE(url.host(), QStringLiteral("127.0.0.1"));
         QFile f(film);
@@ -1152,16 +1186,16 @@ private slots:
         // a wrong address is refused with a reason; a changed one is taken and the library comes back
         QVERIFY(!m_app->setSharedHostAddress(hostId, QStringLiteral("nonsense")).isEmpty());
         QCOMPARE(m_app->setSharedHostAddress(hostId, QStringLiteral("127.0.0.1:%1").arg(m_app->sharingPort())), QString());
-        QTRY_COMPARE(m_app->sharedItems().size(), 1);
+        QTRY_COMPARE(m_app->sharedItems().size(), 2);
         QCOMPARE(m_app->setSharedHostAddress(hostId, QStringLiteral("127.0.0.1:1")), QString());   // nothing there
         QTRY_VERIFY(m_app->sharedStatus().contains(QStringLiteral("can't reach")));
         shot("shared-unreachable");
         QCOMPARE(m_app->setSharedHostAddress(hostId, QStringLiteral("127.0.0.1:%1").arg(m_app->sharingPort())), QString());
-        QTRY_COMPARE(m_app->sharedItems().size(), 1);
+        QTRY_COMPARE(m_app->sharedItems().size(), 2);
 
         // the host takes the approval back: the next refresh shows nothing
         m_app->setShareMode(true);
-        m_app->toggleShare({film});
+        m_app->toggleShare({film, song.path});
         m_app->setShareMode(false);
         m_app->openSharedHost(hostId);
         QTRY_VERIFY(m_app->sharedItems().isEmpty());

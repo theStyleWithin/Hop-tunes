@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QSet>
 #include <QString>
+#include <functional>
 
 class QHostAddress;
 class QSslServer;
@@ -24,6 +25,9 @@ struct ShareItem {
     QString title;
     QString kind;   // "video" | "audio" | "picture" | "book" | "file"
     qint64 size = 0;
+    QString artist, album;   // music
+    qint64 durationMs = 0;
+    int trackNo = 0;
 };
 
 // Where the server gets its library from. Only items the host approved for this guest are ever returned.
@@ -43,11 +47,14 @@ public:
     QList<ShareItem> items(qint64 guestId) const override;
     QString pathFor(qint64 guestId, const QString &itemId) const override;
     static QString kindOf(const QString &path);
+    // Lets the app say more about a file than its name (tags for music, the title the host gave a film).
+    void setDescriber(std::function<void(const QString &path, ShareItem &item)> f) { m_describe = std::move(f); }
 private:
     QString idFor(qint64 guestId, const QString &path) const;
     ProfileDb &m_db;
     ShareAuth &m_auth;
     QString m_host;
+    std::function<void(const QString &, ShareItem &)> m_describe;
 };
 
 // The host's side of library sharing (docs/design-sharing.md). It listens only while started. Every connection is

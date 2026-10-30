@@ -143,7 +143,11 @@ Item {
                         spacing: 16
                         Label { text: row.modelData.title; elide: Text.ElideRight; Layout.fillWidth: true
                                 color: row.modelData.playable ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: 17 } }
-                        Label { text: row.modelData.kind; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                        Label { visible: row.modelData.kind === "audio"; text: (row.modelData.artist || "") + (row.modelData.album ? " · " + row.modelData.album : "")
+                                elide: Text.ElideRight; Layout.maximumWidth: 300; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+                        Label { visible: row.modelData.kind === "audio"; text: row.modelData.durationText || ""; color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+                                Layout.preferredWidth: 44; horizontalAlignment: Text.AlignRight }
+                        Label { text: row.modelData.kind === "audio" ? "music" : row.modelData.kind; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
                         Label { text: row.modelData.sizeText; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } Layout.preferredWidth: 70; horizontalAlignment: Text.AlignRight }
                     }
                 }

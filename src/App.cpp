@@ -1115,6 +1115,18 @@ void App::setSharing(bool on)
     }
     if (m_guest || m_profileId.isEmpty() || !m_db.isOpen() || !sharingAvailable()) return;   // a guest keeps nothing, so shares nothing
     auto share = std::make_unique<Share>(m_db, profile().value(QStringLiteral("name")).toString());
+    // tell the guest a song's title, artist, album and length, and a film's own title (what the host gave it)
+    share->lib.setDescriber([this](const QString &path, ShareItem &it) {
+        const int row = m_libraryIndex.value(path, -1);
+        if (row >= 0 && row < m_library.size()) {
+            const Track &t = m_library[row];
+            it.title = t.displayTitle(); it.artist = t.displayArtist(); it.album = t.displayAlbum();
+            it.durationMs = t.durationMs; it.trackNo = t.trackNo;
+            return;
+        }
+        const QString mine = m_videoMeta.value(path).value(QStringLiteral("title")).toString();
+        if (!mine.isEmpty()) it.title = mine;
+    });
     // a fixed port first, so a router's port forwarding can point at it later; any free one if that is taken
     if (!share->server.start(47800) && !share->server.start(0)) return;
     connect(&share->server, &ShareServer::connectedGuestsChanged, this, &App::shareGuestsChanged);
@@ -1298,9 +1310,13 @@ void App::openSharedHost(qint64 id)
             for (const QJsonValue &v : o.value("items").toArray()) {
                 const QJsonObject it = v.toObject();
                 const QString kind = it.value("kind").toString();
+                const qint64 dur = qint64(it.value("duration").toDouble());
                 m_sharedItems.append(QVariantMap{{QStringLiteral("id"), it.value("id").toString()}, {QStringLiteral("title"), it.value("title").toString()},
                                                  {QStringLiteral("kind"), kind}, {QStringLiteral("sizeText"), SectionListModel::formatSize(qint64(it.value("size").toDouble()))},
-                                                 {QStringLiteral("playable"), kind == QLatin1String("video")}});
+                                                 {QStringLiteral("artist"), it.value("artist").toString()}, {QStringLiteral("album"), it.value("album").toString()},
+                                                 {QStringLiteral("trackNo"), it.value("trackNo").toInt()}, {QStringLiteral("durationMs"), dur},
+                                                 {QStringLiteral("durationText"), dur > 0 ? TrackListModel::formatDuration(dur) : QString()},
+                                                 {QStringLiteral("playable"), kind == QLatin1String("video") || kind == QLatin1String("audio")}});
             }
             m_sharedStatus = m_sharedItems.isEmpty() ? tr("%1 has not shared anything with you yet. ask them to tick what you can see.").arg(h.name) : QString();
         }
@@ -1342,8 +1358,31 @@ void App::playShared(const QString &itemId)
         if (m.value(QStringLiteral("id")).toString() == itemId) { title = m.value(QStringLiteral("title")).toString(); kind = m.value(QStringLiteral("kind")).toString(); }
     }
     if (kind.isEmpty()) return;
+    if (kind == QLatin1String("audio")) {   // the song, then the rest of what was shared, in order
+        ShareHost h;
+        if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h) || !m_shareProxy.start()) { m_sharedStatus = tr("could not start the stream."); emit sharedLibraryChanged(); return; }
+        QList<Track> queue;
+        int start = 0;
+        for (const QVariant &v : m_sharedItems) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("kind")).toString() != QLatin1String("audio")) continue;
+            Track t;
+            t.id = -qint64(queue.size() + 1);   // not a library id: never mistaken for one of my own songs
+            t.path = m_shareProxy.urlFor(endpointOf(h), m.value(QStringLiteral("id")).toString());
+            t.title = m.value(QStringLiteral("title")).toString();
+            t.artist = m.value(QStringLiteral("artist")).toString();
+            t.album = m.value(QStringLiteral("album")).toString();
+            t.durationMs = m.value(QStringLiteral("durationMs")).toLongLong();
+            t.trackNo = m.value(QStringLiteral("trackNo")).toInt();
+            if (m.value(QStringLiteral("id")).toString() == itemId) start = queue.size();
+            queue << t;
+        }
+        m_djSeed.clear(); emit djChanged();
+        m_player.setQueue(queue, start);
+        return;
+    }
     if (kind != QLatin1String("video")) {
-        m_sharedStatus = tr("only films and shows can be played from a shared library so far (beta).");
+        m_sharedStatus = tr("that kind of file cannot be played from a shared library yet (beta).");
         emit sharedLibraryChanged();
         return;
     }
@@ -1862,7 +1901,8 @@ void App::onTrackChanged()
         m_stats[m_listen.path].skipCount++;
     }
     const Track *t = m_player.currentTrack();
-    m_listen = t ? Listen{t->path, 0, t->durationMs, false} : Listen{};
+    // a song streamed from someone's shared library is not counted in my plays and skips
+    m_listen = t && !t->path.startsWith(QLatin1String("http://127.0.0.1:")) ? Listen{t->path, 0, t->durationMs, false} : Listen{};
 }
 
 bool App::currentHearted() const
@@ -1873,7 +1913,7 @@ bool App::currentHearted() const
 
 void App::toggleHeart(const QString &path)
 {
-    if (path.isEmpty() || !profileReady()) return;
+    if (path.isEmpty() || !profileReady() || path.startsWith(QLatin1String("http://127.0.0.1:"))) return;   // a shared song is not mine to heart
     TrackStats &st = m_stats[path];
     st.hearted = !st.hearted;
     m_db.setHearted(path, st.hearted);

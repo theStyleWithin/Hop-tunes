@@ -10,10 +10,11 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   send the `hop://…` link. Each guest has their own private key and their own list of what they may see: nothing
   until you tick it. Once you have a guest, a "share" button appears in the collection; turn it on, pick the guest,
   and tick videos, albums or songs. A guest joins from Settings › sharing › "join someone's library" and finds what
-  was shared in a new "shared" tab. Films and shows stream straight from the host (no downloading, nothing saved);
-  seeking works, and the guest's own resume position is kept on their computer. Everything is encrypted
+  was shared in a new "shared" tab. Films, shows and music stream straight from the host (no downloading, nothing saved);
+  seeking works, a shared song plays through the normal music player (and is never counted as one of your own
+  plays or hearts), and the guest's own resume position for films is kept on their computer. Everything is encrypted
   (a key shared with each guest, no certificates and no accounts) and works on a home network.
-  *Beta: not yet there: music and the other sections for guests, watching together in sync, and connecting over
+  *Beta: not yet there: pictures, books and podcasts for guests, watching together in sync, and connecting over
   the internet.*
 
 ## [1.7.0] - 2026-10-30
