@@ -9,7 +9,17 @@ import QtQuick.Dialogs
 Item {
     id: root
 
-    signal addFolderRequested()
+    signal addFolderRequested(string category)
+
+    readonly property var labels: ({ movies: "movies", shows: "shows", cartoons: "cartoons", anime: "anime", other: "other videos" })
+    readonly property var hints: ({
+        movies: "feature films.",
+        shows: "series and episodes.",
+        cartoons: "western animation.",
+        anime: "anime series and films.",
+        other: "everything else, like videos you saved from YouTube to keep."
+    })
+    readonly property string cat: hop.videoCategory
 
     // Per-profile thumbnail override, like the album "image" button in collection › music.
     // The row is set right before open().
@@ -25,6 +35,38 @@ Item {
         anchors.fill: parent
         spacing: 10
         visible: hop.videoDetailRow < 0   // the grid; a movie's page replaces it while open
+
+        // movies · shows · cartoons · anime · other videos
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 22
+            Repeater {
+                model: hop.videoCategories
+                delegate: AbstractButton {
+                    id: catTab
+                    required property string modelData
+                    objectName: "videoCat_" + modelData
+                    hoverEnabled: true
+                    onClicked: hop.videoCategory = modelData
+                    Accessible.name: root.labels[modelData]
+                    contentItem: Label { text: root.labels[catTab.modelData]
+                                         color: root.cat === catTab.modelData ? hop.accent : (catTab.hovered ? Theme.text2 : Theme.dim)
+                                         font { family: Theme.font; pixelSize: 17 } }
+                    background: Item {}
+                }
+            }
+            Item { Layout.fillWidth: true }
+            AbstractButton {
+                id: addCatFolder
+                objectName: "videoCatAddFolder"
+                hoverEnabled: true
+                visible: !hop.guest && (hop.videoCategoryFolders[root.cat] || []).length > 0
+                onClicked: root.addFolderRequested(root.cat)
+                contentItem: Label { text: "+ add folder"; color: addCatFolder.hovered ? hop.accent : Theme.muted
+                                     font { family: Theme.font; pixelSize: 14; underline: addCatFolder.hovered } }
+                background: Item {}
+            }
+        }
 
         RowLayout {
             Layout.fillWidth: true
@@ -47,18 +89,18 @@ Item {
             Layout.topMargin: 40
             spacing: 18
             Label {
-                text: hop.videoFolders.length === 0 ? "add a folder to find videos" : "no videos found yet"
+                text: (hop.videoCategoryFolders[root.cat] || []).length === 0 ? "add a folder for " + root.labels[root.cat] : "no " + root.labels[root.cat] + " found yet"
                 color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light }
             }
             Label {
-                text: "mkv, mp4, webm, mov, avi, wmv and a few others — anywhere under your video folders."
+                text: root.hints[root.cat] + " mkv, mp4, webm, mov, avi, wmv and a few others, anywhere under the folders you add here."
                 color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
                 wrapMode: Text.WordWrap; Layout.maximumWidth: 640
             }
             Button {
-                objectName: "videosChooseFolder"
-                text: "choose a video folder…"
-                onClicked: root.addFolderRequested()
+                objectName: root.cat === "movies" ? "videosChooseFolder" : "videosChooseFolder_" + root.cat
+                text: "choose a folder for " + root.labels[root.cat] + "…"
+                onClicked: root.addFolderRequested(root.cat)
                 contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 18; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
             }

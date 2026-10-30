@@ -9,6 +9,7 @@ Item {
     id: root
     signal addFolderRequested()
     signal addVideoFolderRequested()
+    signal addVideoCategoryFolderRequested(string category)
     signal addSectionFolderRequested(string kind)
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
     property string collectionTab: "music"   // music | videos | pictures | audiobooks | ebooks | podcasts (spec §4.1)
@@ -198,7 +199,7 @@ Item {
         }
 
         VideosView {
-            onAddFolderRequested: root.addVideoFolderRequested()
+            onAddFolderRequested: function (c) { root.addVideoCategoryFolderRequested(c) }
             visible: root.collectionTab === "videos"
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18

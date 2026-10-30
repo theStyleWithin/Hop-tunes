@@ -93,6 +93,10 @@ Pick how video opens in **settings → video settings → viewing style**. **Win
 Turn on **settings → video settings → livestream chat** for a chat beside the video, as if you were watching a stream. **Nothing is streamed and nobody in it is real**: the chatters are made up on your computer, the chat is the same every time you watch the same video at the same moment (so seeking just redraws it), and nothing is saved. They react to the details you filled in on the movie's page, and you can type to them: they answer, politely, using what the page says (ask who directed it and they will tell you if you filled it in). Choose the **clean** or **lively** look in the same place. While watching, `c` or the "chat" button shows and hides it; press `esc` once to leave the chat box, again to step back.
 
 
+## Video categories
+
+The **videos** tab has five sub sections: **movies, shows, cartoons** (western animation), **anime** and **other videos** (for example videos you saved from YouTube to keep). Each has its own folders: use *choose a folder* (or *+ add folder*) inside the section, or the matching list under **settings**. Your existing video folders are your *movies*. A video belongs to the category whose folder is closest to it, so you can put an *Anime* folder inside a bigger movies folder and add it under anime. Everything still works the same in every category: movie pages, thumbnails, resume, chat and comments.
+
 ## Comments under videos
 
 **settings → video settings → comments** has three choices, and it only shows in the *window* and *theater* styles (never fullscreen):
