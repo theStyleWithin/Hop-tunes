@@ -8,6 +8,8 @@
 #include "library/ProfileDb.h"
 #include "library/SectionIndex.h"
 #include "library/SectionListModel.h"
+#include "library/ShareAuth.h"
+#include "library/ShareServer.h"
 #include "library/SectionScanner.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
@@ -124,6 +126,12 @@ class App : public QObject {
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString statusNote READ statusNote WRITE setStatusNote NOTIFY statusNoteChanged)   // the profile's private status box
     Q_PROPERTY(int videoVolume READ videoVolume WRITE setVideoVolume NOTIFY videoVolumeChanged)   // the movie volume, 0-150 %, separate from the music volume
+    // Library sharing (the host's side; docs/design-sharing.md). Off every time Hop-tunes starts.
+    Q_PROPERTY(bool sharing READ sharing WRITE setSharing NOTIFY sharingChanged)
+    Q_PROPERTY(bool sharingAvailable READ sharingAvailable CONSTANT)   // false when this computer has no TLS library
+    Q_PROPERTY(int sharingPort READ sharingPort NOTIFY sharingChanged)
+    Q_PROPERTY(QStringList sharingAddresses READ sharingAddresses NOTIFY sharingChanged)   // this computer's home-network addresses
+    Q_PROPERTY(QVariantList shareGuests READ shareGuests NOTIFY shareGuestsChanged)   // [{id, name, connected}]
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
     Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
     Q_PROPERTY(QVariantList myVideoComments READ myVideoComments NOTIFY myVideoCommentsChanged)   // this profile's own, for the playing video
@@ -231,6 +239,12 @@ public:
     void setStatusNote(const QString &text);
     int videoVolume() const { return m_videoVolume; }
     void setVideoVolume(int percent);
+    bool sharing() const { return bool(m_share); }
+    void setSharing(bool on);
+    static bool sharingAvailable() { return ShareServer::encryptionAvailable(); }
+    int sharingPort() const { return m_share ? m_share->server.port() : 0; }
+    QStringList sharingAddresses() const;
+    QVariantList shareGuests() const;
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
@@ -333,6 +347,9 @@ public:
     // videos (spec §5b)
     Q_INVOKABLE void openVideoDetail(int row);
     Q_INVOKABLE void closeVideoDetail();
+    // A one-time invite code for a new guest, valid for `hours` (between 10 minutes and a day): {code, link, hours}.
+    Q_INVOKABLE QVariantMap makeShareInvite(double hours);
+    Q_INVOKABLE void removeShareGuest(qint64 id);
     Q_INVOKABLE void addVideoCategoryFolder(const QString &category, const QUrl &folder);
     Q_INVOKABLE void removeVideoCategoryFolder(const QString &category, const QString &path);
     // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
@@ -377,6 +394,8 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void videoChatChanged();
+    void sharingChanged();
+    void shareGuestsChanged();
     void statusNoteChanged();
     void videoVolumeChanged();
     void videoCommentsChanged();
@@ -419,6 +438,14 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     QString m_videoComments = QStringLiteral("off");
+    // Sharing exists only while it is switched on: nothing listens otherwise.
+    struct Share {
+        Share(ProfileDb &db, const QString &host) : auth(db), lib(db, auth, host), server(db, auth, lib) {}
+        ShareAuth auth;
+        GrantLibrary lib;
+        ShareServer server;
+    };
+    std::unique_ptr<Share> m_share;
     QString m_statusNote;
     int m_videoVolume = 100;
     bool m_videoChat = false;

@@ -20,6 +20,7 @@
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QNetworkInterface>
 #include <QFileInfo>
 #include <QRandomGenerator>
 #include <QSet>
@@ -418,6 +419,7 @@ void App::leaveProfile()
     if (m_book.isOpen()) closeBook(0.0);
     m_player.setQueue({}, 0);
     m_listen = {};
+    setSharing(false);            // nothing keeps listening once the profile is closed
     m_scanner.cancel();
     m_videoScanner.cancel();
     for (auto &sec : m_sec) sec->scanner.cancel();
@@ -1091,6 +1093,68 @@ void App::setVideoVolume(int percent)
     m_videoVolume = v;
     saveProfileSettings();
     emit videoVolumeChanged();
+}
+
+void App::setSharing(bool on)
+{
+    if (on == bool(m_share)) return;
+    if (!on) {
+        m_share.reset();
+        emit sharingChanged();
+        emit shareGuestsChanged();
+        return;
+    }
+    if (m_guest || m_profileId.isEmpty() || !m_db.isOpen() || !sharingAvailable()) return;   // a guest keeps nothing, so shares nothing
+    auto share = std::make_unique<Share>(m_db, profile().value(QStringLiteral("name")).toString());
+    // a fixed port first, so a router's port forwarding can point at it later; any free one if that is taken
+    if (!share->server.start(47800) && !share->server.start(0)) return;
+    connect(&share->server, &ShareServer::connectedGuestsChanged, this, &App::shareGuestsChanged);
+    connect(&share->server, &ShareServer::inviteRedeemed, this, &App::shareGuestsChanged);
+    m_share = std::move(share);
+    emit sharingChanged();
+    emit shareGuestsChanged();
+}
+
+QStringList App::sharingAddresses() const
+{
+    QStringList out;
+    if (!m_share) return out;
+    for (const QHostAddress &a : QNetworkInterface::allAddresses()) {
+        if (a.protocol() != QAbstractSocket::IPv4Protocol || a.isLoopback() || !ShareServer::isLocalAddress(a)) continue;
+        out << a.toString();
+    }
+    out.sort();
+    return out;
+}
+
+QVariantList App::shareGuests() const
+{
+    QVariantList out;
+    if (!m_share || !m_db.isOpen()) return out;
+    const QList<qint64> here = m_share->server.connectedGuests();
+    for (const ShareGuest &g : m_db.shareGuests())
+        out.append(QVariantMap{{QStringLiteral("id"), g.id}, {QStringLiteral("name"), g.name},
+                               {QStringLiteral("connected"), here.contains(g.id)}});
+    return out;
+}
+
+QVariantMap App::makeShareInvite(double hours)
+{
+    if (!m_share) return {};
+    const qint64 secs = qint64(qBound(10.0 / 60.0, hours, 24.0) * 3600.0);
+    const QString code = m_share->auth.createInvite(secs, QDateTime::currentSecsSinceEpoch());
+    const QStringList addrs = sharingAddresses();
+    const QString where = (addrs.isEmpty() ? QStringLiteral("this-computer") : addrs.first()) + QLatin1Char(':') + QString::number(sharingPort());
+    return {{QStringLiteral("code"), code}, {QStringLiteral("link"), QStringLiteral("hop://") + where + QLatin1Char('/') + code},
+            {QStringLiteral("hours"), hours}};
+}
+
+void App::removeShareGuest(qint64 id)
+{
+    if (!m_share) return;
+    m_share->auth.removeGuest(id);
+    m_share->server.kick(id);
+    emit shareGuestsChanged();
 }
 
 void App::setVideoChat(bool on)
