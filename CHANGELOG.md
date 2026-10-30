@@ -5,6 +5,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- **A movie volume that is separate from the music volume.** The video player has its own volume slider
+  (and a mute button) that goes from 0 to **150 %**: past the mark at 100 % it boosts quiet films. It is
+  saved per profile and never touches the music volume. Keys: `↑` / `↓` change it by 5, `m` mutes.
 - **Video categories.** The videos tab now has sub sections like music does: **movies, shows, cartoons**
   (western animation), **anime** and **other videos** (for things like videos you saved from YouTube to
   keep). Each has its own folders and its own "choose a folder" button (in the tab and under

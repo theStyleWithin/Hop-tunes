@@ -25,6 +25,8 @@ Item {
     readonly property string error: hop.gstVideo.error
     readonly property var subtitleTracks: hop.gstVideo.subtitleTracks
 
+    property int volume: hop.gstVideo.volume
+    onVolumeChanged: if (hop.gstVideo.volume !== volume) hop.gstVideo.volume = volume
     function play() { hop.gstVideo.play() }
     function pause() { hop.gstVideo.pause() }
     function togglePause() { hop.gstVideo.togglePause() }
