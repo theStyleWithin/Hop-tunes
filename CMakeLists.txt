@@ -52,6 +52,7 @@ add_library(hoptunes_core STATIC
     src/library/EpubBook.h    src/library/EpubBook.cpp
     src/library/ShareAuth.h   src/library/ShareAuth.cpp
     src/library/ShareServer.h src/library/ShareServer.cpp
+    src/library/ShareChoiceModel.h src/library/ShareChoiceModel.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent Qt6::Network PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)

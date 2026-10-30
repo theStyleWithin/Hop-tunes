@@ -14,6 +14,14 @@ Item {
 
     property string profileMsg: ""
     property var invite: ({})          // the invite code just made (sharing)
+    property var chooseGuest: ({})     // the guest whose approvals are open: {id, name}
+    property string chooseSection: "movies"
+    function openChoices(guest) {
+        chooseGuest = guest
+        chooseSection = "movies"
+        hop.openShareChoices(guest.id, chooseSection)
+        choosePopup.open()
+    }
     property bool confirmRemove: false
 
     // Segmented choice: one of a few options, the chosen one filled with the accent.
@@ -594,11 +602,11 @@ Item {
                 color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
             }
             Repeater {
-                model: hop.shareGuests
+                model: hop.shareGuests.length   // a count, so the rows are not rebuilt (and a click not lost) when a guest connects
                 delegate: Rectangle {
                     id: guestRow
-                    required property var modelData
                     required property int index
+                    readonly property var modelData: hop.shareGuests[index] || ({ id: 0, name: "", connected: false })
                     objectName: "shareGuest_" + index
                     Layout.fillWidth: true; Layout.maximumWidth: 760
                     implicitHeight: 56
@@ -615,6 +623,7 @@ Item {
                             Accessible.name: connected ? "connected" : "not connected"
                         }
                         Label { text: guestRow.modelData.name; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideRight; Layout.fillWidth: true  }
+                        PlainButton { objectName: "chooseFor_" + guestRow.index; text: "choose what they can see…"; onClicked: root.openChoices(guestRow.modelData) }
                         PlainButton { objectName: "removeGuest_" + guestRow.index; text: "remove"; danger: true; onClicked: hop.removeShareGuest(guestRow.modelData.id) }
                     }
                 }
@@ -659,5 +668,102 @@ Item {
         }
         Item { height: 18; width: 1 }
     }
+    }
+
+    // What one guest may see: nothing until ticked here, one row at a time (or a whole album / everything shown).
+    Popup {
+        id: choosePopup
+        objectName: "sharePopup"
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(860, (parent ? parent.width : 900) - 80)
+        height: Math.min(640, (parent ? parent.height : 700) - 80)
+        modal: true; focus: true
+        closePolicy: Popup.CloseOnEscape
+        padding: 20
+        background: Rectangle { color: Theme.bg; border { width: 1; color: Theme.line } }
+        onClosed: hop.openShareChoices(0, "")
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label { text: "what " + (root.chooseGuest.name || "they") + " can see"; color: Theme.text; font { family: Theme.font; pixelSize: 22 } }
+            Label {
+                text: "nothing is shared until you tick it. ticks are remembered for next time. ticking an album ticks all its songs."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 14 } wrapMode: Text.WordWrap; Layout.fillWidth: true
+            }
+            RowLayout {
+                spacing: 18
+                Repeater {
+                    model: [["movies", "movies"], ["shows", "shows"], ["cartoons", "cartoons"], ["anime", "anime"], ["other", "other videos"], ["music", "music"]]
+                    delegate: AbstractButton {
+                        id: tabBtn
+                        required property var modelData
+                        objectName: "chooseTab_" + modelData[0]
+                        hoverEnabled: true
+                        onClicked: { root.chooseSection = modelData[0]; hop.openShareChoices(root.chooseGuest.id, modelData[0]) }
+                        contentItem: Label { text: tabBtn.modelData[1]; color: root.chooseSection === tabBtn.modelData[0] ? hop.accent : (tabBtn.hovered ? Theme.text2 : Theme.dim)
+                                             font { family: Theme.font; pixelSize: 17 } }
+                        background: Item {}
+                    }
+                }
+            }
+            RowLayout {
+                spacing: 10
+                TextField {
+                    objectName: "shareChoiceFilter"
+                    Layout.preferredWidth: 280
+                    placeholderText: "filter"; placeholderTextColor: Theme.dim
+                    color: Theme.text; font { family: Theme.font; pixelSize: 15 }
+                    selectByMouse: true
+                    onTextChanged: hop.shareChoices.filter = text
+                    background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
+                }
+                PlainButton { objectName: "approveShown"; text: "approve all shown"; onClicked: hop.shareChoices.setShown(true) }
+                PlainButton { objectName: "hideShown"; text: "hide all shown"; onClicked: hop.shareChoices.setShown(false) }
+                Item { Layout.fillWidth: true }
+                Label { text: hop.shareChoices.approvedCount + " of " + hop.shareChoices.count + " approved"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+            }
+            Label {
+                visible: hop.shareChoices.count === 0
+                text: root.chooseSection === "music" ? "no music here." : "nothing in this section yet."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+            }
+            ListView {
+                id: choiceList
+                objectName: "shareChoiceList"
+                Layout.fillWidth: true; Layout.fillHeight: true
+                clip: true
+                model: hop.shareChoices
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                delegate: AbstractButton {
+                    id: choiceRow
+                    required property int index
+                    required property string title
+                    required property string subtitle
+                    required property int state
+                    objectName: "shareChoice_" + index
+                    width: choiceList.width - 12; height: 44
+                    hoverEnabled: true
+                    onClicked: hop.shareChoices.toggle(index)
+                    Accessible.name: title
+                    Accessible.checked: state === 2
+                    background: Rectangle { color: choiceRow.hovered ? Theme.hover : "transparent" }
+                    contentItem: RowLayout {
+                        spacing: 12
+                        Rectangle {
+                            objectName: "shareBox_" + choiceRow.index
+                            property int state: choiceRow.state
+                            width: 20; height: 20
+                            color: state === 0 ? "transparent" : hop.accent
+                            border { width: 2; color: state === 0 ? Theme.dim : hop.accent }
+                            Label { anchors.centerIn: parent; text: parent.state === 2 ? "\u2713" : (parent.state === 1 ? "\u2013" : ""); color: Theme.ink; font { family: Theme.font; pixelSize: 15 } }
+                        }
+                        Label { text: choiceRow.title; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: 16 } }
+                        Label { text: choiceRow.subtitle; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+                    }
+                }
+            }
+            PlainButton { objectName: "closeChoices"; text: "done"; Layout.alignment: Qt.AlignRight; onClicked: choosePopup.close() }
+        }
     }
 }

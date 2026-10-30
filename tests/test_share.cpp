@@ -2,6 +2,7 @@
 // Library sharing (docs/design-sharing.md): invites, guest keys, approvals, and the encrypted server.
 #include "library/ProfileDb.h"
 #include "library/ShareAuth.h"
+#include "library/ShareChoiceModel.h"
 #include "library/ShareServer.h"
 
 #include <QHostAddress>
@@ -185,6 +186,53 @@ private slots:
         QVERIFY(auth.guestSecret(dad).isEmpty());                                       // the key stops working
         QVERIFY(db.shareGrants(dad).isEmpty());                                         // and the approvals are gone
         QCOMPARE(db.shareGuests().size(), 1);
+    }
+
+    void choosingWhatAGuestMaySee()
+    {
+        QTemporaryDir dir;
+        ProfileDb db;
+        QVERIFY(db.open(dir.filePath(QStringLiteral("p.sqlite"))));
+        ShareAuth auth(db);
+        qint64 dad = 0;
+        QVERIFY(!auth.redeemInvite(ShareAuth::normalizeCode(auth.createInvite(3600, 0)).left(4), QStringLiteral("Dad"), 1, &dad).isEmpty());
+        ShareChoiceModel m(db);
+        const QList<ShareChoice> all{
+            {QStringLiteral("Alpha"), QString(), {QStringLiteral("/m/a.mkv")}},
+            {QStringLiteral("Beta"), QString(), {QStringLiteral("/m/b.mkv")}},
+            {QStringLiteral("Some Album"), QStringLiteral("An Artist · 3 songs"),
+             {QStringLiteral("/s/1.mp3"), QStringLiteral("/s/2.mp3"), QStringLiteral("/s/3.mp3")}}};
+        m.setChoices(dad, all);
+        QCOMPARE(m.count(), 3);
+        QCOMPARE(m.approvedCount(), 0);                                      // nothing approved to begin with
+        for (int i = 0; i < 3; ++i) QCOMPARE(m.index(i).data(ShareChoiceModel::StateRole).toInt(), 0);
+
+        m.toggle(2);                                                          // an album: all its songs at once
+        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 2);
+        QVERIFY(db.isShared(dad, QStringLiteral("/s/2.mp3")));
+        QVERIFY(db.setShareGrants(dad, {QStringLiteral("/s/2.mp3")}, false));   // one song taken back elsewhere
+        m.setChoices(dad, all);                                               // reload: shows as "partly"
+        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 1);
+        m.toggle(2);                                                          // partly -> everything
+        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 2);
+        m.toggle(2);                                                          // everything -> nothing
+        QCOMPARE(m.index(2).data(ShareChoiceModel::StateRole).toInt(), 0);
+        QVERIFY(db.shareGrants(dad).isEmpty());
+
+        m.setFilter(QStringLiteral("alp"));                                   // the filter narrows what "all shown" means
+        QCOMPARE(m.count(), 1);
+        m.setShown(true);
+        QCOMPARE(db.shareGrants(dad), QSet<QString>{QStringLiteral("/m/a.mkv")});
+        m.setFilter(QString());
+        QCOMPARE(m.count(), 3);
+        QCOMPARE(m.approvedCount(), 1);
+        m.setShown(false);
+        QVERIFY(db.shareGrants(dad).isEmpty());
+
+        m.setChoices(0, all);                                                 // no guest: nothing can be approved
+        m.toggle(0);
+        m.setShown(true);
+        QVERIFY(db.shareGrants(dad).isEmpty());
     }
 
     void localAddresses()

@@ -1149,6 +1149,32 @@ QVariantMap App::makeShareInvite(double hours)
             {QStringLiteral("hours"), hours}};
 }
 
+void App::openShareChoices(qint64 guestId, const QString &section)
+{
+    QList<ShareChoice> all;
+    if (m_share && !m_guest && m_db.isOpen() && guestId > 0) {
+        if (section == QLatin1String("music")) {
+            for (const Album &a : m_fullCollection.albums()) {
+                ShareChoice c;
+                c.title = a.title.isEmpty() ? tr("unknown album") : a.title;
+                c.subtitle = a.artist + QStringLiteral(" · ") + QString::number(a.trackRows.size())
+                           + (a.trackRows.size() == 1 ? QStringLiteral(" song") : QStringLiteral(" songs"));
+                for (int r : a.trackRows) if (r >= 0 && r < m_library.size()) c.paths << m_library[r].path;
+                if (!c.paths.isEmpty()) all << c;
+            }
+        } else if (videoCategories().contains(section)) {
+            for (const Video &v : m_videoIndex.videosUnder(allVideoFolders())) {
+                if (categoryOfVideo(v.path) != section) continue;
+                const QString mine = m_videoMeta.value(v.path).value(QStringLiteral("title")).toString();
+                all << ShareChoice{mine.isEmpty() ? v.displayTitle() : mine, QString(), {v.path}};
+            }
+            std::sort(all.begin(), all.end(), [](const ShareChoice &a, const ShareChoice &b) { return a.title.compare(b.title, Qt::CaseInsensitive) < 0; });
+        }
+    }
+    m_shareChoices.setFilter(QString());
+    m_shareChoices.setChoices(m_share && !m_guest ? guestId : 0, all);
+}
+
 void App::removeShareGuest(qint64 id)
 {
     if (!m_share) return;

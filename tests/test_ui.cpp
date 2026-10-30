@@ -1022,6 +1022,31 @@ private slots:
         }
         QTRY_VERIFY(!item("shareGuestDot_0")->property("connected").toBool());
 
+        // choosing what the guest may see: nothing at first; a tick shows the movie to them, a second tick takes it back
+        {
+            GuestLink peek(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
+            QVERIFY(peek.ok());
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"items\":[]"));   // the waiting room
+            QTest::qWait(150);
+            QVERIFY(click("chooseFor_0"));
+            QTRY_VERIFY(item("shareChoice_0") != nullptr && item("shareChoice_0")->isVisible());
+            QVERIFY(m_app->shareChoices()->count() >= 1);
+            QCOMPARE(m_app->shareChoices()->approvedCount(), 0);
+            shot("sharing-choose");
+            QVERIFY(click("shareChoice_0"));
+            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), 1);
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"title\""));  // now it is there
+            QVERIFY(click("shareChoice_0"));
+            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), 0);
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"items\":[]"));
+            QVERIFY(click("approveShown"));
+            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), m_app->shareChoices()->count());
+            QVERIFY(click("hideShown"));
+            QTRY_COMPARE(m_app->shareChoices()->approvedCount(), 0);
+            QVERIFY(click("closeChoices"));
+            QTRY_VERIFY(item("shareChoiceList") == nullptr || !item("shareChoiceList")->isVisible());
+        }
+
         QVERIFY(click("removeGuest_0"));
         QTRY_VERIFY(m_app->shareGuests().isEmpty());
         GuestLink gone(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));

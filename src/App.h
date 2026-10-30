@@ -9,6 +9,7 @@
 #include "library/SectionIndex.h"
 #include "library/SectionListModel.h"
 #include "library/ShareAuth.h"
+#include "library/ShareChoiceModel.h"
 #include "library/ShareServer.h"
 #include "library/SectionScanner.h"
 #include "library/Scanner.h"
@@ -131,6 +132,7 @@ class App : public QObject {
     Q_PROPERTY(bool sharingAvailable READ sharingAvailable CONSTANT)   // false when this computer has no TLS library
     Q_PROPERTY(int sharingPort READ sharingPort NOTIFY sharingChanged)
     Q_PROPERTY(QStringList sharingAddresses READ sharingAddresses NOTIFY sharingChanged)   // this computer's home-network addresses
+    Q_PROPERTY(hop::ShareChoiceModel *shareChoices READ shareChoices CONSTANT)   // what one guest may see: pick from it
     Q_PROPERTY(QVariantList shareGuests READ shareGuests NOTIFY shareGuestsChanged)   // [{id, name, connected}]
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
     Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
@@ -245,6 +247,7 @@ public:
     int sharingPort() const { return m_share ? m_share->server.port() : 0; }
     QStringList sharingAddresses() const;
     QVariantList shareGuests() const;
+    ShareChoiceModel *shareChoices() { return &m_shareChoices; }
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
@@ -350,6 +353,8 @@ public:
     // A one-time invite code for a new guest, valid for `hours` (between 10 minutes and a day): {code, link, hours}.
     Q_INVOKABLE QVariantMap makeShareInvite(double hours);
     Q_INVOKABLE void removeShareGuest(qint64 id);
+    // Fill the choosing list for one guest and one section: "movies", "shows", "cartoons", "anime", "other" or "music".
+    Q_INVOKABLE void openShareChoices(qint64 guestId, const QString &section);
     Q_INVOKABLE void addVideoCategoryFolder(const QString &category, const QUrl &folder);
     Q_INVOKABLE void removeVideoCategoryFolder(const QString &category, const QString &path);
     // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
@@ -446,6 +451,7 @@ private:
         ShareServer server;
     };
     std::unique_ptr<Share> m_share;
+    ShareChoiceModel m_shareChoices{m_db};
     QString m_statusNote;
     int m_videoVolume = 100;
     bool m_videoChat = false;
