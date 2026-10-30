@@ -82,6 +82,16 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.6.0" date="2026-10-30">
+      <description>
+        <p>Movie pages and a better video player.</p>
+        <ul>
+          <li>Clicking a movie opens its page with empty boxes you fill in yourself; playing is a button.</li>
+          <li>Watch in a window, in theater mode or fullscreen (settings, video settings).</li>
+          <li>Optional pretend livestream chat and pretend comments under videos, generated offline; both off by default.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.5.0" date="2026-10-30">
       <description>
         <p>Hop-tunes for Windows (experimental, install at your own risk: the developer never tests on Windows, only automated tests do; Windows testers wanted).</p>
