@@ -38,7 +38,7 @@ rules (pictures and ebooks are stream-to-view: shown, never saved).
   items, there are host-side shortcuts, each still an explicit action by the host: approve a whole album, show,
   folder or category, or approve everything matching a search. Nothing is ever approved automatically.
 - **Pending view:** items you have not decided about, so new additions are easy to review.
-- **Invites:** a one-time code (8 characters) with an expiry (10 minutes to 24 hours). Wrong guesses are rate
+- **Invites:** a one-time code (16 characters) with an expiry (10 minutes to 24 hours). Wrong guesses are rate
   limited and lock the invite after a few tries. After the first code a guest keeps a private key until removed.
 - **Limits:** how many guests at once, how many streams at once, and a bandwidth cap.
 - Whether the movie details you filled in are shown with approved movies (on by default, optional).
@@ -59,10 +59,13 @@ upload speed for every guest. Not in the first version.
   Endpoints (all need the guest's key and check the approval for every request): `hello`, `library` (only
   approved ids, titles, details), `thumb/<id>`, `stream/<id>` (range) and `subtitles/<id>`. **There is no endpoint
   that returns a whole file as a download, and stream links are short-lived.**
-- The invite carries the host's address and the **fingerprint of the host's certificate**, so the guest checks they
-  reached the right machine without a certificate authority.
-- The guest app fetches through a small local proxy that checks the fingerprint and hands the player (mpv or
-  GStreamer) a plain `127.0.0.1` address. The proxy keeps only a small in-memory buffer, nothing on disk.
+- **Encryption uses a pre-shared key, not certificates** (TLS 1.2 PSK with forward secrecy; nothing to generate, no
+  certificate authority, no fingerprints). A guest's first visit uses the invite code as the shared secret; after that,
+  the guest's private key. A wrong key fails the handshake, so a stranger cannot even reach the request stage.
+  Because the invite code is the secret that protects the first handshake, it is 16 characters (about 60 bits), shown
+  as `ABCD-EFGH-JKMN-PQRS`, and an invite is cancelled after five failed attempts.
+- The guest app fetches through a small local proxy that holds the key and hands the player (mpv or GStreamer) a
+  plain `127.0.0.1` address. The proxy keeps only a small in-memory buffer, nothing on disk.
 - **Same network:** the host is found automatically (mDNS) and its address is also in the invite.
 - **Over the internet (the hard part), with no accounts and no third-party services:** home routers block incoming
   connections, so the host's router must forward one port to the host's computer. To make that less painful:
