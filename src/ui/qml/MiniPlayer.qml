@@ -8,17 +8,25 @@ Rectangle {
     id: root
     signal openNowPlaying()
     readonly property var player: hop.player
+    property bool compact: false   // phones: song, play button and a thin progress line only
     color: Theme.bar
-    implicitHeight: 78
+    implicitHeight: compact ? 64 : 78
 
     Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top } height: 1; color: Theme.line }
+    Rectangle {   // phones: how far into the song
+        visible: root.compact && player.hasTrack
+        anchors { left: parent.left; top: parent.top }
+        height: 2; color: hop.accent
+        width: parent.width * Math.min(1, player.position / Math.max(1, player.duration))
+    }
 
     RowLayout {
-        anchors { fill: parent; leftMargin: 48; rightMargin: 48 }
-        spacing: 20
+        anchors { fill: parent; leftMargin: root.compact ? 12 : 48; rightMargin: root.compact ? 12 : 48 }
+        spacing: root.compact ? 10 : 20
 
         MouseArea {
             Layout.preferredWidth: 220
+            Layout.fillWidth: root.compact
             Layout.fillHeight: true
             cursorShape: Qt.PointingHandCursor
             onClicked: root.openNowPlaying()
@@ -40,7 +48,7 @@ Rectangle {
 
         HeartButton {
             objectName: "miniHeart"
-            visible: player.hasTrack
+            visible: player.hasTrack && !root.compact
             on: hop.currentHearted
             onClicked: hop.toggleHeartCurrent()
         }
@@ -49,17 +57,19 @@ Rectangle {
             spacing: 8
             TransportButton {
                 objectName: "shuffleButton"
+                visible: !root.compact
                 glyph: "shuffle"; iconSize: 15; active: player.shuffle
                 onClicked: player.shuffle = !player.shuffle
                 Accessible.name: player.shuffle ? "shuffle on" : "shuffle off"
                 ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: player.shuffle ? "shuffle: on" : "shuffle: off"
             }
-            TransportButton { glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
+            TransportButton { visible: !root.compact; glyph: "prev"; onClicked: player.previous(); enabled: player.hasTrack; Accessible.name: "previous" }
             TransportButton { glyph: player.playing ? "pause" : "play"; round: true; iconSize: 16; enabled: player.hasTrack || hop.songs.count > 0
                               onClicked: player.hasTrack ? player.toggle() : hop.playSongs(0); Accessible.name: player.playing ? "pause" : "play" }
-            TransportButton { glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
+            TransportButton { visible: !root.compact; glyph: "next"; onClicked: player.next(); enabled: player.hasTrack; Accessible.name: "next" }
             TransportButton {
                 objectName: "repeatButton"
+                visible: !root.compact
                 glyph: player.repeatMode === 2 ? "repeat1" : "repeat"; iconSize: 15; active: player.repeatMode !== 0
                 onClicked: player.cycleRepeat()
                 Accessible.name: ["repeat off", "repeat all", "repeat one"][player.repeatMode]
@@ -68,6 +78,7 @@ Rectangle {
         }
 
         RowLayout {
+            visible: !root.compact
             Layout.fillWidth: true
             spacing: 12
             Label { text: player.hasTrack ? hop.formatTime(Math.max(1, player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
@@ -96,6 +107,7 @@ Rectangle {
 
         // volume (spec §4.6)
         RowLayout {
+            visible: !root.compact
             spacing: 2
             property real lastVolume: 1.0
             id: vol
@@ -127,6 +139,7 @@ Rectangle {
         }
 
         Label {
+            visible: !root.compact
             text: hop.djSeed !== "" ? "smart dj" : (player.fading ? "crossfading" : (player.crossfadeMs > 0 ? "crossfade " + Math.round(player.crossfadeMs / 1000) + " s" : "gapless"))
             color: hop.djSeed !== "" || player.fading ? hop.accent : Theme.muted
             font { family: Theme.font; pixelSize: 13 }

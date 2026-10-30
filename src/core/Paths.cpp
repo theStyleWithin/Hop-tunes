@@ -62,4 +62,24 @@ bool ensureDirs()
     return ok;
 }
 
+QString folderPath(const QUrl &folder)
+{
+    if (folder.isLocalFile()) return folder.toLocalFile();
+    if (folder.scheme() == QLatin1String("content")
+        && folder.host() == QLatin1String("com.android.externalstorage.documents")) {
+        const QString tree = QUrl::fromPercentEncoding(folder.path().toUtf8());   // "/tree/primary:Music"
+        const int t = tree.indexOf(QLatin1String("/tree/"));
+        if (t >= 0) {
+            const QString id = tree.mid(t + 6);   // "primary:Music/Sub"
+            const int colon = id.indexOf(QLatin1Char(':'));
+            const QString volume = colon >= 0 ? id.left(colon) : id;
+            const QString rel = colon >= 0 ? id.mid(colon + 1) : QString();
+            const QString root = volume == QLatin1String("primary") ? QStringLiteral("/storage/emulated/0")
+                                                                    : QStringLiteral("/storage/") + volume;
+            return rel.isEmpty() ? root : root + QLatin1Char('/') + rel;
+        }
+    }
+    return folder.toString();
+}
+
 } // namespace hop::Paths

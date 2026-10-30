@@ -67,7 +67,7 @@ Rectangle {
         id: header
         opacity: root.chrome
         Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 450 } }
-        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 48; rightMargin: 48; topMargin: 24 }
+        anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 24 }
         AbstractButton {
             implicitWidth: 44; implicitHeight: 44
             onClicked: root.back()
@@ -80,7 +80,7 @@ Rectangle {
     }
 
     RowLayout {
-        anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: 48; rightMargin: 48; topMargin: 16; bottomMargin: 36 }
+        anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 16; bottomMargin: 36 }
         spacing: 48
 
         ColumnLayout {

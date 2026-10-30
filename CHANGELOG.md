@@ -5,8 +5,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
-- **Groundwork for an Android app** (not part of any release yet): the project now builds for Android as an app
-  shell that starts and shows the library screens; playback comes in a later step. See `docs/android.md`.
+- **An Android app (first version).** Hop-tunes now builds for Android phones and tablets: your library screens,
+  music playback, and a navigation you can switch in settings between a **bottom bar** and a **side drawer** (a
+  side rail or permanent drawer on tablets). Video playback is not on Android yet. See `docs/android.md`.
 
 ## [1.7.1] - 2026-10-30
 

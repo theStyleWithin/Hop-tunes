@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-// Stand-in for GStreamer on Android, where there is none yet (see CMakeLists.txt). Every call
-// does nothing and every "make an element" call returns null, so Player's own "the playbin is
-// missing" path runs and the app reports that playback is unavailable. It goes away when a
-// real Android playback engine replaces GStreamer there.
+// Stand-in for the few GStreamer calls Player makes, for Android where there is no GStreamer
+// (see CMakeLists.txt). GstShim.cpp backs the "playbin" with Qt Multimedia (QMediaPlayer) and turns
+// its signals into bus messages, so Player's queue, shuffle, repeat and resume logic is shared with
+// the desktop. Gapless and crossfade are not available here (the track ends, the next one starts).
 
 #include <cstdint>
 
@@ -23,6 +23,7 @@ typedef void (*GCallback)(void);
 struct GError { gchar *message = nullptr; };
 typedef struct _GstElement GstElement;
 typedef struct _GstBus GstBus;
+struct _GstMessage { int type = 0; void *src = nullptr; char *text = nullptr; };
 typedef struct _GstMessage GstMessage;
 typedef struct _GstElementFactory GstElementFactory;
 typedef struct _GstBin GstBin;
@@ -37,34 +38,34 @@ enum GstMessageType { GST_MESSAGE_UNKNOWN = 0, GST_MESSAGE_EOS = 1, GST_MESSAGE_
 #define GST_SECOND (1000000000LL)
 #define GST_MSECOND (1000000LL)
 #define GST_BIN(x) (reinterpret_cast<GstBin *>(x))
-#define GST_MESSAGE_SRC(m) (static_cast<void *>(nullptr))
-#define GST_OBJECT(o) (o)
-#define GST_MESSAGE_TYPE(m) (static_cast<GstMessageType>(0 * sizeof(m)))
+#define GST_MESSAGE_SRC(m) ((m)->src)
+#define GST_OBJECT(o) (static_cast<void *>(o))
+#define GST_MESSAGE_TYPE(m) (static_cast<GstMessageType>((m)->type))
 #define G_CALLBACK(f) (reinterpret_cast<GCallback>(f))
 #define g_signal_connect(i, s, c, d) (static_cast<void>(sizeof(i) + sizeof(c) + sizeof(d)))
-#define g_object_set(o, ...) (static_cast<void>(sizeof(o)))
 #define g_signal_handlers_disconnect_by_data(i, d) (static_cast<void>(sizeof(i) + sizeof(d)))
 
-inline void g_free(void *) {}
-inline void g_error_free(GError *) {}
-inline gboolean gst_is_initialized() { return TRUE; }
-inline void gst_init(int *, char ***) {}
-inline void gst_version(guint *a, guint *b, guint *c, guint *d) { *a = *b = *c = *d = 0; }
-inline gchar *gst_filename_to_uri(const char *, GError **) { return nullptr; }
-inline GstElementFactory *gst_element_factory_find(const char *) { return nullptr; }
-inline GstElement *gst_element_factory_make(const char *, const char *) { return nullptr; }
-inline GstElement *gst_parse_launch(const char *, GError **) { return nullptr; }
-inline GstElement *gst_parse_bin_from_description(const char *, gboolean, GError **) { return nullptr; }
-inline GstElement *gst_bin_get_by_name(GstBin *, const char *) { return nullptr; }
-inline GstBus *gst_element_get_bus(GstElement *) { return nullptr; }
-inline void *gst_object_ref_sink(void *o) { return o; }
-inline void gst_object_unref(void *) {}
-inline GstStateChangeReturn gst_element_set_state(GstElement *, GstState) { return GST_STATE_CHANGE_FAILURE; }
-inline GstStateChangeReturn gst_element_get_state(GstElement *, GstState *s, GstState *, int64_t) { if (s) *s = GST_STATE_NULL; return GST_STATE_CHANGE_FAILURE; }
-inline gboolean gst_element_seek_simple(GstElement *, GstFormat, GstSeekFlags, gint64) { return FALSE; }
-inline gboolean gst_element_query_position(GstElement *, GstFormat, gint64 *) { return FALSE; }
-inline gboolean gst_element_query_duration(GstElement *, GstFormat, gint64 *) { return FALSE; }
-inline GstMessage *gst_bus_pop(GstBus *) { return nullptr; }
-inline void gst_bus_set_flushing(GstBus *, gboolean) {}
-inline void gst_message_unref(GstMessage *) {}
-inline void gst_message_parse_error(GstMessage *, GError **e, gchar **d) { if (e) *e = nullptr; if (d) *d = nullptr; }
+void g_object_set(void *obj, const char *first, ...);   // "uri", "volume" matter here; the rest are accepted and ignored
+void g_free(void *p);
+void g_error_free(GError *e);
+gboolean gst_is_initialized();
+void gst_init(int *, char ***);
+void gst_version(guint *a, guint *b, guint *c, guint *d);
+gchar *gst_filename_to_uri(const char *path, GError **err);
+GstElementFactory *gst_element_factory_find(const char *name);
+GstElement *gst_element_factory_make(const char *name, const char *id);
+GstElement *gst_parse_launch(const char *, GError **);
+GstElement *gst_parse_bin_from_description(const char *, gboolean, GError **);
+GstElement *gst_bin_get_by_name(GstBin *, const char *);
+GstBus *gst_element_get_bus(GstElement *e);
+void *gst_object_ref_sink(void *o);
+void gst_object_unref(void *o);
+GstStateChangeReturn gst_element_set_state(GstElement *e, GstState s);
+GstStateChangeReturn gst_element_get_state(GstElement *e, GstState *s, GstState *, int64_t);
+gboolean gst_element_seek_simple(GstElement *e, GstFormat, GstSeekFlags, gint64 ns);
+gboolean gst_element_query_position(GstElement *e, GstFormat, gint64 *ns);
+gboolean gst_element_query_duration(GstElement *e, GstFormat, gint64 *ns);
+GstMessage *gst_bus_pop(GstBus *b);
+void gst_bus_set_flushing(GstBus *b, gboolean);
+void gst_message_unref(GstMessage *m);
+void gst_message_parse_error(GstMessage *m, GError **e, gchar **d);

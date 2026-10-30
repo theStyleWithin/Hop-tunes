@@ -57,16 +57,19 @@ Item {
     }
 
     Flickable {
+        id: settingsFlick
         anchors.fill: parent
         contentHeight: col.implicitHeight + 40
+        contentWidth: Theme.compact ? Math.max(width, 700) : width   // phones: pans sideways past the long texts
+        flickableDirection: Flickable.AutoFlickDirection
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { }
 
     ColumnLayout {
         id: col
-        width: parent.width - 96
-        x: 48; y: 28
+        width: settingsFlick.contentWidth - 2 * Theme.pad
+        x: Theme.pad; y: 28
         spacing: 18
 
         // ---- profile ------------------------------------------------------------
@@ -241,6 +244,17 @@ Item {
                 onPicked: function (v) { hop.reduceMotion = v }
             }
         }
+        RowLayout {
+            visible: Window.window !== null && Window.window.mobileNav === true
+            spacing: 16
+            Label { text: "navigation"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Choice {
+                objectName: "navStyleChoice"
+                options: [["bar", "bottom bar"], ["drawer", "side drawer"]]
+                value: hop.navStyle
+                onPicked: function (v) { hop.navStyle = v }
+            }
+        }
         Label {
             visible: hop.guest
             text: "guest mode does not keep these settings."
@@ -264,7 +278,7 @@ Item {
                 : hop.videoViewStyle === "theater" ? "a wide video across the window, with the details and your other videos underneath."
                 : "the video fills the whole screen."
             color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
         }
         RowLayout {
             spacing: 16
@@ -291,7 +305,7 @@ Item {
         Label {
             text: "a pretend live chat beside the video, as if you were watching a stream. nothing is streamed and nobody in it is real: the chatters are generated on your computer, react to the details you filled in on the movie's page, and answer when you type. clean is plain and tidy; lively adds colours, badges and emote chips."
             color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
         }
         RowLayout {
             spacing: 16
@@ -307,7 +321,7 @@ Item {
         Label {
             text: "a comments section under the video (window and theater only). off hides it completely. only mine is a box where you can write comments, as many as you like, and nobody ever answers. populated adds made-up commenters and replies, who also answer what you write after a little while. nobody is real; only your own comments are saved."
             color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
         }
         Label {
             text: "while watching: t switches to theater, f to fullscreen, c shows or hides the chat, esc steps back."

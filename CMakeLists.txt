@@ -119,7 +119,11 @@ add_library(hoptunes_playback STATIC
 )
 target_link_libraries(hoptunes_playback PUBLIC hoptunes_core Qt6::Gui)
 if(ANDROID)
-    target_include_directories(hoptunes_playback PRIVATE src/platform/android)
+    # Music on Android goes through Qt Multimedia, behind the small "gst/gst.h" stand-in.
+    find_package(Qt6 6.4 REQUIRED COMPONENTS Multimedia)
+    target_sources(hoptunes_playback PRIVATE src/platform/android/GstShim.cpp)
+    target_include_directories(hoptunes_playback PUBLIC src/platform/android)
+    target_link_libraries(hoptunes_playback PUBLIC Qt6::Multimedia)
 else()
     target_link_libraries(hoptunes_playback PUBLIC PkgConfig::GST PkgConfig::GIO
         PkgConfig::GST_PBUTILS PkgConfig::GST_APP PkgConfig::GST_VIDEO)

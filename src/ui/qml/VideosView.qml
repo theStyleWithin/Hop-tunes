@@ -95,7 +95,7 @@ Item {
             Label {
                 text: root.hints[root.cat] + " mkv, mp4, webm, mov, avi, wmv and a few others, anywhere under the folders you add here."
                 color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
-                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }
             Button {
                 objectName: root.cat === "movies" ? "videosChooseFolder" : "videosChooseFolder_" + root.cat

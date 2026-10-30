@@ -45,13 +45,21 @@ Item {
         menu.popup(src, x, y)
     }
 
-    ColumnLayout {
+    Flickable {   // phones: the three-pane layout is wider than the screen, so it pans sideways
+        id: panFlick
         anchors.fill: parent
+        contentWidth: Theme.compact ? Math.max(width, 700) : width
+        contentHeight: height
+        flickableDirection: Flickable.HorizontalFlick
+        boundsBehavior: Flickable.StopAtBounds
+        clip: true
+    ColumnLayout {
+        width: panFlick.contentWidth; height: panFlick.height
         spacing: 0
 
         // music · videos
         RowLayout {
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 14
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 14
             spacing: 28
             AbstractButton {
                 id: musicTab
@@ -141,7 +149,7 @@ Item {
         // ARTISTS · ALBUMS · SONGS · PLAYLISTS (genres: later)
         RowLayout {
             visible: root.collectionTab === "music"
-            Layout.leftMargin: 48; Layout.topMargin: 10
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 10
             spacing: 24
             Repeater {
                 model: [["ARTISTS", "artists"], ["ALBUMS", "albums"], ["SONGS", "songs"], ["GENRES", ""], ["PLAYLISTS", "playlists"]]
@@ -171,7 +179,7 @@ Item {
         ColumnLayout {
             visible: root.collectionTab === "music" && hop.librarySize === 0 && !hop.scanning
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.topMargin: 40
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 18
             Label {
                 text: hop.folders.length === 0 ? "add your music" : "no songs found yet"
@@ -182,7 +190,7 @@ Item {
                       ? "pick a folder and hop-tunes will find your songs. nothing is uploaded anywhere."
                       : "hop-tunes looked in " + hop.folders.join(", ") + " and found no audio files."
                 color: Theme.muted; font { family: Theme.font; pixelSize: 18 }
-                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }
             Button {
                 text: "choose a music folder…"
@@ -197,7 +205,7 @@ Item {
         ColumnLayout {
             visible: root.collectionTab === "music" && hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.topMargin: 40
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 12
             Label { text: "nothing matches \u201c" + hop.searchText + "\u201d"; color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light } }
             Label { text: "search looks at titles, artists, albums and genres."; color: Theme.muted; font { family: Theme.font; pixelSize: 16 } }
@@ -208,7 +216,7 @@ Item {
             onAddFolderRequested: function (c) { root.addVideoCategoryFolderRequested(c) }
             visible: root.collectionTab === "videos"
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
         }
 
         Repeater {
@@ -226,7 +234,7 @@ Item {
                     else hop.playSectionItem(secView.kind, row)
                 }
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+                Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
             }
         }
         PictureViewer { id: pictureViewer; model: hop.pictureAlbumItems }
@@ -235,7 +243,7 @@ Item {
         StackLayout {
             visible: root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
             currentIndex: ["artists", "albums", "songs", "playlists"].indexOf(root.mode)
 
             // ---- artists › albums › songs ----
@@ -472,6 +480,7 @@ Item {
                 }
             }
         }
+    }
     }
 
     Menu {

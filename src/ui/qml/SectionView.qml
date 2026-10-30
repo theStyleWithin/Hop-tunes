@@ -123,7 +123,7 @@ Item {
             Label {
                 text: root.meta.hint
                 color: Theme.muted; font { family: Theme.font; pixelSize: 16 }
-                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }
             Button {
                 objectName: "sectionChooseFolder_" + root.kind

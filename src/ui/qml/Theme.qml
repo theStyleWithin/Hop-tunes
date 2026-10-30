@@ -7,6 +7,8 @@ import QtQuick
 QtObject {
     readonly property bool light: typeof hop !== "undefined" && hop !== null && hop.lightTheme
     readonly property bool reduceMotion: typeof hop !== "undefined" && hop !== null && hop.reduceMotion
+    property bool compact: false        // phones (set by Main.qml): tighter margins
+    readonly property int pad: compact ? 12 : 48
     readonly property int motion: reduceMotion ? 0 : 180          // pivot transitions, ms (≤ 200)
 
     readonly property color bg:      light ? "#f4f4f6" : "#111113"

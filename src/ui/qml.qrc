@@ -16,6 +16,7 @@
     <file>qml/ProfileAvatar.qml</file>
     <file>qml/ProfileChip.qml</file>
     <file>qml/StatusNote.qml</file>
+    <file>qml/MobileNav.qml</file>
     <file>qml/PlainButton.qml</file>
     <file>qml/PinField.qml</file>
     <file>qml/HeartButton.qml</file>

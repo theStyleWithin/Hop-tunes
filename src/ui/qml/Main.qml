@@ -8,8 +8,14 @@ ApplicationWindow {
     id: win
     width: 1280
     height: 800
-    minimumWidth: 900
-    minimumHeight: 600
+    // phones and tablets: bottom bar / side drawer (MobileNav.qml) instead of the desktop's top pivots
+    property bool forceMobile: false   // tests and screenshots
+    readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
+    readonly property bool tablet: width >= 600
+    Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
+    readonly property int railWidth: !mobileNav || !tablet ? 0 : (hop.navStyle === "drawer" ? 240 : 84)
+    minimumWidth: mobileNav ? 0 : 900
+    minimumHeight: mobileNav ? 0 : 600
     visible: true
     title: hop.player.hasTrack ? hop.player.title + " · Hop-tunes" : "Hop-tunes"
     color: view === "now playing" ? Theme.bgDeep : Theme.bg
@@ -83,8 +89,12 @@ ApplicationWindow {
         visible: hop.profileReady
 
         // pivots, with the private status box at the right end (in the collection view)
+        Item {   // phones with the side drawer: room for the ☰ header
+            visible: win.mobileNav && !win.tablet && hop.navStyle === "drawer"
+            implicitHeight: 56
+        }
         Item {
-            visible: win.view !== "now playing"
+            visible: win.view !== "now playing" && !win.mobileNav
             Layout.fillWidth: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 24
             implicitHeight: pivots.implicitHeight
@@ -127,6 +137,7 @@ ApplicationWindow {
             id: stack
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.leftMargin: win.railWidth
             currentIndex: win.views.indexOf(win.view)
             // Slide-and-fade between pivots (spec §4.5: ≤ 200 ms, off with "reduce motion").
             transform: Translate { id: slide }
@@ -143,9 +154,24 @@ ApplicationWindow {
         }
 
         MiniPlayer {
+            compact: win.mobileNav && !win.tablet
             Layout.fillWidth: true
+            Layout.leftMargin: win.railWidth
             visible: win.view !== "now playing"
             onOpenNowPlaying: win.view = "now playing"
         }
+        Item {   // room for the phone's bottom bar
+            visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer"
+            implicitHeight: 72
+        }
+    }
+
+    MobileNav {
+        anchors.fill: parent
+        visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen
+        views: win.views
+        view: win.view
+        tablet: win.tablet
+        onPicked: function (v) { win.view = v }
     }
 }

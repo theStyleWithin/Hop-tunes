@@ -945,6 +945,69 @@ private slots:
         QTRY_COMPARE(item("statusNote")->property("text").toString(), QString());   // the box follows
     }
 
+    // Phones and tablets: a bottom bar or a side drawer, switched in settings, and a rail or a permanent
+    // drawer on a wide screen. (The desktop keeps its top pivots; forceMobile stands in for Android here.)
+    void phoneAndTabletNavigation()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {   // a failed check must not leave the window phone-sized for the tests after it
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setNavStyle(QStringLiteral("bar")); w->setProperty("forceMobile", false); w->resize(size); }
+        } restore{w, before, m_app.get()};
+        w->setProperty("forceMobile", true);
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setNavStyle(QStringLiteral("bar"));
+        w->resize(412, 860);
+        QTRY_COMPARE(w->property("tablet").toBool(), false);
+        QTRY_COMPARE(w->property("railWidth").toInt(), 0);
+        QVERIFY(w->property("mobileNav").toBool());
+        shot("android-phone-bar");
+
+        // the bottom bar moves between views
+        QTRY_VERIFY(item("navMenuButton") == nullptr || !item("navMenuButton")->isVisible());
+        QTRY_VERIFY(item("navTab_now playing") != nullptr && item("navTab_now playing")->isVisible());
+        QVERIFY(click("navTab_now playing"));
+        QTRY_COMPARE(w->property("view").toString(), QStringLiteral("now playing"));
+        shot("android-phone-nowplaying");
+        w->setProperty("view", QStringLiteral("settings"));
+        shot("android-phone-settings");
+        w->setProperty("view", QStringLiteral("quickplay"));
+        shot("android-phone-quickplay");
+        w->setProperty("view", QStringLiteral("collection"));
+
+        // the side drawer: a ☰ button opens it, and the choice is remembered in the profile
+        m_app->setNavStyle(QStringLiteral("drawer"));
+        QTRY_VERIFY(item("navMenuButton") != nullptr && item("navMenuButton")->isVisible());
+        QVERIFY(click("navMenuButton"));
+        QTRY_VERIFY(item("mobileNav") != nullptr && item("mobileNav")->property("drawerOpen").toBool());
+        shot("android-phone-drawer");
+        QCOMPARE(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("navStyle").toString(),
+                 QStringLiteral("drawer"));
+        QMetaObject::invokeMethod(item("mobileNav"), "closeDrawer");
+        QTRY_VERIFY(!item("mobileNav")->property("drawerOpen").toBool());
+        m_app->setNavStyle(QStringLiteral("nonsense"));   // anything else means the bottom bar
+        QCOMPARE(m_app->navStyle(), QStringLiteral("bar"));
+
+        // a tablet: a side rail, or a permanent drawer
+        w->resize(1000, 700);
+        QTRY_VERIFY(w->property("tablet").toBool());
+        QTRY_COMPARE(w->property("railWidth").toInt(), 84);
+        shot("android-tablet-rail");
+        m_app->setNavStyle(QStringLiteral("drawer"));
+        QTRY_COMPARE(w->property("railWidth").toInt(), 240);
+        shot("android-tablet-drawer");
+
+        m_app->setNavStyle(QStringLiteral("bar"));
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->property("railWidth").toInt(), 0);
+        QVERIFY(!w->property("mobileNav").toBool());
+        QTRY_COMPARE(w->size(), before);   // the desktop layout is back before the next test looks at it
+        QTRY_VERIFY(!item("navTab_collection") || !item("navTab_collection")->isVisible());
+        QTest::qWait(400);
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()

@@ -10,6 +10,11 @@
 #endif
 #include "ui/MpvVideoItem.h"
 
+#ifdef Q_OS_ANDROID
+#include <QJniEnvironment>
+#include <QJniObject>
+#include <QCoreApplication>
+#endif
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QFont>
@@ -91,6 +96,23 @@ int main(int argc, char *argv[])
 #endif
 
     QGuiApplication app(argc, argv);
+#ifdef Q_OS_ANDROID
+    {   // reading your own music, films and pictures needs the media permissions (asked once)
+        const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+        const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
+        const QStringList perms = sdk >= 33
+            ? QStringList{QStringLiteral("android.permission.READ_MEDIA_AUDIO"), QStringLiteral("android.permission.READ_MEDIA_VIDEO"),
+                          QStringLiteral("android.permission.READ_MEDIA_IMAGES")}
+            : QStringList{QStringLiteral("android.permission.READ_EXTERNAL_STORAGE")};
+        QJniEnvironment env;
+        jobjectArray arr = env->NewObjectArray(perms.size(), env->FindClass("java/lang/String"), nullptr);
+        for (int i = 0; i < perms.size(); ++i) {
+            const QJniObject name = QJniObject::fromString(perms[i]);
+            env->SetObjectArrayElement(arr, i, name.object<jstring>());
+        }
+        activity.callMethod<void>("requestPermissions", "([Ljava/lang/String;I)V", arr, jint(1));
+    }
+#endif
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setOrganizationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hop-tunes"));
