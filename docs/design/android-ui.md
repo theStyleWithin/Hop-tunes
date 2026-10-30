@@ -26,3 +26,12 @@
   from the right edge and can be closed; comments are not shown there. Settings › video player has the same
   choices as the desktop: live chat off / clean / lively, comments off / only mine / populated. Nobody in
   either is real; it is all generated on the device.
+
+## Video details page
+
+![Video details page](android-video-details-mockup.png)
+
+Same fields as the desktop page: poster (change / reset), title, year, rating, score, tagline, overview,
+genre, director, writers, studio, tags, and cast & crew (add person, role, photo, remove). On a phone it is
+one scrolling column with play and resume next to the poster; on a tablet the poster and play buttons sit on
+the left and the details on the right. Everything stays on the device.
