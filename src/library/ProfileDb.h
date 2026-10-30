@@ -41,6 +41,12 @@ struct VideoComment {
     qint64 at = 0;     // ms since epoch
 };
 
+struct ShareGuest {
+    qint64 id = 0;
+    QString name;
+    qint64 created = 0;   // seconds since epoch
+};
+
 struct AlbumOverride {
     QString title;
     QString art;   // absolute path to the profile's own copy of the chosen image
@@ -98,6 +104,15 @@ public:
     bool setAlbumOverrideArt(const QString &ref, const QString &artPath);   // "" clears it
     QHash<QString, QString> videoMetas() const;   // video path -> JSON of the details the user filled in
     bool setVideoMeta(const QString &videoPath, const QString &json);   // "" clears it
+    // Library sharing (see docs/design-sharing.md): who may connect, and exactly which items each may see.
+    // A guest is known only by the hash of the private key they were given; nothing is visible by default.
+    qint64 addShareGuest(const QString &name, const QString &keyHash, qint64 created);   // new id, 0 on failure
+    QList<ShareGuest> shareGuests() const;
+    bool removeShareGuest(qint64 id);                       // their approvals go with them
+    qint64 shareGuestByKeyHash(const QString &keyHash) const;   // 0 when unknown
+    bool setShareGrants(qint64 guestId, const QStringList &paths, bool granted);
+    bool isShared(qint64 guestId, const QString &path) const;
+    QSet<QString> shareGrants(qint64 guestId) const;
     QList<VideoComment> videoComments(const QString &videoPath) const;   // newest first
     qint64 addVideoComment(const QString &videoPath, const QString &text, qint64 at);   // new id, 0 on failure
     bool removeVideoComment(qint64 id);

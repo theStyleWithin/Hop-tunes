@@ -50,6 +50,7 @@ add_library(hoptunes_core STATIC
     src/library/SectionIndex.h src/library/SectionIndex.cpp
     src/library/SectionListModel.h src/library/SectionListModel.cpp
     src/library/EpubBook.h    src/library/EpubBook.cpp
+    src/library/ShareAuth.h   src/library/ShareAuth.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
@@ -164,6 +165,10 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_m4 tests/test_m4.cpp)
     target_link_libraries(test_m4 PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME playlists-search-dj COMMAND test_m4)
+
+    add_executable(test_share tests/test_share.cpp)
+    target_link_libraries(test_share PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME share COMMAND test_share)
 
     add_executable(test_player tests/test_player.cpp)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
