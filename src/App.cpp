@@ -20,6 +20,7 @@
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QNetworkInterface>
 #include <QFileInfo>
 #include <QRandomGenerator>
 #include <QSet>
@@ -39,6 +40,7 @@ static const QChar kRefSep(0x1f);
 
 App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 {
+    connect(&m_partyTimer, &QTimer::timeout, this, &App::pollParty);
     m_scanner.setArtCacheDir(Paths::artCacheDir());
     connect(&m_scanner, &Scanner::started, this, &App::scanningChanged);
     connect(&m_scanner, &Scanner::progress, this, [this](int done, int total) {
@@ -368,6 +370,8 @@ void App::activate(const QString &id, bool guest)
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_statusNote = s.value(QStringLiteral("statusNote")).toString().left(300);
+    m_sharePublicAddress = s.value(QStringLiteral("sharePublicAddress")).toString().left(120);
+    QTimer::singleShot(0, this, [this] { emit sharedHostsChanged(); });   // once the profile database is open
     m_videoVolume = qBound(0, s.value(QStringLiteral("videoVolume")).toInt(100), 150);
     m_videoChat = s.value(QStringLiteral("videoChat")).toBool(false);
     m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
@@ -424,6 +428,12 @@ void App::leaveProfile()
     if (m_book.isOpen()) closeBook(0.0);
     m_player.setQueue({}, 0);
     m_listen = {};
+    setSharing(false);            // nothing keeps listening once the profile is closed
+    ++m_shareGen;
+    m_shareProxy.forgetAll();
+    m_sharedHost = 0; m_sharedItems.clear(); m_sharedStatus.clear(); m_shareJoinMessage.clear(); m_shareJoining = false;
+    m_partyFollowing = false; m_sharedWatching = false; m_sharedParty = {}; m_partyTimer.stop();
+    emit sharedHostsChanged(); emit sharedLibraryChanged(); emit shareJoinChanged();
     m_scanner.cancel();
     m_videoScanner.cancel();
     for (auto &sec : m_sec) sec->scanner.cancel();
@@ -445,6 +455,7 @@ void App::leaveProfile()
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
     m_statusNote.clear();
+    m_sharePublicAddress.clear();
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
@@ -496,6 +507,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("statusNote"), m_statusNote);
+    s.insert(QStringLiteral("sharePublicAddress"), m_sharePublicAddress);
     s.insert(QStringLiteral("videoVolume"), m_videoVolume);
     s.insert(QStringLiteral("videoChat"), m_videoChat);
     s.insert(QStringLiteral("videoChatLook"), m_videoChatLook);
@@ -1047,6 +1059,7 @@ void App::clearVideoThumb(int row)
 QString App::videoPlayerTitle() const
 {
     if (m_videoPlayerPath.isEmpty()) return {};
+    if (!m_videoPlayerRemoteTitle.isEmpty()) return m_videoPlayerRemoteTitle;
     const QString mine = m_videoMeta.value(m_videoPlayerPath).value(QStringLiteral("title")).toString();
     return mine.isEmpty() ? QFileInfo(m_videoPlayerPath).completeBaseName() : mine;
 }
@@ -1068,6 +1081,8 @@ void App::playVideo(int row)
 
 void App::openVideoFile(const QString &path)
 {
+    m_videoPlayerSource.clear();
+    m_videoPlayerRemoteTitle.clear();
     m_videoPlayerPath = path;
     m_videoPlayerResumeMs = m_db.isOpen() ? m_db.videoProgress(path).positionMs : 0;
     m_videoPlayerOpen = true;
@@ -1097,6 +1112,459 @@ void App::setVideoVolume(int percent)
     m_videoVolume = v;
     saveProfileSettings();
     emit videoVolumeChanged();
+}
+
+static bool findHost(const ProfileDb &db, qint64 id, ShareHost *out);
+static ShareEndpoint endpointOf(const ShareHost &h);
+
+void App::setPartyHosting(bool on)
+{
+    if (!m_share || on == m_partyHosting) return;
+    m_partyHosting = on;
+    emit sharingChanged();
+}
+
+void App::reportPlayback(qint64 positionMs, bool paused)
+{
+    if (!m_partyHosting || m_videoPlayerPath.isEmpty() || m_videoPlayerPath.startsWith(QLatin1String("share:"))) return;
+    m_partyPos = positionMs; m_partyPaused = paused; m_partyPath = m_videoPlayerPath;
+    m_partyClock.restart();
+}
+
+PartyInfo App::partyNow() const
+{
+    PartyInfo p;
+    if (!m_partyHosting || !m_videoPlayerOpen || m_partyPath.isEmpty() || m_partyPath != m_videoPlayerPath || !m_partyClock.isValid()) return p;
+    p.active = true;
+    p.path = m_partyPath;
+    p.paused = m_partyPaused;
+    p.positionMs = m_partyPos + (m_partyPaused ? 0 : m_partyClock.elapsed());
+    p.title = videoPlayerTitle();
+    return p;
+}
+
+// ---- the guest's side of a party: look now and then, and follow when asked ----
+
+void App::setSharedWatching(bool on) { m_sharedWatching = on; updatePartyTimer(); if (on) pollParty(); }
+
+void App::updatePartyTimer()
+{
+    const bool run = m_sharedHost != 0 && (m_sharedWatching || m_partyFollowing);
+    m_partyTimer.setInterval(m_partyFollowing ? 1000 : 3000);
+    if (run && !m_partyTimer.isActive()) m_partyTimer.start();
+    else if (!run) m_partyTimer.stop();
+}
+
+void App::pollParty()
+{
+    ShareHost h;
+    if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h)) return;
+    const int gen = m_shareGen;
+    const qint64 id = h.id;
+    ShareClient::fetchJson(endpointOf(h), "GET", "/v1/party", {}, this, [this, gen, id, h](int status, const QJsonObject &o, const QString &) {
+        if (gen != m_shareGen || m_sharedHost != id) return;
+        if (status != 200) {
+            if (m_partyFollowing && ++m_partyMisses >= 4) { m_partyFollowing = false; updatePartyTimer(); }   // the host is gone
+            m_sharedParty = {};
+            emit sharedPartyChanged();
+            return;
+        }
+        m_partyMisses = 0;
+        const bool active = o.value("active").toBool();
+        const QString item = o.value("item").toString();
+        m_sharedParty = QVariantMap{{QStringLiteral("active"), active}, {QStringLiteral("item"), item}, {QStringLiteral("title"), o.value("title").toString()},
+                                    {QStringLiteral("host"), h.name}, {QStringLiteral("kind"), o.value("kind").toString()}};
+        if (m_partyFollowing) {
+            if (!active) { m_partyFollowing = false; updatePartyTimer(); }
+            else {
+                m_partyTargetMs = qint64(o.value("position").toDouble());
+                m_partyTargetPaused = o.value("paused").toBool();
+                m_partyTargetClock.restart();
+                if (!item.isEmpty() && item != m_partyItem && o.value("kind").toString() == QLatin1String("video")) {   // the host moved on to another film
+                    m_partyItem = item;
+                    openRemoteVideo(QStringLiteral("share:%1:%2").arg(id).arg(item), sharedStreamUrl(item), o.value("title").toString(), m_partyTargetMs);
+                }
+            }
+        }
+        emit sharedPartyChanged();
+    });
+}
+
+void App::joinParty()
+{
+    const QString item = m_sharedParty.value(QStringLiteral("item")).toString();
+    if (item.isEmpty() || m_sharedParty.value(QStringLiteral("kind")).toString() != QLatin1String("video")) return;
+    ShareHost h;
+    if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h)) return;
+    const int gen = m_shareGen;
+    ShareClient::fetchJson(endpointOf(h), "GET", "/v1/party", {}, this, [this, gen, h](int status, const QJsonObject &o, const QString &) {
+        if (gen != m_shareGen || status != 200 || !o.value("active").toBool() || o.value("item").toString().isEmpty()) return;
+        m_partyItem = o.value("item").toString();
+        m_partyTargetMs = qint64(o.value("position").toDouble());
+        m_partyTargetPaused = o.value("paused").toBool();
+        m_partyTargetClock.restart();
+        m_partyMisses = 0;
+        m_partyFollowing = true;
+        updatePartyTimer();
+        openRemoteVideo(QStringLiteral("share:%1:%2").arg(h.id).arg(m_partyItem), sharedStreamUrl(m_partyItem), o.value("title").toString(), m_partyTargetMs);
+        emit sharedPartyChanged();
+    });
+}
+
+QVariantMap App::partyAdviceFor(qint64 localMs, bool localPaused) const
+{
+    if (!m_partyFollowing) return {{QStringLiteral("seek"), -1}, {QStringLiteral("pause"), -1}};
+    const qint64 now = m_partyTargetMs + (m_partyTargetPaused ? 0 : m_partyTargetClock.elapsed());
+    const PartyAdvice a = partyAdvice(localMs, localPaused, now, m_partyTargetPaused);
+    return {{QStringLiteral("seek"), a.seekTo}, {QStringLiteral("pause"), a.pause}};
+}
+
+void App::setSharingInternet(bool on)
+{
+    if (!m_share || on == m_share->server.allowInternet()) return;
+    m_share->server.setAllowInternet(on);
+    emit sharingChanged();
+}
+
+void App::setSharingPublicAddress(const QString &text)
+{
+    // an address or a name, optionally with a port: letters, digits and . - : [ ] only, so it can only ever be an address
+    QString t = text.trimmed();
+    t.remove(QRegularExpression(QStringLiteral("[^A-Za-z0-9.:\\-\\[\\]]")));
+    t = t.left(120);
+    if (t == m_sharePublicAddress) return;
+    m_sharePublicAddress = t;
+    saveProfileSettings();
+    emit sharingChanged();
+}
+
+void App::setSharing(bool on)
+{
+    if (on == bool(m_share)) return;
+    if (!on) {
+        m_partyHosting = false;
+        m_share.reset();
+        keepShareModeValid();
+        emit sharingChanged();
+        emit shareGuestsChanged();
+        return;
+    }
+    if (m_guest || m_profileId.isEmpty() || !m_db.isOpen() || !sharingAvailable()) return;   // a guest keeps nothing, so shares nothing
+    auto share = std::make_unique<Share>(m_db, profile().value(QStringLiteral("name")).toString());
+    // tell the guest a song's title, artist, album and length, and a film's own title (what the host gave it)
+    share->server.setPartyProvider([this] { return partyNow(); });
+    m_partyHosting = false;   // every time sharing starts, nobody is following until the host says so
+    share->lib.setDescriber([this](const QString &path, ShareItem &it) {
+        const int row = m_libraryIndex.value(path, -1);
+        if (row >= 0 && row < m_library.size()) {
+            const Track &t = m_library[row];
+            it.title = t.displayTitle(); it.artist = t.displayArtist(); it.album = t.displayAlbum();
+            it.durationMs = t.durationMs; it.trackNo = t.trackNo;
+            return;
+        }
+        const QString mine = m_videoMeta.value(path).value(QStringLiteral("title")).toString();
+        if (!mine.isEmpty()) it.title = mine;
+    });
+    // a fixed port first, so a router's port forwarding can point at it later; any free one if that is taken
+    if (!share->server.start(47800) && !share->server.start(0)) {
+        m_sharingMessage = tr("sharing could not start: this computer would not let Hop-tunes listen for connections (a sandbox or a firewall may be blocking it).");
+        emit sharingChanged();
+        return;
+    }
+    m_sharingMessage.clear();
+    connect(&share->server, &ShareServer::connectedGuestsChanged, this, &App::shareGuestsChanged);
+    connect(&share->server, &ShareServer::inviteRedeemed, this, [this] { keepShareModeValid(); emit shareGuestsChanged(); });
+    m_share = std::move(share);
+    emit sharingChanged();
+    emit shareGuestsChanged();
+}
+
+QStringList App::sharingAddresses() const
+{
+    QStringList out;
+    if (!m_share) return out;
+    for (const QHostAddress &a : QNetworkInterface::allAddresses()) {
+        if (a.protocol() != QAbstractSocket::IPv4Protocol || a.isLoopback() || !ShareServer::isLocalAddress(a)) continue;
+        out << a.toString();
+    }
+    out.sort();
+    return out;
+}
+
+QVariantList App::shareGuests() const
+{
+    QVariantList out;
+    if (!m_share || !m_db.isOpen()) return out;
+    const QList<qint64> here = m_share->server.connectedGuests();
+    for (const ShareGuest &g : m_db.shareGuests())
+        out.append(QVariantMap{{QStringLiteral("id"), g.id}, {QStringLiteral("name"), g.name},
+                               {QStringLiteral("connected"), here.contains(g.id)}});
+    return out;
+}
+
+QVariantMap App::makeShareInvite(double hours)
+{
+    if (!m_share) return {};
+    const qint64 secs = qint64(qBound(10.0 / 60.0, hours, 24.0) * 3600.0);
+    const QString code = m_share->auth.createInvite(secs, QDateTime::currentSecsSinceEpoch());
+    const QStringList addrs = sharingAddresses();
+    // from outside the home, the invite carries the public address the host typed (with the port unless they gave one)
+    QString where;
+    if (m_share->server.allowInternet() && !m_sharePublicAddress.isEmpty()) {
+        where = m_sharePublicAddress;
+        if (where.count(QLatin1Char(':')) > 1 && !where.startsWith(QLatin1Char('[')))   // a bare IPv6 address needs brackets
+            where = QLatin1Char('[') + where + QLatin1Char(']');
+        const bool hasPort = where.startsWith(QLatin1Char('[')) ? where.contains(QStringLiteral("]:")) : where.count(QLatin1Char(':')) == 1;
+        if (!hasPort) where += QLatin1Char(':') + QString::number(sharingPort());
+    } else {
+        where = (addrs.isEmpty() ? QStringLiteral("this-computer") : addrs.first()) + QLatin1Char(':') + QString::number(sharingPort());
+    }
+    return {{QStringLiteral("code"), code}, {QStringLiteral("link"), QStringLiteral("hop://") + where + QLatin1Char('/') + code},
+            {QStringLiteral("hours"), hours}};
+}
+
+bool App::canChooseShares() const
+{
+    return m_share && !m_guest && m_db.isOpen() && !m_db.shareGuests().isEmpty();
+}
+
+void App::keepShareModeValid()
+{
+    const bool was = m_shareMode;
+    const qint64 oldTarget = m_shareTarget;
+    if (!canChooseShares()) { m_shareMode = false; m_shareTarget = 0; }
+    else {
+        bool found = false;
+        for (const ShareGuest &g : m_db.shareGuests()) if (g.id == m_shareTarget) found = true;
+        if (!found) m_shareTarget = m_db.shareGuests().first().id;
+    }
+    if (was != m_shareMode || oldTarget != m_shareTarget) emit shareModeChanged();
+}
+
+void App::setShareMode(bool on)
+{
+    if (on && !canChooseShares()) on = false;
+    if (on == m_shareMode) return;
+    m_shareMode = on;
+    if (on) keepShareModeValid();
+    emit shareModeChanged();
+}
+
+void App::setShareTarget(qint64 id)
+{
+    if (!canChooseShares() || id == m_shareTarget) return;
+    for (const ShareGuest &g : m_db.shareGuests())
+        if (g.id == id) { m_shareTarget = id; emit shareModeChanged(); emit shareRevisionChanged(); return; }
+}
+
+QString App::shareTargetName() const
+{
+    for (const ShareGuest &g : m_db.shareGuests()) if (g.id == m_shareTarget) return g.name;
+    return {};
+}
+
+int App::shareState(const QStringList &paths) const
+{
+    if (m_shareTarget <= 0 || paths.isEmpty() || !m_db.isOpen()) return 0;
+    const QSet<QString> have = m_db.shareGrants(m_shareTarget);
+    int in = 0;
+    for (const QString &p : paths) if (have.contains(p)) ++in;
+    return in == 0 ? 0 : in == paths.size() ? 2 : 1;
+}
+
+void App::toggleShare(const QStringList &paths)
+{
+    if (!m_shareMode || m_shareTarget <= 0 || paths.isEmpty()) return;
+    const bool approve = shareState(paths) != 2;
+    if (!m_db.setShareGrants(m_shareTarget, paths, approve)) return;
+    ++m_shareRevision;
+    emit shareRevisionChanged();
+}
+
+// ---- the guest's side ----------------------------------------------------------------------------------
+
+QVariantList App::sharedHosts() const
+{
+    QVariantList out;
+    if (!m_db.isOpen() || m_guest) return out;
+    for (const ShareHost &h : m_db.shareHosts())
+        out.append(QVariantMap{{QStringLiteral("id"), h.id}, {QStringLiteral("name"), h.name},
+                               {QStringLiteral("address"), h.address}, {QStringLiteral("port"), int(h.port)}});
+    return out;
+}
+
+static bool findHost(const ProfileDb &db, qint64 id, ShareHost *out)
+{
+    for (const ShareHost &h : db.shareHosts()) if (h.id == id) { *out = h; return true; }
+    return false;
+}
+
+static ShareEndpoint endpointOf(const ShareHost &h)
+{
+    return ShareEndpoint{h.address, h.port, "guest:" + QByteArray::number(h.guestId), QByteArray::fromHex(h.secret.toLatin1())};
+}
+
+void App::joinShare(const QString &link)
+{
+    if (m_guest || !m_db.isOpen() || m_shareJoining) return;
+    ShareClient::Invite inv;
+    if (!ShareClient::parseInvite(link, &inv)) {
+        m_shareJoinMessage = tr("that is not an invite link. it looks like hop://192.168.1.20:47800/ABCD-EFGH-JKMN-PQRS");
+        emit shareJoinChanged();
+        return;
+    }
+    m_shareJoining = true;
+    m_shareJoinMessage = tr("connecting…");
+    emit shareJoinChanged();
+    const int gen = m_shareGen;
+    const QString name = profile().value(QStringLiteral("name")).toString();
+    auto fail = [this, gen](const QString &why) {
+        if (gen != m_shareGen) return;
+        m_shareJoining = false;
+        m_shareJoinMessage = why;
+        emit shareJoinChanged();
+    };
+    ShareClient::redeem(inv, name, this, [this, gen, inv, fail](bool ok, qint64 gid, const QString &key, const QString &err) {
+        if (gen != m_shareGen || !m_db.isOpen()) return;
+        if (!ok) { fail(err); return; }
+        const ShareEndpoint ep{inv.address, inv.port, "guest:" + QByteArray::number(gid), QByteArray::fromHex(key.toLatin1())};
+        ShareClient::fetchJson(ep, "GET", "/v1/hello", {}, this, [this, gen, inv, gid, key, fail](int status, const QJsonObject &o, const QString &) {
+            if (gen != m_shareGen || !m_db.isOpen()) return;
+            const QString hostName = status == 200 && !o.value("name").toString().trimmed().isEmpty() ? o.value("name").toString().trimmed() : inv.address;
+            const qint64 id = m_db.addShareHost(ShareHost{0, hostName, inv.address, inv.port, gid, key, QDateTime::currentSecsSinceEpoch()});
+            if (!id) { fail(tr("could not save the invite")); return; }
+            m_shareJoining = false;
+            m_shareJoinMessage = tr("you joined %1. they choose what you can see; it appears in the \"shared\" tab of the collection.").arg(hostName);
+            emit shareJoinChanged();
+            emit sharedHostsChanged();
+            openSharedHost(id);
+        });
+    });
+}
+
+void App::openSharedHost(qint64 id)
+{
+    ShareHost h;
+    if (!m_db.isOpen() || !findHost(m_db, id, &h)) return;
+    m_sharedHost = id;
+    m_sharedItems.clear();
+    m_sharedStatus = tr("connecting…");
+    emit sharedLibraryChanged();
+    const int gen = m_shareGen;
+    ShareClient::fetchJson(endpointOf(h), "GET", "/v1/library", {}, this, [this, gen, id, h](int status, const QJsonObject &o, const QString &err) {
+        if (gen != m_shareGen || m_sharedHost != id) return;
+        m_sharedItems.clear();
+        if (status == 0) {
+            m_sharedStatus = tr("can't reach %1: %2. if the host's address changed, use \"change address\" above.")
+                                 .arg(h.name, err.isEmpty() ? tr("no answer") : err);
+        } else if (status != 200) {
+            m_sharedStatus = tr("%1 no longer lets you in.").arg(h.name);
+        } else {
+            for (const QJsonValue &v : o.value("items").toArray()) {
+                const QJsonObject it = v.toObject();
+                const QString kind = it.value("kind").toString();
+                const qint64 dur = qint64(it.value("duration").toDouble());
+                m_sharedItems.append(QVariantMap{{QStringLiteral("id"), it.value("id").toString()}, {QStringLiteral("title"), it.value("title").toString()},
+                                                 {QStringLiteral("kind"), kind}, {QStringLiteral("sizeText"), SectionListModel::formatSize(qint64(it.value("size").toDouble()))},
+                                                 {QStringLiteral("artist"), it.value("artist").toString()}, {QStringLiteral("album"), it.value("album").toString()},
+                                                 {QStringLiteral("trackNo"), it.value("trackNo").toInt()}, {QStringLiteral("durationMs"), dur},
+                                                 {QStringLiteral("durationText"), dur > 0 ? TrackListModel::formatDuration(dur) : QString()},
+                                                 {QStringLiteral("playable"), kind == QLatin1String("video") || kind == QLatin1String("audio")}});
+            }
+            m_sharedStatus = m_sharedItems.isEmpty() ? tr("%1 has not shared anything with you yet. ask them to tick what you can see.").arg(h.name) : QString();
+        }
+        emit sharedLibraryChanged();
+    });
+}
+
+void App::leaveSharedHost(qint64 id)
+{
+    if (!m_db.isOpen()) return;
+    m_db.removeShareHost(id);
+    if (m_sharedHost == id) { m_sharedHost = 0; m_sharedItems.clear(); m_sharedStatus.clear(); emit sharedLibraryChanged(); }
+    emit sharedHostsChanged();
+}
+
+QString App::setSharedHostAddress(qint64 id, const QString &text)
+{
+    const QUrl u(QStringLiteral("hop://") + text.trimmed());
+    if (!u.isValid() || u.host().isEmpty() || u.port() <= 0 || u.port() > 65535)
+        return tr("type it as address:port, like 192.168.1.20:47800");
+    if (!m_db.isOpen() || !m_db.setShareHostAddress(id, u.host(), quint16(u.port()))) return tr("could not save it");
+    emit sharedHostsChanged();
+    if (m_sharedHost == id) openSharedHost(id);
+    return {};
+}
+
+QString App::sharedStreamUrl(const QString &itemId)
+{
+    ShareHost h;
+    if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h) || !m_shareProxy.start()) return {};
+    return m_shareProxy.urlFor(endpointOf(h), itemId);
+}
+
+void App::playShared(const QString &itemId)
+{
+    QString title, kind;
+    for (const QVariant &v : m_sharedItems) {
+        const QVariantMap m = v.toMap();
+        if (m.value(QStringLiteral("id")).toString() == itemId) { title = m.value(QStringLiteral("title")).toString(); kind = m.value(QStringLiteral("kind")).toString(); }
+    }
+    if (kind.isEmpty()) return;
+    if (kind == QLatin1String("audio")) {   // the song, then the rest of what was shared, in order
+        ShareHost h;
+        if (!m_db.isOpen() || !findHost(m_db, m_sharedHost, &h) || !m_shareProxy.start()) { m_sharedStatus = tr("could not start the stream."); emit sharedLibraryChanged(); return; }
+        QList<Track> queue;
+        int start = 0;
+        for (const QVariant &v : m_sharedItems) {
+            const QVariantMap m = v.toMap();
+            if (m.value(QStringLiteral("kind")).toString() != QLatin1String("audio")) continue;
+            Track t;
+            t.id = -qint64(queue.size() + 1);   // not a library id: never mistaken for one of my own songs
+            t.path = m_shareProxy.urlFor(endpointOf(h), m.value(QStringLiteral("id")).toString());
+            t.title = m.value(QStringLiteral("title")).toString();
+            t.artist = m.value(QStringLiteral("artist")).toString();
+            t.album = m.value(QStringLiteral("album")).toString();
+            t.durationMs = m.value(QStringLiteral("durationMs")).toLongLong();
+            t.trackNo = m.value(QStringLiteral("trackNo")).toInt();
+            if (m.value(QStringLiteral("id")).toString() == itemId) start = queue.size();
+            queue << t;
+        }
+        m_djSeed.clear(); emit djChanged();
+        m_player.setQueue(queue, start);
+        return;
+    }
+    if (kind != QLatin1String("video")) {
+        m_sharedStatus = tr("that kind of file cannot be played from a shared library yet (beta).");
+        emit sharedLibraryChanged();
+        return;
+    }
+    const QString url = sharedStreamUrl(itemId);
+    if (url.isEmpty()) {
+        m_sharedStatus = tr("could not start the stream.");
+        emit sharedLibraryChanged();
+        return;
+    }
+    openRemoteVideo(QStringLiteral("share:%1:%2").arg(m_sharedHost).arg(itemId), url, title);
+}
+
+void App::openRemoteVideo(const QString &key, const QString &url, const QString &title, qint64 startMs)
+{
+    m_videoPlayerPath = key;
+    m_videoPlayerSource = url;
+    m_videoPlayerRemoteTitle = title;
+    m_videoPlayerResumeMs = startMs >= 0 ? startMs : (m_db.isOpen() ? m_db.videoProgress(key).positionMs : 0);
+    m_videoPlayerOpen = true;
+    emit videoPlayerChanged(); emit myVideoCommentsChanged();
+}
+
+void App::removeShareGuest(qint64 id)
+{
+    if (!m_share) return;
+    m_share->auth.removeGuest(id);
+    m_share->server.kick(id);
+    keepShareModeValid();
+    emit shareGuestsChanged();
 }
 
 void App::setVideoChat(bool on)
@@ -1159,7 +1627,10 @@ void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)
 {
     saveVideoProgress(positionMs, durationMs);
     m_videoPlayerOpen = false;
+    if (m_partyFollowing) { m_partyFollowing = false; updatePartyTimer(); emit sharedPartyChanged(); }   // closing the player leaves the party
     m_videoPlayerPath.clear();
+    m_videoPlayerSource.clear();
+    m_videoPlayerRemoteTitle.clear();
     emit videoPlayerChanged(); emit myVideoCommentsChanged();
 }
 
@@ -1212,7 +1683,7 @@ QVariantMap App::buildVideoDetail(const QString &path) const
     const Video *v = row >= 0 ? &vs[row] : nullptr;   // a file opened from outside the library has no row
     d[QStringLiteral("row")] = row;
     d[QStringLiteral("path")] = path;
-    d[QStringLiteral("fileName")] = v ? v->displayTitle() : QFileInfo(path).completeBaseName();
+    d[QStringLiteral("fileName")] = v ? v->displayTitle() : (path == m_videoPlayerPath && !m_videoPlayerRemoteTitle.isEmpty() ? m_videoPlayerRemoteTitle : QFileInfo(path).completeBaseName());
     d[QStringLiteral("thumb")] = v && !v->thumb.isEmpty() ? QUrl::fromLocalFile(v->thumb).toString() : QString();
     d[QStringLiteral("customThumb")] = v && v->customThumb;
     d[QStringLiteral("resolution")] = v ? VideoListModel::resolutionBadge(v->width, v->height) : QString();
@@ -1584,7 +2055,8 @@ void App::onTrackChanged()
         m_stats[m_listen.path].skipCount++;
     }
     const Track *t = m_player.currentTrack();
-    m_listen = t ? Listen{t->path, 0, t->durationMs, false} : Listen{};
+    // a song streamed from someone's shared library is not counted in my plays and skips
+    m_listen = t && !t->path.startsWith(QLatin1String("http://127.0.0.1:")) ? Listen{t->path, 0, t->durationMs, false} : Listen{};
 }
 
 bool App::currentHearted() const
@@ -1595,7 +2067,7 @@ bool App::currentHearted() const
 
 void App::toggleHeart(const QString &path)
 {
-    if (path.isEmpty() || !profileReady()) return;
+    if (path.isEmpty() || !profileReady() || path.startsWith(QLatin1String("http://127.0.0.1:"))) return;   // a shared song is not mine to heart
     TrackStats &st = m_stats[path];
     st.hearted = !st.hearted;
     m_db.setHearted(path, st.hearted);

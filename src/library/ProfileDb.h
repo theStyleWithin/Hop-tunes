@@ -41,6 +41,23 @@ struct VideoComment {
     qint64 at = 0;     // ms since epoch
 };
 
+struct ShareGuest {
+    qint64 id = 0;
+    QString name;
+    qint64 created = 0;   // seconds since epoch
+};
+
+// A library someone shared with this profile (the guest's side): where it is and the private key to get in.
+struct ShareHost {
+    qint64 id = 0;
+    QString name;
+    QString address;
+    quint16 port = 0;
+    qint64 guestId = 0;   // the id the host gave this profile
+    QString secret;       // the private key (64 hex characters)
+    qint64 added = 0;
+};
+
 struct AlbumOverride {
     QString title;
     QString art;   // absolute path to the profile's own copy of the chosen image
@@ -98,6 +115,20 @@ public:
     bool setAlbumOverrideArt(const QString &ref, const QString &artPath);   // "" clears it
     QHash<QString, QString> videoMetas() const;   // video path -> JSON of the details the user filled in
     bool setVideoMeta(const QString &videoPath, const QString &json);   // "" clears it
+    // Library sharing (see docs/design-sharing.md): who may connect, and exactly which items each may see.
+    // Each guest has a private key (64 hex characters) that is the shared secret of their encrypted connection, so
+    // the host has to keep it (it lives only in this profile's own database); nothing is visible by default.
+    qint64 addShareHost(const ShareHost &host);               // new id, 0 on failure
+    QList<ShareHost> shareHosts() const;
+    bool removeShareHost(qint64 id);
+    bool setShareHostAddress(qint64 id, const QString &address, quint16 port);
+    qint64 addShareGuest(const QString &name, const QString &secretHex, qint64 created);   // new id, 0 on failure
+    QList<ShareGuest> shareGuests() const;
+    bool removeShareGuest(qint64 id);                       // their approvals go with them
+    QByteArray shareGuestSecret(qint64 id) const;           // the guest's private key as bytes; empty when unknown
+    bool setShareGrants(qint64 guestId, const QStringList &paths, bool granted);
+    bool isShared(qint64 guestId, const QString &path) const;
+    QSet<QString> shareGrants(qint64 guestId) const;
     QList<VideoComment> videoComments(const QString &videoPath) const;   // newest first
     qint64 addVideoComment(const QString &videoPath, const QString &text, qint64 at);   // new id, 0 on failure
     bool removeVideoComment(qint64 id);

@@ -20,6 +20,12 @@
 #include <QQuickItem>
 #include <QQuickStyle>
 #include <QQuickWindow>
+#include <QSslCipher>
+#include <QSslConfiguration>
+#include <QSslPreSharedKeyAuthenticator>
+#include <QSslSocket>
+#include <QTcpSocket>
+#include <QHostAddress>
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <QtTest>
@@ -47,6 +53,45 @@ bool writeWav(const QString &path, int ms)
     f.write(QByteArray(int(bytes), '\0'));
     return true;
 }
+
+// A guest's side of one connection to a sharing host (see test_share.cpp for the full client): connect with an identity
+// and a shared key, send one request, return the body (empty if the handshake was refused). The host runs in this
+// thread, so waiting must keep the event loop going.
+struct GuestLink {
+    QSslSocket socket;
+    explicit GuestLink(quint16 port, const QByteArray &identity, const QByteArray &key)
+    {
+        QSslConfiguration conf = QSslConfiguration::defaultConfiguration();
+        conf.setProtocol(QSsl::TlsV1_2);
+        conf.setCiphers({QSslCipher(QStringLiteral("ECDHE-PSK-CHACHA20-POLY1305"), QSsl::TlsV1_2)});
+        conf.setPeerVerifyMode(QSslSocket::VerifyNone);
+        socket.setSslConfiguration(conf);
+        QObject::connect(&socket, &QSslSocket::preSharedKeyAuthenticationRequired, [identity, key](QSslPreSharedKeyAuthenticator *a) {
+            a->setIdentity(identity); a->setPreSharedKey(key);
+        });
+        socket.connectToHostEncrypted(QStringLiteral("127.0.0.1"), port);
+        QElapsedTimer t; t.start();
+        while (!socket.isEncrypted() && t.elapsed() < 4000 && socket.state() != QAbstractSocket::UnconnectedState) QTest::qWait(10);
+    }
+    bool ok() const { return socket.isEncrypted(); }
+    QByteArray request(const QByteArray &req)
+    {
+        socket.write(req);
+        QByteArray all;
+        QElapsedTimer t; t.start();
+        while (t.elapsed() < 3000) {
+            QTest::qWait(20);
+            all += socket.readAll();
+            const int e = all.indexOf("\r\n\r\n");
+            if (e >= 0) {
+                const int c = all.toLower().indexOf("content-length:");
+                const int want = c >= 0 ? all.mid(c + 15, all.indexOf('\r', c) - c - 15).trimmed().toInt() : 0;
+                if (all.size() >= e + 4 + want) return all.mid(e + 4);
+            }
+        }
+        return {};
+    }
+};
 
 // A tiny VP8+Opus/Matroska clip (see test_video.cpp for the same recipe) — enough for
 // VideoScanner to probe and for the Videos grid to show a real tile.
@@ -134,6 +179,21 @@ class TestUi : public QObject {
         const QPointF c = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
         QTest::mouseClick(window(), Qt::LeftButton, Qt::NoModifier, c.toPoint());
         return true;
+    }
+    // Click `name` until `appears` is on screen. A click can land before a freshly shown page has been laid out (slow CI
+    // machines), and then nothing opens; it is only repeated while the thing has not appeared, so it cannot double up.
+    bool clickUntilShown(const char *name, const char *appears, int timeoutMs = 8000)
+    {
+        QElapsedTimer t;
+        t.start();
+        while (t.elapsed() < timeoutMs) {
+            QQuickItem *i = find(window()->contentItem(), QLatin1String(appears));
+            if (i && i->isVisible()) return true;
+            click(name);
+            QTest::qWait(400);
+        }
+        QQuickItem *i = find(window()->contentItem(), QLatin1String(appears));
+        return i && i->isVisible();
     }
     void type(const char *name, const QString &text)
     {
@@ -393,7 +453,7 @@ private slots:
     void m4ManualPlaylist()
     {
         QVERIFY(click("tab_playlists"));
-        QVERIFY(click("newPlaylist"));
+        QVERIFY(clickUntilShown("newPlaylist", "namePromptField"));
         type("namePromptField", QStringLiteral("Road Trip"));
         QVERIFY(click("namePromptOk"));
         QTRY_VERIFY(m_app->selectedPlaylist().startsWith(QStringLiteral("pl:")));
@@ -422,7 +482,7 @@ private slots:
 
     void m4SmartPlaylist()
     {
-        QVERIFY(click("newSmartPlaylist"));
+        QVERIFY(clickUntilShown("newSmartPlaylist", "smartName"));
         type("smartName", QStringLiteral("Unplayed"));
         QTRY_VERIFY(item("smartPreview")->property("text").toString().contains(QStringLiteral("match")));
         shot("m4-smart-editor");
@@ -927,6 +987,300 @@ private slots:
         QVERIFY(r.property("answers").toBool());
         QVERIFY(r.property("answerDirector").toBool());
         QVERIFY(r.property("ago").toBool());
+    }
+
+    // Settings -> sharing: off at start, an invite code, a guest who uses it appears with a connected dot, and removing
+    // them works. The host is real here (it listens on this machine); the guest is a small client.
+    void sharingSettings()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
+        QVERIFY(!m_app->sharing());                                       // off whenever Hop-tunes starts
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("sharingChoice") != nullptr);
+        QVERIFY(item("sharingPanel") == nullptr || !item("sharingPanel")->isVisible());
+        QTest::qWait(150);
+        QVERIFY(click("choice_sharing"));
+        QTRY_VERIFY(m_app->sharing());
+        QVERIFY(m_app->sharingPort() > 0);
+        QTRY_VERIFY(item("sharingPanel") != nullptr && item("sharingPanel")->isVisible());
+        QVERIFY(item("sharingWhere")->property("text").toString().contains(QString::number(m_app->sharingPort())));
+        QVERIFY(m_app->shareGuests().isEmpty());
+
+        QTest::qWait(150);
+        QVERIFY(click("makeInvite"));
+        QTRY_VERIFY(item("inviteCode") != nullptr && item("inviteCode")->isVisible());
+        const QString code = item("inviteCode")->property("text").toString();
+        QCOMPARE(code.size(), 19);
+        QVERIFY(item("inviteLink")->property("text").toString().startsWith(QStringLiteral("hop://")));
+        QVERIFY(item("inviteLink")->property("text").toString().endsWith(code));
+        ensureVisible(item("shareGuest_0") ? item("shareGuest_0") : item("inviteLink"));
+        shot("sharing-invite");
+
+        // a guest uses the invite: they appear in the list, not yet connected
+        const QByteArray label = ShareAuth::normalizeCode(code).left(4).toLatin1();
+        GuestLink first(quint16(m_app->sharingPort()), "invite:" + label, ShareAuth::secretFromCode(code));
+        QVERIFY(first.ok());
+        const QByteArray body = "{\"name\":\"Guest A\"}";
+        const QByteArray reply = first.request("POST /v1/redeem HTTP/1.1\r\nContent-Length: " + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+        const QString key = QString::fromLatin1(reply).section(QStringLiteral("\"key\":\""), 1).section(QLatin1Char('"'), 0, 0);
+        const QString gid = QString::fromLatin1(reply).section(QStringLiteral("\"guest\":"), 1).section(QRegularExpression(QStringLiteral("[,}]")), 0, 0);
+        QCOMPARE(key.size(), 64);
+        QTRY_COMPARE(m_app->shareGuests().size(), 1);
+        QTRY_VERIFY(item("shareGuest_0") != nullptr && item("shareGuest_0")->isVisible());
+        QVERIFY(!item("shareGuestDot_0")->property("connected").toBool());
+
+        // when the guest comes back with their key, the dot lights up; when they leave, it goes out
+        {
+            GuestLink back(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
+            QVERIFY(back.ok());
+            QTRY_VERIFY(item("shareGuestDot_0")->property("connected").toBool());
+            ensureVisible(item("shareGuest_0"));
+            shot("sharing-guest");
+        }
+        QTRY_VERIFY(!item("shareGuestDot_0")->property("connected").toBool());
+
+        // choosing what the guest may see happens in the collection, and only once there is a guest
+        {
+            QVERIFY(m_app->canChooseShares());
+            window()->setProperty("view", QStringLiteral("collection"));
+            QVERIFY(click("subTab_videos"));
+            QTRY_VERIFY(item("shareModeToggle") != nullptr && item("shareModeToggle")->isVisible());
+            QVERIFY(!m_app->shareMode());
+            QVERIFY(item("shareBar") == nullptr || !item("shareBar")->isVisible());
+            GuestLink peek(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
+            QVERIFY(peek.ok());
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"items\":[]"));   // the waiting room
+
+            QVERIFY(click("shareModeToggle"));
+            QTRY_VERIFY(m_app->shareMode());
+            QTRY_VERIFY(item("shareBar") != nullptr && item("shareBar")->isVisible());
+            QCOMPARE(m_app->shareTargetName(), QStringLiteral("Guest A"));
+            QTRY_VERIFY(item("shareTick") != nullptr && item("shareTick")->isVisible());   // a tick on the video tile
+            shot("sharing-mode");
+            QVERIFY(click("shareTick"));                                              // a tick shows it to the guest
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"title\""));
+            QVERIFY(click("shareTick"));                                              // a second tick takes it back
+            QVERIFY(peek.request("GET /v1/library HTTP/1.1\r\n\r\n").contains("\"items\":[]"));
+
+            QVERIFY(click("shareDone"));
+            QTRY_VERIFY(!m_app->shareMode());
+            QTRY_VERIFY(item("shareTick") == nullptr || !item("shareTick")->isVisible());   // nothing changes when it is off
+            window()->setProperty("view", QStringLiteral("settings"));
+            QTRY_VERIFY(item("removeGuest_0") != nullptr && item("removeGuest_0")->isVisible());
+        }
+
+        QVERIFY(click("removeGuest_0"));
+        QTRY_VERIFY(m_app->shareGuests().isEmpty());
+        GuestLink gone(quint16(m_app->sharingPort()), "guest:" + gid.toLatin1(), QByteArray::fromHex(key.toLatin1()));
+        QVERIFY(!gone.ok());                                              // a removed guest's key is dead
+
+        const int port = m_app->sharingPort();
+        QVERIFY(click("choice_stopped"));
+        QTRY_VERIFY(!m_app->sharing());
+        QCOMPARE(m_app->sharingPort(), 0);
+        GuestLink late(quint16(port), "guest:1", QByteArray(32, 'x'));
+        QVERIFY(!late.ok());                                              // nothing listens any more
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // The host's "watch party" switch: off to begin with, and off again whenever sharing starts.
+    void watchPartySwitch()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
+        m_app->setSharing(true);
+        QVERIFY(!m_app->partyHosting());
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("partyChoice") != nullptr);
+        QTest::qWait(150);
+        QVERIFY(click("choice_partyon"));
+        QTRY_VERIFY(m_app->partyHosting());
+        QVERIFY(click("choice_partyoff"));
+        QTRY_VERIFY(!m_app->partyHosting());
+        m_app->setPartyHosting(true);
+        m_app->setSharing(false);
+        m_app->setSharing(true);
+        QVERIFY(!m_app->partyHosting());
+        m_app->setSharing(false);
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // "Also from outside": off to begin with, the invite then carries the public address the host typed, and the steps
+    // are there to read. (The address is cleaned so it can only ever be an address.)
+    void sharingFromOutside()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
+        m_app->setSharing(true);
+        QVERIFY(m_app->sharing());
+        QVERIFY(!m_app->sharingInternet());                              // home network only whenever sharing starts
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("sharingInternetChoice") != nullptr);
+        QVERIFY(item("outsidePanel") == nullptr || !item("outsidePanel")->isVisible());
+        const QString homeLink = m_app->makeShareInvite(1).value("link").toString();
+        QVERIFY(!homeLink.contains(QStringLiteral("203.0.113.5")));
+
+        QTest::qWait(150);
+        QVERIFY(click("choice_outside"));
+        QTRY_VERIFY(m_app->sharingInternet());
+        QTRY_VERIFY(item("outsidePanel") != nullptr && item("outsidePanel")->isVisible());
+        QVERIFY(item("sharePublicAddress") != nullptr);
+
+        // with no public address typed the invite still uses the home address; with one, that one (and the port)
+        QVERIFY(!m_app->makeShareInvite(1).value("link").toString().contains(QStringLiteral("203.0.113.5")));
+        m_app->setSharingPublicAddress(QStringLiteral("  203.0.113.5 "));
+        QCOMPARE(m_app->sharingPublicAddress(), QStringLiteral("203.0.113.5"));
+        QVERIFY(m_app->makeShareInvite(1).value("link").toString().startsWith(QStringLiteral("hop://203.0.113.5:%1/").arg(m_app->sharingPort())));
+        m_app->setSharingPublicAddress(QStringLiteral("my host!<x>.example.com:5000"));   // nothing but an address survives
+        QCOMPARE(m_app->sharingPublicAddress(), QStringLiteral("myhostx.example.com:5000"));
+        QVERIFY(m_app->makeShareInvite(1).value("link").toString().startsWith(QStringLiteral("hop://myhostx.example.com:5000/")));   // a port typed is kept
+        m_app->setSharingPublicAddress(QStringLiteral("2001:db8::1"));
+        QVERIFY(m_app->makeShareInvite(1).value("link").toString().startsWith(QStringLiteral("hop://[2001:db8::1]:%1/").arg(m_app->sharingPort())));
+        // the link a guest would paste is understood
+        ShareClient::Invite inv;
+        QVERIFY(ShareClient::parseInvite(m_app->makeShareInvite(1).value("link").toString(), &inv));
+        QCOMPARE(inv.address, QStringLiteral("2001:db8::1"));
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(st.value("sharePublicAddress").toString(), QStringLiteral("2001:db8::1"));   // remembered for next time
+
+        // the steps, with this computer's real port in them
+        QVERIFY(click("netHelpToggle"));
+        QTRY_VERIFY(item("netHelp") != nullptr && item("netHelp")->isVisible());
+        ensureVisible(item("netHelp"));
+        shot("sharing-outside");
+        QVERIFY(click("choice_home"));
+        QTRY_VERIFY(!m_app->sharingInternet());
+
+        m_app->setSharingPublicAddress(QString());
+        m_app->setSharing(false);                                         // switching it off and on again starts at home-only
+        m_app->setSharing(true);
+        QVERIFY(!m_app->sharingInternet());
+        m_app->setSharing(false);
+        window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // The guest's side (here one profile is both the host and a guest of itself over the loopback address): join with an
+    // invite link, see only what was ticked, read it through the local proxy, change the address, leave.
+    void guestSideJoinsBrowsesAndLeaves()
+    {
+        if (!App::sharingAvailable()) QSKIP("no TLS library on this machine");
+        QVERIFY(m_app->sharedHosts().isEmpty());
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(item("subTab_shared") == nullptr || !item("subTab_shared")->isVisible());   // no tab until there is something
+
+        m_app->setSharing(true);
+        QVERIFY(m_app->sharing());
+        const QString code = m_app->makeShareInvite(1).value("code").toString();
+        const QString link = QStringLiteral("hop://127.0.0.1:%1/%2").arg(m_app->sharingPort()).arg(code);
+
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("joinLink") != nullptr);
+        QVERIFY(item("betaTag") != nullptr);
+        type("joinLink", QStringLiteral("not a link"));
+        QVERIFY(click("joinButton"));
+        QTRY_VERIFY(item("joinMessage") != nullptr && item("joinMessage")->property("text").toString().contains(QStringLiteral("not an invite link")));
+        QVERIFY(m_app->sharedHosts().isEmpty());
+
+        type("joinLink", link);
+        QVERIFY(click("joinButton"));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->sharedHosts().size(), 1, 8000);
+        QTRY_VERIFY(item("joinMessage")->property("text").toString().contains(QStringLiteral("you joined")));
+        ensureVisible(item("joinMessage"));
+        shot("sharing-join");
+        const qint64 hostId = m_app->sharedHosts().first().toMap().value("id").toLongLong();
+        QCOMPARE(m_app->shareGuests().size(), 1);                              // the host side sees the guest too
+
+        // the waiting room: nothing is shared yet
+        window()->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(item("subTab_shared") != nullptr && item("subTab_shared")->isVisible());
+        QVERIFY(click("subTab_shared"));
+        QTRY_VERIFY(item("sharedStatus") != nullptr && item("sharedStatus")->isVisible());
+        QVERIFY(item("sharedStatus")->property("text").toString().contains(QStringLiteral("has not shared anything")));
+        QVERIFY(m_app->sharedItems().isEmpty());
+        shot("shared-waiting");
+
+        // the host ticks a film; the guest refreshes and sees exactly that
+        const QString film = m_app->videos()->videos().first().path;
+        const Track song = m_app->songs()->tracks().first();
+        m_app->setShareMode(true);
+        QVERIFY(m_app->shareMode());
+        m_app->toggleShare({film});
+        m_app->toggleShare({song.path});
+        m_app->setShareMode(false);
+        QVERIFY(click("sharedRefresh"));
+        QTRY_COMPARE(m_app->sharedItems().size(), 2);
+        QString songId, filmId;
+        for (const QVariant &v : m_app->sharedItems()) {
+            const QVariantMap m = v.toMap();
+            if (m.value("kind").toString() == QLatin1String("audio")) songId = m.value("id").toString();
+            else filmId = m.value("id").toString();
+        }
+        QVERIFY(!songId.isEmpty() && !filmId.isEmpty());
+        // a song comes with its tags, so the guest sees a title, artist, album and length rather than a file name
+        for (const QVariant &v : m_app->sharedItems()) {
+            const QVariantMap m = v.toMap();
+            if (m.value("id").toString() != songId) continue;
+            QCOMPARE(m.value("title").toString(), song.displayTitle());
+            QCOMPARE(m.value("artist").toString(), song.displayArtist());
+            QCOMPARE(m.value("album").toString(), song.displayAlbum());
+            QVERIFY(m.value("durationMs").toLongLong() > 0);
+            QVERIFY(m.value("playable").toBool());
+        }
+        QTRY_VERIFY(item("sharedItem_0") != nullptr && item("sharedItem_0")->isVisible());
+        shot("shared-library");
+
+        // a shared song plays through the music player from the local address, and is not counted as one of my own
+        m_app->playShared(songId);
+        QTRY_VERIFY(m_app->player()->hasTrack());
+        QCOMPARE(m_app->player()->queueLength(), 1);
+        QCOMPARE(m_app->player()->title(), song.displayTitle());
+        QVERIFY(m_app->player()->currentTrack()->path.startsWith(QStringLiteral("http://127.0.0.1:")));
+        if (GstElementFactory *f = gst_element_factory_find("souphttpsrc")) {   // the stream really arrives (where GStreamer can read http)
+            gst_object_unref(f);
+            QTRY_VERIFY_WITH_TIMEOUT(m_app->player()->position() > 0 || m_app->player()->duration() > 0, 10000);
+        }
+        m_app->toggleHeartCurrent();   // a shared song is not mine to heart
+        QVERIFY(!m_app->currentHearted());
+        m_app->player()->setQueue({}, 0);
+
+        // the player reads the film from the local address, byte for byte
+        const QString itemId = filmId;
+        const QUrl url(m_app->sharedStreamUrl(itemId));
+        QCOMPARE(url.host(), QStringLiteral("127.0.0.1"));
+        QFile f(film);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QByteArray want = f.readAll();
+        QTcpSocket s;
+        s.connectToHost(QHostAddress::LocalHost, quint16(url.port()));
+        QVERIFY(s.waitForConnected(2000));
+        s.write("GET " + url.path().toUtf8() + " HTTP/1.1\r\nHost: x\r\n\r\n");
+        QByteArray all;
+        QElapsedTimer t; t.start();
+        while (t.elapsed() < 8000 && (s.state() == QAbstractSocket::ConnectedState || s.bytesAvailable())) { QTest::qWait(10); all += s.readAll(); }
+        QCOMPARE(all.mid(all.indexOf("\r\n\r\n") + 4), want);
+
+        // a wrong address is refused with a reason; a changed one is taken and the library comes back
+        QVERIFY(!m_app->setSharedHostAddress(hostId, QStringLiteral("nonsense")).isEmpty());
+        QCOMPARE(m_app->setSharedHostAddress(hostId, QStringLiteral("127.0.0.1:%1").arg(m_app->sharingPort())), QString());
+        QTRY_COMPARE(m_app->sharedItems().size(), 2);
+        QCOMPARE(m_app->setSharedHostAddress(hostId, QStringLiteral("127.0.0.1:1")), QString());   // nothing there
+        QTRY_VERIFY(m_app->sharedStatus().contains(QStringLiteral("can't reach")));
+        shot("shared-unreachable");
+        QCOMPARE(m_app->setSharedHostAddress(hostId, QStringLiteral("127.0.0.1:%1").arg(m_app->sharingPort())), QString());
+        QTRY_COMPARE(m_app->sharedItems().size(), 2);
+
+        // the host takes the approval back: the next refresh shows nothing
+        m_app->setShareMode(true);
+        m_app->toggleShare({film, song.path});
+        m_app->setShareMode(false);
+        m_app->openSharedHost(hostId);
+        QTRY_VERIFY(m_app->sharedItems().isEmpty());
+
+        // leaving removes the library and the tab
+        QVERIFY(click("sharedLeave"));
+        QTRY_VERIFY(m_app->sharedHosts().isEmpty());
+        QTRY_VERIFY(item("subTab_shared") == nullptr || !item("subTab_shared")->isVisible());
+        m_app->removeShareGuest(m_app->shareGuests().first().toMap().value("id").toLongLong());
+        m_app->setSharing(false);
+        QVERIFY(click("subTab_music"));
     }
 
     // A private status box above the profile: empty by default, kept per profile, saved as you type.

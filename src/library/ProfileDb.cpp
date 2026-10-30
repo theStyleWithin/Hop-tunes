@@ -136,6 +136,28 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=8")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 8;
+    }
+    if (version < 9) {
+        // v9: library sharing: the people allowed to connect, and what each may see (default: nothing).
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE share_guest (id INTEGER PRIMARY KEY, name TEXT NOT NULL, "
+                    "secret TEXT NOT NULL UNIQUE, created INTEGER NOT NULL DEFAULT 0)")
+            && exec("CREATE TABLE share_grant (guest_id INTEGER NOT NULL, path TEXT NOT NULL, "
+                    "PRIMARY KEY (guest_id, path))")
+            && exec("PRAGMA user_version=9")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
+        version = 9;
+    }
+    if (version < 10) {
+        // v10: libraries other people shared with this profile (it is their guest), with the key for each.
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE share_host (id INTEGER PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL, "
+                    "port INTEGER NOT NULL, guest_id INTEGER NOT NULL, secret TEXT NOT NULL, added INTEGER NOT NULL DEFAULT 0)")
+            && exec("PRAGMA user_version=10")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -409,6 +431,111 @@ bool ProfileDb::setVideoMeta(const QString &videoPath, const QString &json)
     Stmt s(m_db, "INSERT INTO video_meta(path, json) VALUES(?1, ?2) ON CONFLICT(path) DO UPDATE SET json = ?2");
     s.bind(1, videoPath); s.bind(2, json);
     return s.run();
+}
+
+// ---- library sharing ----------------------------------------------------------------
+
+qint64 ProfileDb::addShareHost(const ShareHost &h)
+{
+    if (!m_db || h.address.isEmpty() || h.port == 0 || h.secret.size() != 64) return 0;
+    Stmt s(m_db, "INSERT INTO share_host(name, address, port, guest_id, secret, added) VALUES(?1, ?2, ?3, ?4, ?5, ?6)");
+    s.bind(1, h.name.left(60)); s.bind(2, h.address); s.bind(3, int(h.port)); s.bind(4, h.guestId); s.bind(5, h.secret); s.bind(6, h.added);
+    return s.run() ? sqlite3_last_insert_rowid(m_db) : 0;
+}
+
+QList<ShareHost> ProfileDb::shareHosts() const
+{
+    QList<ShareHost> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT id, name, address, port, guest_id, secret, added FROM share_host ORDER BY added, id");
+    while (s.step() == SQLITE_ROW)
+        out.append(ShareHost{s.i64(0), s.str(1), s.str(2), quint16(s.i32(3)), s.i64(4), s.str(5), s.i64(6)});
+    return out;
+}
+
+bool ProfileDb::removeShareHost(qint64 id)
+{
+    if (!m_db) return false;
+    Stmt s(m_db, "DELETE FROM share_host WHERE id = ?1");
+    s.bind(1, id);
+    return s.run();
+}
+
+bool ProfileDb::setShareHostAddress(qint64 id, const QString &address, quint16 port)
+{
+    if (!m_db || address.isEmpty() || port == 0) return false;
+    Stmt s(m_db, "UPDATE share_host SET address = ?2, port = ?3 WHERE id = ?1");
+    s.bind(1, id); s.bind(2, address); s.bind(3, int(port));
+    return s.run();
+}
+
+qint64 ProfileDb::addShareGuest(const QString &name, const QString &secretHex, qint64 created)
+{
+    if (!m_db || secretHex.size() != 64) return 0;
+    Stmt s(m_db, "INSERT INTO share_guest(name, secret, created) VALUES(?1, ?2, ?3)");
+    s.bind(1, name.left(60)); s.bind(2, secretHex); s.bind(3, created);
+    return s.run() ? sqlite3_last_insert_rowid(m_db) : 0;
+}
+
+QList<ShareGuest> ProfileDb::shareGuests() const
+{
+    QList<ShareGuest> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT id, name, created FROM share_guest ORDER BY created, id");
+    while (s.step() == SQLITE_ROW) out.append(ShareGuest{s.i64(0), s.str(1), s.i64(2)});
+    return out;
+}
+
+bool ProfileDb::removeShareGuest(qint64 id)
+{
+    if (!m_db) return false;
+    Stmt g(m_db, "DELETE FROM share_grant WHERE guest_id = ?1");
+    g.bind(1, id);
+    if (!g.run()) return false;
+    Stmt s(m_db, "DELETE FROM share_guest WHERE id = ?1");
+    s.bind(1, id);
+    return s.run();
+}
+
+QByteArray ProfileDb::shareGuestSecret(qint64 id) const
+{
+    if (!m_db || id <= 0) return {};
+    Stmt s(m_db, "SELECT secret FROM share_guest WHERE id = ?1");
+    s.bind(1, id);
+    return s.step() == SQLITE_ROW ? QByteArray::fromHex(s.str(0).toLatin1()) : QByteArray();
+}
+
+bool ProfileDb::setShareGrants(qint64 guestId, const QStringList &paths, bool granted)
+{
+    if (!m_db || guestId <= 0) return false;
+    if (paths.isEmpty()) return true;
+    if (!exec("BEGIN")) return false;
+    Stmt s(m_db, granted ? "INSERT OR IGNORE INTO share_grant(guest_id, path) VALUES(?1, ?2)"
+                         : "DELETE FROM share_grant WHERE guest_id = ?1 AND path = ?2");
+    for (const QString &p : paths) {
+        s.bind(1, guestId); s.bind(2, p);
+        if (s.step() != SQLITE_DONE) { exec("ROLLBACK"); return false; }
+        s.reset();
+    }
+    return exec("COMMIT");
+}
+
+bool ProfileDb::isShared(qint64 guestId, const QString &path) const
+{
+    if (!m_db || guestId <= 0) return false;
+    Stmt s(m_db, "SELECT 1 FROM share_grant WHERE guest_id = ?1 AND path = ?2");
+    s.bind(1, guestId); s.bind(2, path);
+    return s.step() == SQLITE_ROW;
+}
+
+QSet<QString> ProfileDb::shareGrants(qint64 guestId) const
+{
+    QSet<QString> out;
+    if (!m_db || guestId <= 0) return out;
+    Stmt s(m_db, "SELECT path FROM share_grant WHERE guest_id = ?1");
+    s.bind(1, guestId);
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0));
+    return out;
 }
 
 QList<VideoComment> ProfileDb::videoComments(const QString &videoPath) const

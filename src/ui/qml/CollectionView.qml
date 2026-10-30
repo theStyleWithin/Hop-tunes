@@ -84,6 +84,18 @@ Item {
                     background: Item {}
                 }
             }
+            // libraries other people shared with this profile: the tab exists only once you have joined one
+            AbstractButton {
+                id: sharedTab
+                objectName: "subTab_shared"
+                visible: hop.sharedHosts.length > 0
+                hoverEnabled: true
+                onClicked: root.collectionTab = "shared"
+                contentItem: Label { text: "shared"; color: root.collectionTab === "shared" ? hop.accent : (sharedTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: 22 } }
+                background: Item {}
+            }
+            Connections { target: hop; function onSharedHostsChanged() { if (hop.sharedHosts.length === 0 && root.collectionTab === "shared") root.collectionTab = "music" } }
             Item { Layout.preferredWidth: 20 }
             // instant search (spec §4.2)
             TextField {
@@ -130,12 +142,69 @@ Item {
                 color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             }
             Item { Layout.fillWidth: true }
+            // choose what guests may see; there only while sharing is on and there is a guest
+            AbstractButton {
+                id: shareToggle
+                objectName: "shareModeToggle"
+                visible: hop.canChooseShares
+                hoverEnabled: true
+                onClicked: hop.shareMode = !hop.shareMode
+                Accessible.name: "choose what guests can see"
+                Accessible.checked: hop.shareMode
+                contentItem: Label {
+                    text: "share"
+                    color: hop.shareMode ? hop.accent : (shareToggle.hovered ? Theme.text2 : Theme.muted)
+                    font { family: Theme.font; pixelSize: 16; underline: shareToggle.hovered }
+                }
+                background: Item {}
+            }
             // centred on this row but adding nothing to its height, so the tabs stay exactly where they were
             Item {
                 Layout.preferredWidth: tabChip.implicitWidth; Layout.preferredHeight: 0; Layout.alignment: Qt.AlignVCenter
                 ProfileChip { id: tabChip; anchors { right: parent.right; verticalCenter: parent.verticalCenter } }
             }
             Shortcut { sequences: ["Ctrl+F", "/"]; enabled: hop.profileReady && search.visible; onActivated: { root.mode = root.mode === "playlists" ? "songs" : root.mode; search.forceActiveFocus(); search.selectAll() } }
+        }
+
+        // while choosing what a guest may see: whose list this is, and how it works
+        RowLayout {
+            visible: hop.shareMode
+            objectName: "shareBar"
+            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 10
+            spacing: 14
+            Label { text: "choosing what"; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } }
+            Repeater {
+                model: hop.shareGuests.length   // a count, so the buttons are not rebuilt when a guest connects
+                delegate: AbstractButton {
+                    id: whoBtn
+                    required property int index
+                    readonly property var g: hop.shareGuests[index] || ({ id: 0, name: "" })
+                    objectName: "shareWho_" + index
+                    hoverEnabled: true
+                    onClicked: hop.shareTarget = g.id
+                    contentItem: Label {
+                        text: whoBtn.g.name
+                        color: hop.shareTarget === whoBtn.g.id ? Theme.ink : Theme.text
+                        font { family: Theme.font; pixelSize: 15 }
+                        horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                    }
+                    background: Rectangle {
+                        implicitHeight: 30; implicitWidth: Math.max(60, whoBtn.contentItem.implicitWidth + 24)
+                        color: hop.shareTarget === whoBtn.g.id ? hop.accent : (whoBtn.hovered ? Theme.hover : "transparent")
+                        border { width: 1; color: hop.shareTarget === whoBtn.g.id ? hop.accent : Theme.line }
+                    }
+                }
+            }
+            Label { text: "can see. tick what to share: they see only what is ticked."; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } }
+            Item { Layout.fillWidth: true }
+            AbstractButton {
+                id: shareDone
+                objectName: "shareDone"
+                hoverEnabled: true
+                onClicked: hop.shareMode = false
+                contentItem: Label { text: "done"; color: shareDone.hovered ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 15; underline: shareDone.hovered } }
+                background: Item {}
+            }
         }
 
         // ARTISTS · ALBUMS · SONGS · PLAYLISTS (genres: later)
@@ -228,6 +297,12 @@ Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
             }
+        }
+        SharedView {
+            objectName: "sharedView"
+            visible: root.collectionTab === "shared"
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
         }
         PictureViewer { id: pictureViewer; model: hop.pictureAlbumItems }
         EbookReader { id: ebookReader }
@@ -408,6 +483,7 @@ Item {
                     width: allAlbums.cellWidth - 18; height: allAlbums.cellHeight
                     onClicked: { hop.openAlbum(index); root.mode = "artists" }
                     Accessible.name: title + ", " + artist
+                    ShareTick { x: 6; y: 6; paths: hop.albumPaths(tile.index) }
                     MouseArea {
                         anchors.fill: parent; acceptedButtons: Qt.RightButton
                         onClicked: function (mouse) { root.albumMenu(hop.albumPaths(tile.index), hop.albumRef(tile.index), tile.title, function () { hop.playTile("album", hop.albumRef(tile.index)) }, tile, mouse.x, mouse.y) }

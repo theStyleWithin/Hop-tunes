@@ -13,6 +13,8 @@ Item {
     signal addSectionFolderRequested(string kind)
 
     property string profileMsg: ""
+    property var invite: ({})          // the invite code just made (sharing)
+    property bool showNetHelp: false
     property bool confirmRemove: false
 
     // Segmented choice: one of a few options, the chosen one filled with the accent.
@@ -501,6 +503,263 @@ Item {
             }
             PlainButton { visible: root.confirmRemove; text: "cancel"; onClicked: root.confirmRemove = false }
             PlainButton { visible: root.confirmRemove; text: "remove"; danger: true; onClicked: { root.confirmRemove = false; root.profileMsg = hop.removeProfile() } }
+        }
+
+        // ---- sharing (the host's side) -----------------------------------------------
+        Connections { target: hop; function onSharingChanged() { if (!hop.sharing) root.invite = ({}) } }
+        RowLayout {
+            visible: !hop.guest
+            Layout.topMargin: 28
+            spacing: 12
+            Label { text: "sharing"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
+            Label {
+                objectName: "betaTag"
+                text: "party watch beta"; color: Theme.ink
+                font { family: Theme.font; pixelSize: 12; weight: Font.Medium }
+                leftPadding: 8; rightPadding: 8; topPadding: 2; bottomPadding: 2
+                background: Rectangle { color: hop.accent }
+            }
+        }
+        Label {
+            visible: !hop.guest
+            text: "let people you trust watch and listen to what you approve, from their own Hop-tunes. nothing is shared until you approve it, guests can only stream (never download), and sharing is off every time you start Hop-tunes."
+            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+        }
+        Label {
+            visible: !hop.guest && !hop.sharingAvailable
+            text: "sharing is not available on this computer: it needs the system's encryption library (OpenSSL), which was not found."
+            color: Theme.danger; font { family: Theme.font; pixelSize: 14 }
+            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+        }
+        RowLayout {
+            visible: !hop.guest && hop.sharingAvailable
+            spacing: 16
+            Label { text: "sharing"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Choice {
+                objectName: "sharingChoice"
+                options: [["stopped", "off"], ["sharing", "on"]]
+                value: hop.sharing ? "sharing" : "stopped"
+                onPicked: function (v) { hop.sharing = (v === "sharing") }
+            }
+        }
+        ColumnLayout {
+            visible: !hop.guest && hop.sharing
+            objectName: "sharingPanel"
+            Layout.fillWidth: true
+            spacing: 10
+            Label {
+                objectName: "sharingWhere"
+                text: "you are sharing. on this network your address is " + (hop.sharingAddresses.length > 0 ? hop.sharingAddresses.join(" or ") : "(not connected to a network)") + ", port " + hop.sharingPort + "."
+                color: Theme.text2; font { family: Theme.font; pixelSize: 15 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+
+            Label {
+                visible: hop.sharingMessage !== ""
+                text: hop.sharingMessage; color: Theme.danger; font { family: Theme.font; pixelSize: 14 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+            RowLayout {
+                spacing: 16
+                Label { text: "who can connect"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140; Layout.topMargin: 6 }
+                Choice {
+                    objectName: "sharingInternetChoice"
+                    options: [["home", "this network only"], ["outside", "also from outside"]]
+                    value: hop.sharingInternet ? "outside" : "home"
+                    onPicked: function (v) { hop.sharingInternet = (v === "outside") }
+                }
+            }
+            ColumnLayout {
+                objectName: "outsidePanel"
+                visible: hop.sharingInternet
+                Layout.fillWidth: true
+                spacing: 8
+                Label {
+                    text: "anyone who has an invite and your address can try to connect from anywhere. every connection still needs a guest's own private key, and sharing switches itself off when you close Hop-tunes. you also have to let it through your router and firewall: see \"how to set this up\" below."
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                    wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                }
+                RowLayout {
+                    spacing: 16
+                    Label { text: "your public address"; color: Theme.text; font { family: Theme.font; pixelSize: 15 } Layout.preferredWidth: 140 }
+                    TextField {
+                        id: publicField
+                        objectName: "sharePublicAddress"
+                        Layout.preferredWidth: 300
+                        text: hop.sharingPublicAddress
+                        placeholderText: "e.g. 203.0.113.5 or a name"; placeholderTextColor: Theme.dim
+                        selectByMouse: true
+                        color: Theme.text; font { family: Theme.font; pixelSize: 15 }
+                        onEditingFinished: hop.sharingPublicAddress = text
+                        background: Rectangle { color: Theme.panel; border { width: publicField.activeFocus ? 2 : 1; color: publicField.activeFocus ? hop.accent : Theme.line } }
+                    }
+                }
+                Label {
+                    text: "this goes into the invite link instead of your home-network address. your router's status page shows it (often under \"WAN\" or \"Internet\")."
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 13 }
+                    wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                }
+                AbstractButton {
+                    id: helpBtn
+                    objectName: "netHelpToggle"
+                    hoverEnabled: true
+                    onClicked: root.showNetHelp = !root.showNetHelp
+                    contentItem: Label { text: root.showNetHelp ? "hide the steps" : "how to set this up"; color: helpBtn.hovered ? hop.accent : Theme.text2
+                                         font { family: Theme.font; pixelSize: 15; underline: helpBtn.hovered } }
+                    background: Item {}
+                }
+                ColumnLayout {
+                    objectName: "netHelp"
+                    visible: root.showNetHelp
+                    spacing: 6
+                    Repeater {
+                        model: [
+                            "1. give this computer a fixed address on your home network (your router calls it a DHCP reservation or static lease). today it is " + (hop.sharingAddresses.length > 0 ? hop.sharingAddresses[0] : "(see your router)") + ".",
+                            "2. in your router's settings find port forwarding (also called virtual server or NAT) and add a rule: protocol TCP, outside port " + hop.sharingPort + ", inside port " + hop.sharingPort + ", to this computer's address.",
+                            "3. let it through this computer's firewall. linux with ufw: sudo ufw allow " + hop.sharingPort + "/tcp. with firewalld: sudo firewall-cmd --permanent --add-port=" + hop.sharingPort + "/tcp, then sudo firewall-cmd --reload. windows: tick private and public when it asks, or add an inbound rule for TCP port " + hop.sharingPort + " in windows defender firewall.",
+                            "4. find your public address on the router's status page. if it starts with 100.64 to 100.127, or with 10., 172.16 to 172.31 or 192.168, your internet provider shares one address between customers and port forwarding cannot work: ask them for a public address, or use IPv6 if you have it.",
+                            "5. type that address above, make an invite and send it. home addresses change now and then: if a guest cannot connect later, send them the new one (they use \"change address\").",
+                            "6. test it from outside your home, with a guest: many routers do not let you reach your own public address from inside."
+                        ]
+                        delegate: Label {
+                            required property string modelData
+                            text: modelData
+                            color: Theme.text2; font { family: Theme.font; pixelSize: 14 }
+                            wrapMode: Text.WordWrap; Layout.maximumWidth: 640; Layout.fillWidth: true
+                        }
+                    }
+                }
+            }
+
+            RowLayout {
+                spacing: 16
+                Label { text: "watch party"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140; Layout.topMargin: 6 }
+                Choice {
+                    objectName: "partyChoice"
+                    options: [["partyoff", "off"], ["partyon", "on"]]
+                    value: hop.partyHosting ? "partyon" : "partyoff"
+                    onPicked: function (v) { hop.partyHosting = (v === "partyon") }
+                }
+            }
+            Label {
+                text: "when on, a guest who may see the film you are playing can join and watch it in step with you: your pausing and seeking carry over. it is off again the next time sharing starts."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 13 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+
+            Label { text: "invite someone"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 6  }
+            RowLayout {
+                spacing: 16
+                Label { text: "valid for"; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } Layout.preferredWidth: 140  }
+                Choice {
+                    id: inviteHours
+                    objectName: "inviteHoursChoice"
+                    options: [[0.1667, "10 minutes"], [1, "1 hour"], [24, "1 day"]]
+                    value: 1
+                    onPicked: function (v) { value = v }
+                }
+            }
+            PlainButton {
+                objectName: "makeInvite"
+                text: "make an invite code"
+                onClicked: root.invite = hop.makeShareInvite(inviteHours.value)
+            }
+            ColumnLayout {
+                visible: !!root.invite.code
+                spacing: 6
+                Label {
+                    objectName: "inviteCode"
+                    text: root.invite.code || ""
+                    color: hop.accent; font { family: Theme.font; pixelSize: 30; weight: Font.Medium }
+                }
+                RowLayout {
+                    spacing: 10
+                    TextField {
+                        id: linkField
+                        objectName: "inviteLink"
+                        text: root.invite.link || ""
+                        readOnly: true; selectByMouse: true
+                        Layout.preferredWidth: 440
+                        color: Theme.text; font { family: Theme.font; pixelSize: 15 }
+                        background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
+                    }
+                    PlainButton { text: "copy"; onClicked: { linkField.selectAll(); linkField.copy(); linkField.deselect() } }
+                }
+                Label {
+                    text: "one use only, and it stops working after " + (root.invite.hours < 1 ? "10 minutes" : root.invite.hours === 1 ? "1 hour" : "1 day") + ". send it to them yourself; they paste it into their Hop-tunes."
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 13 }
+                    wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                }
+            }
+
+            Label { text: "guests"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 10  }
+            Label {
+                visible: hop.shareGuests.length === 0
+                text: "no guests yet. a guest appears here once they have used an invite."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+            }
+            Repeater {
+                model: hop.shareGuests.length   // a count, so the rows are not rebuilt (and a click not lost) when a guest connects
+                delegate: Rectangle {
+                    id: guestRow
+                    required property int index
+                    readonly property var modelData: hop.shareGuests[index] || ({ id: 0, name: "", connected: false })
+                    objectName: "shareGuest_" + index
+                    Layout.fillWidth: true; Layout.maximumWidth: 760
+                    implicitHeight: 56
+                    color: Theme.panel
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
+                        spacing: 12
+                        Rectangle {
+                            objectName: "shareGuestDot_" + guestRow.index
+                            property bool connected: guestRow.modelData.connected
+                            width: 12; height: 12; radius: 6
+                            color: connected ? hop.accent : "transparent"
+                            border { width: 2; color: connected ? hop.accent : Theme.dim }
+                            Accessible.name: connected ? "connected" : "not connected"
+                        }
+                        Label { text: guestRow.modelData.name; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideRight; Layout.fillWidth: true  }
+                        PlainButton { objectName: "removeGuest_" + guestRow.index; text: "remove"; danger: true; onClicked: hop.removeShareGuest(guestRow.modelData.id) }
+                    }
+                }
+            }
+        }
+
+        // ---- joining someone else's library (the guest's side) ------------------------
+        ColumnLayout {
+            objectName: "joinPanel"
+            visible: !hop.guest && hop.sharingAvailable
+            Layout.fillWidth: true
+            spacing: 8
+            Label { text: "join someone's library"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 14 }
+            Label {
+                text: "paste the invite link they sent you (it looks like hop://192.168.1.20:47800/ABCD-EFGH-JKMN-PQRS). what they share with you then appears in the \"shared\" tab of the collection."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+            RowLayout {
+                spacing: 10
+                TextField {
+                    id: joinField
+                    objectName: "joinLink"
+                    Layout.preferredWidth: 440
+                    placeholderText: "hop://…"; placeholderTextColor: Theme.dim
+                    selectByMouse: true
+                    color: Theme.text; font { family: Theme.font; pixelSize: 15 }
+                    onAccepted: if (!hop.shareJoining) hop.joinShare(text)
+                    background: Rectangle { color: Theme.panel; border { width: joinField.activeFocus ? 2 : 1; color: joinField.activeFocus ? hop.accent : Theme.line } }
+                }
+                PlainButton { objectName: "joinButton"; text: hop.shareJoining ? "joining…" : "join"; enabled: !hop.shareJoining; onClicked: hop.joinShare(joinField.text) }
+            }
+            Label {
+                objectName: "joinMessage"
+                visible: hop.shareJoinMessage !== ""
+                text: hop.shareJoinMessage
+                color: Theme.text2; font { family: Theme.font; pixelSize: 14 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
         }
 
         // ---- about -------------------------------------------------------------------

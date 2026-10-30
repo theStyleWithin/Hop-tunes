@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
-project(hop-tunes VERSION 1.7.1 LANGUAGES CXX)
+project(hop-tunes VERSION 1.8.0 LANGUAGES CXX)
+set(HOPTUNES_VERSION_TEXT "${PROJECT_VERSION}-beta.1")   # what About shows: Party Watch beta
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -22,7 +23,7 @@ endif()
 option(HOPTUNES_BUILD_APP   "Build the desktop application" ON)
 option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui Network)
 find_package(PkgConfig REQUIRED)
 find_package(ZLIB REQUIRED)   # EpubBook unzips the book itself
 pkg_check_modules(TAGLIB  REQUIRED IMPORTED_TARGET taglib)
@@ -50,9 +51,12 @@ add_library(hoptunes_core STATIC
     src/library/SectionIndex.h src/library/SectionIndex.cpp
     src/library/SectionListModel.h src/library/SectionListModel.cpp
     src/library/EpubBook.h    src/library/EpubBook.cpp
+    src/library/ShareAuth.h   src/library/ShareAuth.cpp
+    src/library/ShareServer.h src/library/ShareServer.cpp
+    src/library/ShareClient.h src/library/ShareClient.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
-target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
+target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent Qt6::Network PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
@@ -125,7 +129,7 @@ if(HOPTUNES_BUILD_APP)
     if(WIN32)
         target_sources(hop-tunes PRIVATE src/platform/WinRuntime.h src/platform/WinRuntime.cpp ${CMAKE_BINARY_DIR}/hop-tunes.rc)
     endif()
-    target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
+    target_compile_definitions(hop-tunes PRIVATE HOPTUNES_VERSION="${HOPTUNES_VERSION_TEXT}")
     target_link_libraries(hop-tunes PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL)
     target_compile_options(hop-tunes PRIVATE -Wall -Wextra)
 
@@ -164,6 +168,10 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_m4 tests/test_m4.cpp)
     target_link_libraries(test_m4 PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME playlists-search-dj COMMAND test_m4)
+
+    add_executable(test_share tests/test_share.cpp)
+    target_link_libraries(test_share PRIVATE hoptunes_core Qt6::Test Qt6::Network)
+    add_test(NAME share COMMAND test_share)
 
     add_executable(test_player tests/test_player.cpp)
     target_link_libraries(test_player PRIVATE hoptunes_playback Qt6::Test)
@@ -206,7 +214,7 @@ if(HOPTUNES_BUILD_TESTS)
     if(HOPTUNES_BUILD_APP)
         add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/MpvVideoItem.cpp src/ui/qml.qrc assets/assets.qrc)
         target_link_libraries(test_ui PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::OpenGL Qt6::Test)
-        target_compile_definitions(test_ui PRIVATE HOPTUNES_VERSION="${PROJECT_VERSION}")
+        target_compile_definitions(test_ui PRIVATE HOPTUNES_VERSION="${HOPTUNES_VERSION_TEXT}")
         target_compile_definitions(test_ui PRIVATE HOPTUNES_TEST_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests")
 
         # Damaged files, odd names, broken databases and playlists must never crash or block startup.

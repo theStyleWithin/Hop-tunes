@@ -8,6 +8,9 @@
 #include "library/ProfileDb.h"
 #include "library/SectionIndex.h"
 #include "library/SectionListModel.h"
+#include "library/ShareAuth.h"
+#include "library/ShareClient.h"
+#include "library/ShareServer.h"
 #include "library/SectionScanner.h"
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
@@ -25,7 +28,9 @@
 #include <QSet>
 #include <QStringList>
 #include <QHash>
+#include <QElapsedTimer>
 #include <QTimer>
+#include "library/PartySync.h"
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
@@ -125,6 +130,31 @@ class App : public QObject {
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString statusNote READ statusNote WRITE setStatusNote NOTIFY statusNoteChanged)   // the profile's private status box
     Q_PROPERTY(int videoVolume READ videoVolume WRITE setVideoVolume NOTIFY videoVolumeChanged)   // the movie volume, 0-150 %, separate from the music volume
+    // Library sharing (the host's side; docs/design-sharing.md). Off every time Hop-tunes starts.
+    Q_PROPERTY(bool sharing READ sharing WRITE setSharing NOTIFY sharingChanged)
+    Q_PROPERTY(bool sharingAvailable READ sharingAvailable CONSTANT)   // false when this computer has no TLS library
+    Q_PROPERTY(bool sharingInternet READ sharingInternet WRITE setSharingInternet NOTIFY sharingChanged)   // also accept connections from outside the home network (off whenever sharing starts)
+    Q_PROPERTY(QString sharingPublicAddress READ sharingPublicAddress WRITE setSharingPublicAddress NOTIFY sharingChanged)   // what guests outside should use in the invite
+    Q_PROPERTY(QString sharingMessage READ sharingMessage NOTIFY sharingChanged)   // why sharing did not start, or ""
+    Q_PROPERTY(bool partyHosting READ partyHosting WRITE setPartyHosting NOTIFY sharingChanged)   // guests who may see the film you play follow along
+    Q_PROPERTY(QVariantMap sharedParty READ sharedParty NOTIFY sharedPartyChanged)   // {active, item, title}: what the host is watching
+    Q_PROPERTY(bool partyFollowing READ partyFollowing NOTIFY sharedPartyChanged)
+    Q_PROPERTY(int sharingPort READ sharingPort NOTIFY sharingChanged)
+    Q_PROPERTY(QStringList sharingAddresses READ sharingAddresses NOTIFY sharingChanged)   // this computer's home-network addresses
+    // "Sharing mode" in the collection: tick what one guest may see. It exists only while sharing is on and there is a guest.
+    Q_PROPERTY(bool canChooseShares READ canChooseShares NOTIFY shareGuestsChanged)
+    Q_PROPERTY(bool shareMode READ shareMode WRITE setShareMode NOTIFY shareModeChanged)
+    Q_PROPERTY(qint64 shareTarget READ shareTarget WRITE setShareTarget NOTIFY shareModeChanged)   // the guest being chosen for
+    Q_PROPERTY(QString shareTargetName READ shareTargetName NOTIFY shareModeChanged)
+    Q_PROPERTY(int shareRevision READ shareRevision NOTIFY shareRevisionChanged)   // changes whenever a tick changes
+    Q_PROPERTY(QVariantList shareGuests READ shareGuests NOTIFY shareGuestsChanged)   // [{id, name, connected}]
+    // Libraries other people shared with this profile (the guest's side)
+    Q_PROPERTY(QVariantList sharedHosts READ sharedHosts NOTIFY sharedHostsChanged)   // [{id, name, address, port}]
+    Q_PROPERTY(qint64 sharedHost READ sharedHost NOTIFY sharedLibraryChanged)         // the one being browsed
+    Q_PROPERTY(QVariantList sharedItems READ sharedItems NOTIFY sharedLibraryChanged) // [{id, title, kind, sizeText, playable}]
+    Q_PROPERTY(QString sharedStatus READ sharedStatus NOTIFY sharedLibraryChanged)    // what to tell the guest, or ""
+    Q_PROPERTY(QString shareJoinMessage READ shareJoinMessage NOTIFY shareJoinChanged)
+    Q_PROPERTY(bool shareJoining READ shareJoining NOTIFY shareJoinChanged)
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
     Q_PROPERTY(QString videoComments READ videoComments WRITE setVideoComments NOTIFY videoCommentsChanged)   // "off" | "mine" | "populated"
     Q_PROPERTY(QVariantList myVideoComments READ myVideoComments NOTIFY myVideoCommentsChanged)   // this profile's own, for the playing video
@@ -133,6 +163,7 @@ class App : public QObject {
     Q_PROPERTY(bool videoPlayerOpen READ videoPlayerOpen NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerPath READ videoPlayerPath NOTIFY videoPlayerChanged)
     Q_PROPERTY(QString videoPlayerTitle READ videoPlayerTitle NOTIFY videoPlayerChanged)
+    Q_PROPERTY(QString videoPlayerSource READ videoPlayerSource NOTIFY videoPlayerChanged)   // what to open: the file, or a shared film's local address
     Q_PROPERTY(qint64 videoPlayerResumeMs READ videoPlayerResumeMs NOTIFY videoPlayerChanged)
     // "mpv" | "gstreamer" | "none" — which engine VideoPlayerView.qml should instantiate.
     Q_PROPERTY(QString videoEngine READ videoEngine CONSTANT)
@@ -232,6 +263,35 @@ public:
     void setStatusNote(const QString &text);
     int videoVolume() const { return m_videoVolume; }
     void setVideoVolume(int percent);
+    bool sharing() const { return bool(m_share); }
+    void setSharing(bool on);
+    static bool sharingAvailable() { return ShareServer::encryptionAvailable(); }
+    bool partyHosting() const { return m_share && m_partyHosting; }
+    void setPartyHosting(bool on);
+    PartyInfo partyNow() const;
+    QVariantMap sharedParty() const { return m_sharedParty; }
+    bool partyFollowing() const { return m_partyFollowing; }
+    bool sharingInternet() const { return m_share && m_share->server.allowInternet(); }
+    void setSharingInternet(bool on);
+    QString sharingPublicAddress() const { return m_sharePublicAddress; }
+    void setSharingPublicAddress(const QString &text);
+    QString sharingMessage() const { return m_sharingMessage; }
+    int sharingPort() const { return m_share ? m_share->server.port() : 0; }
+    QStringList sharingAddresses() const;
+    QVariantList shareGuests() const;
+    bool canChooseShares() const;
+    bool shareMode() const { return m_shareMode; }
+    void setShareMode(bool on);
+    qint64 shareTarget() const { return m_shareTarget; }
+    void setShareTarget(qint64 id);
+    QString shareTargetName() const;
+    int shareRevision() const { return m_shareRevision; }
+    QVariantList sharedHosts() const;
+    qint64 sharedHost() const { return m_sharedHost; }
+    QVariantList sharedItems() const { return m_sharedItems; }
+    QString sharedStatus() const { return m_sharedStatus; }
+    QString shareJoinMessage() const { return m_shareJoinMessage; }
+    bool shareJoining() const { return m_shareJoining; }
     bool videoChat() const { return m_videoChat; }
     void setVideoChat(bool on);
     QString videoChatLook() const { return m_videoChatLook; }
@@ -241,6 +301,7 @@ public:
     void setVideoChatLook(const QString &look);
     QString videoPlayerPath() const { return m_videoPlayerPath; }
     QString videoPlayerTitle() const;
+    QString videoPlayerSource() const { return m_videoPlayerSource.isEmpty() ? m_videoPlayerPath : m_videoPlayerSource; }
     qint64 videoPlayerResumeMs() const { return m_videoPlayerResumeMs; }
     QString videoEngine() const;
     GstVideoPlayer *gstVideo() { return &m_gstVideo; }
@@ -334,6 +395,25 @@ public:
     // videos (spec §5b)
     Q_INVOKABLE void openVideoDetail(int row);
     Q_INVOKABLE void closeVideoDetail();
+    // A one-time invite code for a new guest, valid for `hours` (between 10 minutes and a day): {code, link, hours}.
+    Q_INVOKABLE QVariantMap makeShareInvite(double hours);
+    Q_INVOKABLE void removeShareGuest(qint64 id);
+    // Party Watch. The host's player reports where it is about once a second; a guest's player asks what to do to stay with it.
+    Q_INVOKABLE void reportPlayback(qint64 positionMs, bool paused);
+    Q_INVOKABLE void setSharedWatching(bool on);   // the shared tab is on screen: look for a party now and then
+    Q_INVOKABLE void joinParty();
+    Q_INVOKABLE QVariantMap partyAdviceFor(qint64 localMs, bool localPaused) const;
+    // The guest's side: join with an invite link (hop://address:port/CODE), browse a host, play what it approved.
+    Q_INVOKABLE void joinShare(const QString &link);
+    Q_INVOKABLE void openSharedHost(qint64 id);
+    Q_INVOKABLE void leaveSharedHost(qint64 id);
+    Q_INVOKABLE QString setSharedHostAddress(qint64 id, const QString &text);   // "address:port"; "" when it was taken, else why not
+    Q_INVOKABLE void playShared(const QString &itemId);
+    Q_INVOKABLE QString sharedStreamUrl(const QString &itemId);   // the local address a player can read this item from ("" if not possible)
+    void openRemoteVideo(const QString &key, const QString &url, const QString &title, qint64 startMs = -1);
+    // For the chosen guest: 0 none of these files approved, 1 some, 2 all. Toggle approves all of them, or (when all are) takes them back.
+    Q_INVOKABLE int shareState(const QStringList &paths) const;
+    Q_INVOKABLE void toggleShare(const QStringList &paths);
     Q_INVOKABLE void addVideoCategoryFolder(const QString &category, const QUrl &folder);
     Q_INVOKABLE void removeVideoCategoryFolder(const QString &category, const QString &path);
     // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
@@ -378,6 +458,14 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void videoChatChanged();
+    void sharingChanged();
+    void shareGuestsChanged();
+    void sharedHostsChanged();
+    void sharedLibraryChanged();
+    void sharedPartyChanged();
+    void shareJoinChanged();
+    void shareModeChanged();
+    void shareRevisionChanged();
     void statusNoteChanged();
     void videoVolumeChanged();
     void videoCommentsChanged();
@@ -420,6 +508,42 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     QString m_videoComments = QStringLiteral("off");
+    // Sharing exists only while it is switched on: nothing listens otherwise.
+    struct Share {
+        Share(ProfileDb &db, const QString &host) : auth(db), lib(db, auth, host), server(db, auth, lib) {}
+        ShareAuth auth;
+        GrantLibrary lib;
+        ShareServer server;
+    };
+    ShareProxy m_shareProxy;
+    qint64 m_sharedHost = 0;
+    QVariantList m_sharedItems;
+    QString m_sharedStatus;
+    QString m_shareJoinMessage;
+    bool m_shareJoining = false;
+    bool m_partyHosting = false;
+    qint64 m_partyPos = 0;
+    bool m_partyPaused = false;
+    QString m_partyPath;
+    QElapsedTimer m_partyClock;
+    QVariantMap m_sharedParty;
+    bool m_partyFollowing = false, m_sharedWatching = false;
+    qint64 m_partyTargetMs = 0;
+    bool m_partyTargetPaused = false;
+    QElapsedTimer m_partyTargetClock;
+    QString m_partyItem;
+    int m_partyMisses = 0;
+    QTimer m_partyTimer;
+    void pollParty();
+    void updatePartyTimer();
+    int m_shareGen = 0;   // bumped when the profile closes, so a late reply from a host is ignored
+    QString m_sharePublicAddress;   // saved per profile (a name or number only the host knows)
+    QString m_sharingMessage;
+    std::unique_ptr<Share> m_share;
+    bool m_shareMode = false;
+    qint64 m_shareTarget = 0;
+    int m_shareRevision = 0;
+    void keepShareModeValid();   // sharing off or no guests: leave the mode; the chosen guest is removed: pick another
     QString m_statusNote;
     int m_videoVolume = 100;
     bool m_videoChat = false;
@@ -510,7 +634,9 @@ private:
     bool m_videoScanRescanPending = false;
     QElapsedTimer m_videoReloadClock;
     bool m_videoPlayerOpen = false;
-    QString m_videoPlayerPath;
+    QString m_videoPlayerPath;          // identity of what is playing (a file path, or share:<host>:<item> for a shared film)
+    QString m_videoPlayerSource;        // set only for a shared film: the local address the player reads
+    QString m_videoPlayerRemoteTitle;
     qint64 m_videoPlayerResumeMs = 0;
 };
 

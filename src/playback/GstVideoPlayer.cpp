@@ -151,10 +151,11 @@ bool GstVideoPlayer::openSource(const QString &path, qint64 startPositionMs)
     if (!m_pipeline) return false;
     gst_element_set_state(m_pipeline, GST_STATE_NULL);
 
-    const QByteArray uri = QUrl::fromLocalFile(path).toString().toUtf8();
+    const bool streamed = path.startsWith(QLatin1String("http://127.0.0.1:"));   // a shared film, via the local sharing proxy
+    const QByteArray uri = (streamed ? path : QUrl::fromLocalFile(path).toString()).toUtf8();
     g_object_set(m_pipeline, "uri", uri.constData(), nullptr);
 
-    const QString sub = sidecarSubtitle(path);
+    const QString sub = streamed ? QString() : sidecarSubtitle(path);
     if (!sub.isEmpty()) {
         const QByteArray subUri = QUrl::fromLocalFile(sub).toString().toUtf8();
         g_object_set(m_pipeline, "suburi", subUri.constData(), nullptr);
