@@ -95,26 +95,8 @@ ApplicationWindow {
                 }
             }
             Item { Layout.fillWidth: true }
-            // who's listening: click to switch profile (playback stops, no restart)
-            AbstractButton {
-                id: chip
-                objectName: "profileChip"
-                hoverEnabled: true
-                onClicked: hop.leaveProfile()
-                Accessible.name: "switch profile (" + (hop.profile.name || "") + ")"
-                ToolTip.visible: hovered; ToolTip.delay: 600; ToolTip.text: "switch profile"
-                contentItem: Row {
-                    spacing: 12
-                    Label {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: hop.profile.name || ""
-                        color: chip.hovered ? Theme.text : Theme.muted
-                        font { family: Theme.font; pixelSize: 18 }
-                    }
-                    ProfileAvatar { profile: hop.profile; size: 40 }
-                }
-                background: Item { }
-            }
+            // who's listening (in the collection view it sits in the tab row below instead)
+            ProfileChip { visible: win.view !== "collection" }
         }
 
         StackLayout {

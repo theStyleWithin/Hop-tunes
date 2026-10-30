@@ -14,6 +14,7 @@
     <file>qml/SettingsView.qml</file>
     <file>qml/ProfileGate.qml</file>
     <file>qml/ProfileAvatar.qml</file>
+    <file>qml/ProfileChip.qml</file>
     <file>qml/PlainButton.qml</file>
     <file>qml/PinField.qml</file>
     <file>qml/HeartButton.qml</file>
