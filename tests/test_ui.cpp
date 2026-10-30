@@ -929,6 +929,22 @@ private slots:
         QVERIFY(r.property("ago").toBool());
     }
 
+    // A private status box above the profile: empty by default, kept per profile, saved as you type.
+    void statusNoteIsPrivateAndRemembered()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(item("statusNote") != nullptr && item("statusNote")->isVisible());
+        QCOMPARE(m_app->statusNote(), QString());
+        type("statusNote", QStringLiteral("hello there"));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->statusNote(), QStringLiteral("hello there"), 3000);
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(st.value("statusNote").toString(), QStringLiteral("hello there"));
+        m_app->setStatusNote(QString(400, QLatin1Char('x')));   // a note has a limit
+        QCOMPARE(m_app->statusNote().size(), 300);
+        m_app->setStatusNote(QString());
+        QTRY_COMPARE(item("statusNote")->property("text").toString(), QString());   // the box follows
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()

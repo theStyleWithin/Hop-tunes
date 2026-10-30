@@ -5,6 +5,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- **A private status box** at the top right of the collection view, right above your profile: an empty
+  box for anything you want to see there, like a lyric, a quote or how you feel. Nobody else ever sees
+  it; it is saved in your profile (up to 300 characters) as you type and is there next time you open
+  Hop-tunes. Guests do not get one, since a guest keeps nothing.
 - **Picture albums.** `collection › pictures` now shows one slot per folder (a cover, the folder's
   name and how many pictures it holds) instead of pouring every picture into one big grid. Click a slot to
   open its pictures, and "‹ albums" to go back; the viewer, arrow keys and slideshow work inside the open
