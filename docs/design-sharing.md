@@ -1,6 +1,6 @@
-# Design: sharing a library with family (draft 4, for review)
+# Design: sharing a library with family (approved plan, v1)
 
-Status: **draft, nothing is built.** Goal: let one person (the *host*) let a few people they trust (the *guests*,
+Status: **approved by the owner; building in small steps (see Phases).** Goal: let one person (the *host*) let a few people they trust (the *guests*,
 first of all the host's dad) watch and listen to part of their Hop-tunes library. Not a media server: both sides
 run Hop-tunes, and the host decides, item by item, what each guest may see. **Streaming only, never downloading.**
 
@@ -127,8 +127,7 @@ upload speed for every guest. Not in the first version.
 - **No accounts, ever.** Internet access is by port forwarding (automatic where the router allows it, otherwise a
   manual guide), not through a third-party service. Hop-tunes stays open-garden software.
 
-## Questions that are still open
-1. Is it fine for the automatic router setup (UPnP and similar) to be on offer when the host turns on "allow
-   internet"? Some people dislike UPnP, so it would be a button the host presses, never automatic.
-2. For a guest whose host's address has changed: is typing the new address (sent however the host likes) enough, or
-   should the invite be re-issuable as a short code that includes the new address?
+## Settled by the owner
+- The automatic router setup is a button the host presses (never automatic), and the aim is to make internet setup
+  nearly painless: try the automatic way first, and fall back to the guide only if it fails.
+- If the host's address changes, the guest simply types the new one (simplest option; no re-issuable codes).
