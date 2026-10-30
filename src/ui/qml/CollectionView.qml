@@ -84,6 +84,18 @@ Item {
                     background: Item {}
                 }
             }
+            // libraries other people shared with this profile: the tab exists only once you have joined one
+            AbstractButton {
+                id: sharedTab
+                objectName: "subTab_shared"
+                visible: hop.sharedHosts.length > 0
+                hoverEnabled: true
+                onClicked: root.collectionTab = "shared"
+                contentItem: Label { text: "shared"; color: root.collectionTab === "shared" ? hop.accent : (sharedTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: 22 } }
+                background: Item {}
+            }
+            Connections { target: hop; function onSharedHostsChanged() { if (hop.sharedHosts.length === 0 && root.collectionTab === "shared") root.collectionTab = "music" } }
             Item { Layout.preferredWidth: 20 }
             // instant search (spec §4.2)
             TextField {
@@ -285,6 +297,12 @@ Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
             }
+        }
+        SharedView {
+            objectName: "sharedView"
+            visible: root.collectionTab === "shared"
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
         }
         PictureViewer { id: pictureViewer; model: hop.pictureAlbumItems }
         EbookReader { id: ebookReader }

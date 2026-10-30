@@ -292,6 +292,32 @@ private slots:
         QCOMPARE(st, 502);
     }
 
+    void librariesSharedWithMeAreRemembered()
+    {
+        QTemporaryDir dir;
+        const QString file = dir.filePath(QStringLiteral("p.sqlite"));
+        qint64 id = 0;
+        {
+            ProfileDb db;
+            QVERIFY(db.open(file));
+            QVERIFY(db.shareHosts().isEmpty());
+            QCOMPARE(db.addShareHost(ShareHost{0, QStringLiteral("Home"), QString(), 47800, 3, QString(64, QLatin1Char('a')), 1}), qint64(0));   // no address
+            QCOMPARE(db.addShareHost(ShareHost{0, QStringLiteral("Home"), QStringLiteral("10.0.0.2"), 47800, 3, QStringLiteral("short"), 1}), qint64(0));   // not a key
+            id = db.addShareHost(ShareHost{0, QStringLiteral("Home"), QStringLiteral("10.0.0.2"), 47800, 3, QString(64, QLatin1Char('a')), 1});
+            QVERIFY(id > 0);
+        }
+        ProfileDb db;
+        QVERIFY(db.open(file));                                   // still there next time
+        QCOMPARE(db.shareHosts().size(), 1);
+        QCOMPARE(db.shareHosts().first().guestId, qint64(3));
+        QVERIFY(db.setShareHostAddress(id, QStringLiteral("10.0.0.9"), 5000));   // the host's address changed
+        QCOMPARE(db.shareHosts().first().address, QStringLiteral("10.0.0.9"));
+        QCOMPARE(db.shareHosts().first().port, quint16(5000));
+        QVERIFY(!db.setShareHostAddress(id, QString(), 5000));
+        QVERIFY(db.removeShareHost(id));
+        QVERIFY(db.shareHosts().isEmpty());
+    }
+
     void localAddresses()
     {
         for (const char *a : {"127.0.0.1", "10.1.2.3", "172.16.0.9", "172.31.255.1", "192.168.1.50", "169.254.3.4",

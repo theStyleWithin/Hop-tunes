@@ -158,7 +158,7 @@ Rectangle {
                     if (item === nullSurface || !hop.videoPlayerPath) return
                     loadedPath = hop.videoPlayerPath
                     item.setResumePosition(hop.videoPlayerResumeMs)
-                    item.source = hop.videoPlayerPath
+                    item.source = hop.videoPlayerSource
                     item.play()
                 }
                 function onSurfaceLoaded(item) {

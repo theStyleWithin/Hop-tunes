@@ -506,7 +506,19 @@ Item {
 
         // ---- sharing (the host's side) -----------------------------------------------
         Connections { target: hop; function onSharingChanged() { if (!hop.sharing) root.invite = ({}) } }
-        Label { visible: !hop.guest; text: "sharing"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 28 }
+        RowLayout {
+            visible: !hop.guest
+            Layout.topMargin: 28
+            spacing: 12
+            Label { text: "sharing"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
+            Label {
+                objectName: "betaTag"
+                text: "party watch beta"; color: Theme.ink
+                font { family: Theme.font; pixelSize: 12; weight: Font.Medium }
+                leftPadding: 8; rightPadding: 8; topPadding: 2; bottomPadding: 2
+                background: Rectangle { color: hop.accent }
+            }
+        }
         Label {
             visible: !hop.guest
             text: "let people you trust watch and listen to what you approve, from their own Hop-tunes. nothing is shared until you approve it, guests can only stream (never download), and sharing is off every time you start Hop-tunes."
@@ -618,6 +630,41 @@ Item {
                         PlainButton { objectName: "removeGuest_" + guestRow.index; text: "remove"; danger: true; onClicked: hop.removeShareGuest(guestRow.modelData.id) }
                     }
                 }
+            }
+        }
+
+        // ---- joining someone else's library (the guest's side) ------------------------
+        ColumnLayout {
+            objectName: "joinPanel"
+            visible: !hop.guest && hop.sharingAvailable
+            Layout.fillWidth: true
+            spacing: 8
+            Label { text: "join someone's library"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 14 }
+            Label {
+                text: "paste the invite link they sent you (it looks like hop://192.168.1.20:47800/ABCD-EFGH-JKMN-PQRS). what they share with you then appears in the \"shared\" tab of the collection."
+                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            }
+            RowLayout {
+                spacing: 10
+                TextField {
+                    id: joinField
+                    objectName: "joinLink"
+                    Layout.preferredWidth: 440
+                    placeholderText: "hop://…"; placeholderTextColor: Theme.dim
+                    selectByMouse: true
+                    color: Theme.text; font { family: Theme.font; pixelSize: 15 }
+                    onAccepted: if (!hop.shareJoining) hop.joinShare(text)
+                    background: Rectangle { color: Theme.panel; border { width: joinField.activeFocus ? 2 : 1; color: joinField.activeFocus ? hop.accent : Theme.line } }
+                }
+                PlainButton { objectName: "joinButton"; text: hop.shareJoining ? "joining…" : "join"; enabled: !hop.shareJoining; onClicked: hop.joinShare(joinField.text) }
+            }
+            Label {
+                objectName: "joinMessage"
+                visible: hop.shareJoinMessage !== ""
+                text: hop.shareJoinMessage
+                color: Theme.text2; font { family: Theme.font; pixelSize: 14 }
+                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
             }
         }
 

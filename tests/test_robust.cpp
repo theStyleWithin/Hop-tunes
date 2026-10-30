@@ -334,6 +334,35 @@ private slots:
         QVERIFY(!app.videoPlayerOpen());
         app.player()->setQueue({}, 0);
     }
+
+    // A film from a shared library plays from a local address, is known by a stable key (not that address), shows the
+    // host's title, and resumes where it was left.
+    void aSharedFilmPlaysFromALocalAddressAndResumes()
+    {
+        App app;
+        QVERIFY(app.init());
+        if (!app.profileReady()) QCOMPARE(app.createProfile(QStringLiteral("Vid"), QStringLiteral("#7cc4ff"), {}, {}), QString());
+        const QString key = QStringLiteral("share:1:abc"), url = QStringLiteral("http://127.0.0.1:5555/s/tokenone");
+        app.openRemoteVideo(key, url, QStringLiteral("A Film"));
+        QVERIFY(app.videoPlayerOpen());
+        QCOMPARE(app.videoPlayerPath(), key);
+        QCOMPARE(app.videoPlayerSource(), url);
+        QCOMPARE(app.videoPlayerTitle(), QStringLiteral("A Film"));
+        QCOMPARE(app.videoPlayerInfo().value("fileName").toString(), QStringLiteral("A Film"));
+        app.closeVideoPlayer(30000, 600000);
+        QVERIFY(!app.videoPlayerOpen());
+        app.openRemoteVideo(key, QStringLiteral("http://127.0.0.1:5555/s/tokentwo"), QStringLiteral("A Film"));   // a new address each time
+        QCOMPARE(app.videoPlayerResumeMs(), qint64(30000));                                                      // but the same film
+        app.closeVideoPlayer(0, 0);
+
+        const QString clip = m_home.filePath(QStringLiteral("clip2.mkv"));
+        QVERIFY(writeTestVideo(clip));
+        app.openFiles({clip});                                                                                    // a file again: nothing remote is left over
+        QCOMPARE(app.videoPlayerSource(), app.videoPlayerPath());
+        QVERIFY(app.videoPlayerTitle() != QStringLiteral("A Film"));
+        app.closeVideoPlayer(0, 0);
+        app.player()->setQueue({}, 0);
+    }
 };
 
 int main(int argc, char **argv)

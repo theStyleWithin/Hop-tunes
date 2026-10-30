@@ -101,7 +101,8 @@ bool MpvCore::init()
 bool MpvCore::open(const QString &path, qint64 startPositionMs)
 {
     if (!m_mpv) return false;
-    const QByteArray url = QUrl::fromLocalFile(path).toString().toUtf8();
+    // a shared film arrives as an address on this computer only (the sharing proxy); everything else is a file
+    const QByteArray url = (path.startsWith(QLatin1String("http://127.0.0.1:")) ? path : QUrl::fromLocalFile(path).toString()).toUtf8();
     const char *args[] = {"loadfile", url.constData(), "replace", nullptr};
     const int rc = mpv_command(m_mpv, args);
     if (rc < 0) { setError(QString::fromUtf8(mpv_error_string(rc))); return false; }

@@ -148,6 +148,16 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=9")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 9;
+    }
+    if (version < 10) {
+        // v10: libraries other people shared with this profile (it is their guest), with the key for each.
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE share_host (id INTEGER PRIMARY KEY, name TEXT NOT NULL, address TEXT NOT NULL, "
+                    "port INTEGER NOT NULL, guest_id INTEGER NOT NULL, secret TEXT NOT NULL, added INTEGER NOT NULL DEFAULT 0)")
+            && exec("PRAGMA user_version=10")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -424,6 +434,40 @@ bool ProfileDb::setVideoMeta(const QString &videoPath, const QString &json)
 }
 
 // ---- library sharing ----------------------------------------------------------------
+
+qint64 ProfileDb::addShareHost(const ShareHost &h)
+{
+    if (!m_db || h.address.isEmpty() || h.port == 0 || h.secret.size() != 64) return 0;
+    Stmt s(m_db, "INSERT INTO share_host(name, address, port, guest_id, secret, added) VALUES(?1, ?2, ?3, ?4, ?5, ?6)");
+    s.bind(1, h.name.left(60)); s.bind(2, h.address); s.bind(3, int(h.port)); s.bind(4, h.guestId); s.bind(5, h.secret); s.bind(6, h.added);
+    return s.run() ? sqlite3_last_insert_rowid(m_db) : 0;
+}
+
+QList<ShareHost> ProfileDb::shareHosts() const
+{
+    QList<ShareHost> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT id, name, address, port, guest_id, secret, added FROM share_host ORDER BY added, id");
+    while (s.step() == SQLITE_ROW)
+        out.append(ShareHost{s.i64(0), s.str(1), s.str(2), quint16(s.i32(3)), s.i64(4), s.str(5), s.i64(6)});
+    return out;
+}
+
+bool ProfileDb::removeShareHost(qint64 id)
+{
+    if (!m_db) return false;
+    Stmt s(m_db, "DELETE FROM share_host WHERE id = ?1");
+    s.bind(1, id);
+    return s.run();
+}
+
+bool ProfileDb::setShareHostAddress(qint64 id, const QString &address, quint16 port)
+{
+    if (!m_db || address.isEmpty() || port == 0) return false;
+    Stmt s(m_db, "UPDATE share_host SET address = ?2, port = ?3 WHERE id = ?1");
+    s.bind(1, id); s.bind(2, address); s.bind(3, int(port));
+    return s.run();
+}
 
 qint64 ProfileDb::addShareGuest(const QString &name, const QString &secretHex, qint64 created)
 {
