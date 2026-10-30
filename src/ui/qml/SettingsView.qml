@@ -111,6 +111,24 @@ Item {
             }
         }
         Label { visible: Theme.compact; text: "settings"; color: Theme.strong; font { family: Theme.font; pixelSize: 46; weight: Font.Light } }
+        SRow {   // phones and tablets: how you move around (the bottom bar or the side drawer)
+            visible: Window.window !== null && Window.window.mobileNav === true
+            Label { text: "navigation"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }
+            Label { text: "choose how you move around"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } Layout.topMargin: -6 }
+            Choice {
+                objectName: "navStyleChoice"
+                options: [["bar", "bottom bar"], ["drawer", "side drawer"]]
+                value: hop.navStyle
+                onPicked: function (v) { hop.navStyle = v }
+            }
+        }
+        SRow {
+            visible: Window.window !== null && Window.window.mobileNav === true
+            Label { text: "on tablets"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }
+            Label { text: "screens wider than 600 dp show a side rail or a permanent drawer, whichever you pick above"
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                    wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.topMargin: -6 }
+        }
 
         // ---- profile ------------------------------------------------------------
         Label { text: hop.guest ? "guest mode" : "profile"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
@@ -302,17 +320,6 @@ Item {
                 options: [[false, "animate"], [true, "reduce motion"]]
                 value: hop.reduceMotion
                 onPicked: function (v) { hop.reduceMotion = v }
-            }
-        }
-        RowLayout {
-            visible: Window.window !== null && Window.window.mobileNav === true
-            spacing: 16
-            Label { text: "navigation"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
-            Choice {
-                objectName: "navStyleChoice"
-                options: [["bar", "bottom bar"], ["drawer", "side drawer"]]
-                value: hop.navStyle
-                onPicked: function (v) { hop.navStyle = v }
             }
         }
         Label {

@@ -1125,6 +1125,18 @@ private slots:
         QVERIFY(click("pillCat_shows"));
         QTest::qWait(1500);
         shot("mock-collection-videos");
+        m_app->openVideoDetail(0);
+        QTest::qWait(500);
+        m_app->addCastMember(); m_app->setCastMember(0, QStringLiteral("Mira Hollis"), QStringLiteral("Nell (lead)"));
+        m_app->addCastMember(); m_app->setCastMember(1, QStringLiteral("Tomas Ruiz"), QStringLiteral("Harbour master"));
+        m_app->addCastMember(); m_app->setCastMember(2, QStringLiteral("Ana Veltri"), QStringLiteral("director"));
+        QTest::qWait(500);
+        shot("mock-videodetail-top");
+        QVERIFY2(overflowing().isEmpty(), qPrintable(QStringLiteral("video details overflow: ") + overflowing().join(QStringLiteral(" | "))));
+        if (auto *f = item("videoDetailAddPerson")) { auto *fl = f->parentItem(); while (fl && !fl->inherits("QQuickFlickable")) fl = fl->parentItem(); if (fl) fl->setProperty("contentY", 560); }
+        QTest::qWait(300);
+        shot("mock-videodetail-cast");
+        m_app->closeVideoDetail();
         QVERIFY(click("pillTab_music"));
         m_app->playSongs(0);
         QTest::qWait(1200);

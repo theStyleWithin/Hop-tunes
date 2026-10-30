@@ -25,7 +25,6 @@ Item {
                 visible: !hop.guest
                 Layout.fillWidth: true
                 implicitHeight: 104
-                radius: 12
             }
             Label { visible: !hop.guest; text: "saved as you type · " + hop.statusNote.length + " of 300"
                     color: Theme.dim; font { family: Theme.font; pixelSize: 13 } Layout.bottomMargin: 6 }
@@ -35,7 +34,7 @@ Item {
                 RowLayout {
                     anchors { fill: parent; margins: 14 }
                     spacing: 12
-                    ProfileAvatar { profile: hop.profile; size: 72 }
+                    ProfileAvatar { profile: hop.profile; size: 72; round: true; cornerColor: Theme.panel }
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 2

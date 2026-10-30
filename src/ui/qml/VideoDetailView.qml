@@ -25,8 +25,16 @@ Item {
         onAccepted: hop.setCastPhoto(index, selectedFile)
     }
 
+    PhoneVideoDetail {   // phones
+        visible: Theme.compact
+        anchors.fill: parent
+        onChoosePoster: posterDialog.open()
+        onChoosePhoto: function (i) { castDialog.index = i; castDialog.open() }
+    }
+
     Flickable {
         id: flick
+        visible: !Theme.compact
         anchors.fill: parent
         contentWidth: width
         contentHeight: page.implicitHeight + 40

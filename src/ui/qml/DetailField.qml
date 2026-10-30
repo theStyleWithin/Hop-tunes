@@ -23,9 +23,9 @@ TextField {
     font { family: Theme.font; pixelSize: root.pixel; weight: root.light ? Font.Light : Font.Normal }
     leftPadding: 10; rightPadding: 10; topPadding: 6; bottomPadding: 6
     background: Rectangle {
-        implicitHeight: root.pixel + 18
+        implicitHeight: Theme.compact && !root.light ? 46 : root.pixel + 18
         color: root.activeFocus ? Theme.panel : "transparent"
         border { width: 1; color: root.activeFocus ? Theme.accent : Theme.borderSoft }
-        radius: 3
+        radius: Theme.compact ? 10 : 3
     }
 }

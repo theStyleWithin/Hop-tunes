@@ -67,14 +67,14 @@ Item {
 
         // phones: the collection tabs as scrolling pills
         Label {   // phones: the big light title, as in the mockups
-            visible: root.phone
+            visible: root.phone && hop.videoDetailRow < 0
             text: "collection"
             color: Theme.strong
             font { family: Theme.font; pixelSize: 46; weight: Font.Light }
             Layout.leftMargin: Theme.pad; Layout.topMargin: 12
         }
         PillRow {
-            visible: root.phone
+            visible: root.phone && hop.videoDetailRow < 0
             underline: true
             Layout.fillWidth: true; Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 4
             namePrefix: "pillTab_"

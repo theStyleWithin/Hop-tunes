@@ -9,8 +9,9 @@ Rectangle {
     property alias text: edit.text
     implicitWidth: 460
     implicitHeight: 56
-    color: Theme.panel
-    border { width: edit.activeFocus ? 2 : 1; color: edit.activeFocus ? Theme.accent : Theme.line }
+    color: Theme.compact ? "transparent" : Theme.panel
+    radius: Theme.compact ? 12 : 0
+    border { width: edit.activeFocus ? 2 : 1; color: edit.activeFocus ? Theme.accent : (Theme.compact ? Theme.borderSoft : Theme.line) }
 
     Flickable {
         id: flick
