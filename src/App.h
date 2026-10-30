@@ -41,6 +41,9 @@ class App : public QObject {
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
     // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
     Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
+    Q_PROPERTY(QStringList videoCategories READ videoCategories CONSTANT)   // movies, shows, cartoons, anime, other
+    Q_PROPERTY(QString videoCategory READ videoCategory WRITE setVideoCategory NOTIFY videoCategoryChanged)   // the videos tab shows this one
+    Q_PROPERTY(QVariantMap videoCategoryFolders READ videoCategoryFolders NOTIFY foldersChanged)   // category -> [paths]
     // Pictures, audiobooks, ebooks and podcasts: each has its own models and folder list.
     // The extra sections that are switched on, in tab order (single source of truth for the UI).
     Q_PROPERTY(QStringList sectionKinds READ sectionKinds CONSTANT)
@@ -137,7 +140,13 @@ public:
     TrackListModel *songs() { return &m_songs; }
     Player *player() { return &m_player; }
     QStringList folders() const { return m_folders; }
-    QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }
+    QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }   // the "movies" folders
+    QStringList allVideoFolders() const;   // movies + every other category's folders: what gets scanned
+    static QStringList videoCategories();
+    QString videoCategory() const { return m_videoCategory; }
+    void setVideoCategory(const QString &c);
+    QVariantMap videoCategoryFolders() const;
+    QString categoryOfVideo(const QString &path) const;   // the category whose folder is the closest parent
     SectionListModel *pictures() { return &m_sec[0]->model; }
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
@@ -309,6 +318,8 @@ public:
     // videos (spec §5b)
     Q_INVOKABLE void openVideoDetail(int row);
     Q_INVOKABLE void closeVideoDetail();
+    Q_INVOKABLE void addVideoCategoryFolder(const QString &category, const QUrl &folder);
+    Q_INVOKABLE void removeVideoCategoryFolder(const QString &category, const QString &path);
     // Fields are filled in by the user, never detected: title year rating score tagline overview genre director writers studio tags.
     Q_INVOKABLE void setVideoField(const QString &key, const QString &value);
     Q_INVOKABLE void addCastMember();
@@ -327,6 +338,7 @@ public:
 
 signals:
     void foldersChanged();
+    void videoCategoryChanged();
     void sectionFoldersChanged();
     void sectionStatusChanged();
     void bookChanged();
@@ -422,6 +434,8 @@ private:
     QStringList m_folders;
     QStringList m_videoFolders;       // used only when m_videoFoldersOwn
     bool m_videoFoldersOwn = false;   // this profile has set its own video folders
+    QHash<QString, QStringList> m_videoCatFolders;   // shows | cartoons | anime | other -> folders
+    QString m_videoCategory = QStringLiteral("movies");
     QStringList watchedFolders() const;   // music + video folders, deduplicated
     int m_scanDone = 0;
     int m_scanTotal = 0;

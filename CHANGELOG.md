@@ -4,6 +4,14 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **Video categories.** The videos tab now has sub sections like music does: **movies, shows, cartoons**
+  (western animation), **anime** and **other videos** (for things like videos you saved from YouTube to
+  keep). Each has its own folders and its own "choose a folder" button (in the tab and under
+  settings), and a video belongs to the category whose folder is its closest parent, so a folder
+  inside a movies folder can still be added as anime. Your existing video folders are your movies, so
+  nothing moves. The "up next" list while watching follows the category you are in.
+
 ## [1.6.0] - 2026-10-30
 
 ### Added
