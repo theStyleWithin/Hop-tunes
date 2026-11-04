@@ -45,42 +45,87 @@ Item {
         menu.popup(src, x, y)
     }
 
+    // phones: artists › albums › songs is one pane at a time (0 artists, 1 albums, 2 songs)
+    property int phoneStep: 0
+    AbstractButton {   // phones: the "+" button adds a folder to the videos category on show
+        objectName: "videoAddFab"
+        visible: root.phone && root.collectionTab === "videos" && !hop.guest && hop.videoDetailRow < 0
+        anchors { right: parent.right; bottom: parent.bottom; rightMargin: 20; bottomMargin: 16 }
+        width: 56; height: 56; z: 5
+        onClicked: root.addVideoCategoryFolderRequested(hop.videoCategory)
+        Accessible.name: "add a folder"
+        background: Rectangle { radius: 16; color: Theme.accent }
+        contentItem: Label { text: "+"; color: Theme.ink; font { family: Theme.font; pixelSize: 34 }
+                             horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+    }
+    readonly property bool phone: Theme.compact
+    onPhoneChanged: if (phone && mode === "artists") { mode = "albums"; phoneStep = 0 }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
 
+        // phones: the collection tabs as scrolling pills
+        Label {   // phones: the big light title, as in the mockups
+            visible: root.phone && hop.videoDetailRow < 0
+            text: "collection"
+            color: Theme.strong
+            font { family: Theme.font; pixelSize: 46; weight: Font.Light }
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 12
+        }
+        PillRow {
+            visible: root.phone && hop.videoDetailRow < 0
+            underline: true
+            Layout.fillWidth: true; Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 4
+            namePrefix: "pillTab_"
+            items: [["music", "music"], ["videos", "videos"]].concat(hop.sectionKinds.map(function (k) { return [k, k] }))
+            current: root.collectionTab
+            onPicked: function (v) { root.collectionTab = v }
+        }
+
+        Label {
+            visible: root.phone && hop.scanning && root.collectionTab === "music"
+            text: hop.scanTotal > 0 ? "scanning " + hop.scanDone + " / " + hop.scanTotal : "scanning…"
+            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+            Layout.leftMargin: Theme.pad
+        }
+
         // music · videos
         RowLayout {
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 14
+            visible: !root.phone
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: root.phone ? 6 : 14
             spacing: 28
             AbstractButton {
                 id: musicTab
+                visible: !root.phone
                 objectName: "subTab_music"
                 hoverEnabled: true
                 onClicked: root.collectionTab = "music"
-                contentItem: Label { text: "music"; color: root.collectionTab === "music" ? hop.accent : (musicTab.hovered ? Theme.text2 : Theme.dim)
-                                      font { family: Theme.font; pixelSize: 22 } }
+                contentItem: Label { text: "music"; color: root.collectionTab === "music" ? Theme.accent : (musicTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: Theme.fs(22) } }
                 background: Item {}
             }
             AbstractButton {
                 id: videosTab
+                visible: !root.phone
                 objectName: "subTab_videos"
                 hoverEnabled: true
                 onClicked: root.collectionTab = "videos"
-                contentItem: Label { text: "videos"; color: root.collectionTab === "videos" ? hop.accent : (videosTab.hovered ? Theme.text2 : Theme.dim)
-                                      font { family: Theme.font; pixelSize: 22 } }
+                contentItem: Label { text: "videos"; color: root.collectionTab === "videos" ? Theme.accent : (videosTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: Theme.fs(22) } }
                 background: Item {}
             }
             Repeater {
                 model: hop.sectionKinds
                 delegate: AbstractButton {
                     id: secTab
+                    visible: !root.phone
                     required property string modelData
                     objectName: "subTab_" + modelData
                     hoverEnabled: true
                     onClicked: root.collectionTab = modelData
-                    contentItem: Label { text: secTab.modelData; color: root.collectionTab === secTab.modelData ? hop.accent : (secTab.hovered ? Theme.text2 : Theme.dim)
-                                          font { family: Theme.font; pixelSize: 22 } }
+                    contentItem: Label { text: secTab.modelData; color: root.collectionTab === secTab.modelData ? Theme.accent : (secTab.hovered ? Theme.text2 : Theme.dim)
+                                          font { family: Theme.font; pixelSize: Theme.fs(22) } }
                     background: Item {}
                 }
             }
@@ -88,25 +133,26 @@ Item {
             AbstractButton {
                 id: sharedTab
                 objectName: "subTab_shared"
-                visible: hop.sharedHosts.length > 0
+                visible: !root.phone && hop.sharedHosts.length > 0
                 hoverEnabled: true
                 onClicked: root.collectionTab = "shared"
-                contentItem: Label { text: "shared"; color: root.collectionTab === "shared" ? hop.accent : (sharedTab.hovered ? Theme.text2 : Theme.dim)
+                contentItem: Label { text: "shared"; color: root.collectionTab === "shared" ? Theme.accent : (sharedTab.hovered ? Theme.text2 : Theme.dim)
                                       font { family: Theme.font; pixelSize: 22 } }
                 background: Item {}
             }
             Connections { target: hop; function onSharedHostsChanged() { if (hop.sharedHosts.length === 0 && root.collectionTab === "shared") root.collectionTab = "music" } }
-            Item { Layout.preferredWidth: 20 }
+            Item { visible: !root.phone; Layout.preferredWidth: 20 }
             // instant search (spec §4.2)
             TextField {
                 id: search
                 objectName: "searchField"
                 visible: hop.librarySize > 0 && root.collectionTab === "music"
                 implicitWidth: 260
+                Layout.fillWidth: root.phone
                 placeholderText: "search"
                 placeholderTextColor: Theme.dim
                 color: Theme.text
-                font { family: Theme.font; pixelSize: 16 }
+                font { family: Theme.font; pixelSize: Theme.fs(16) }
                 leftPadding: 34
                 text: hop.searchText
                 onTextEdited: searchDelay.restart()
@@ -118,8 +164,8 @@ Item {
                 Connections { target: hop; function onSearchChanged() { if (search.text !== hop.searchText) search.text = hop.searchText } }
                 background: Rectangle {
                     implicitHeight: 38; color: Theme.panel
-                    border { width: search.activeFocus ? 2 : 1; color: search.activeFocus ? hop.accent : Theme.line }
-                    Label { x: 11; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.dim; font.pixelSize: 18 }
+                    border { width: search.activeFocus ? 2 : 1; color: search.activeFocus ? Theme.accent : Theme.line }
+                    Label { x: 11; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.dim; font.pixelSize: Theme.fs(18) }
                 }
                 AbstractButton {
                     visible: search.text !== ""
@@ -127,39 +173,40 @@ Item {
                     width: 26; height: 26
                     onClicked: { search.text = ""; hop.searchText = "" }
                     Accessible.name: "clear search"
-                    contentItem: Label { text: "×"; color: Theme.muted; font.pixelSize: 20; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Label { text: "×"; color: Theme.muted; font.pixelSize: Theme.fs(20); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Item { }
                 }
             }
             Label {
                 visible: hop.scanning && root.collectionTab === "music"
                 text: hop.scanTotal > 0 ? "scanning " + hop.scanDone + " / " + hop.scanTotal : "scanning…"
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             Label {
                 visible: !hop.scanning && hop.librarySize > 0 && root.collectionTab === "music"
                 text: hop.searchText !== "" ? hop.songs.count + " of " + hop.librarySize : hop.songs.count + (hop.songs.count === 1 ? " song" : " songs")
-                color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
-            Item { Layout.fillWidth: true }
+            Item { visible: !root.phone; Layout.fillWidth: true }
             // choose what guests may see; there only while sharing is on and there is a guest
             AbstractButton {
                 id: shareToggle
                 objectName: "shareModeToggle"
-                visible: hop.canChooseShares
+                visible: !root.phone && hop.canChooseShares
                 hoverEnabled: true
                 onClicked: hop.shareMode = !hop.shareMode
                 Accessible.name: "choose what guests can see"
                 Accessible.checked: hop.shareMode
                 contentItem: Label {
                     text: "share"
-                    color: hop.shareMode ? hop.accent : (shareToggle.hovered ? Theme.text2 : Theme.muted)
+                    color: hop.shareMode ? Theme.accent : (shareToggle.hovered ? Theme.text2 : Theme.muted)
                     font { family: Theme.font; pixelSize: 16; underline: shareToggle.hovered }
                 }
                 background: Item {}
             }
             // centred on this row but adding nothing to its height, so the tabs stay exactly where they were
             Item {
+                visible: !root.phone
                 Layout.preferredWidth: tabChip.implicitWidth; Layout.preferredHeight: 0; Layout.alignment: Qt.AlignVCenter
                 ProfileChip { id: tabChip; anchors { right: parent.right; verticalCenter: parent.verticalCenter } }
             }
@@ -190,8 +237,8 @@ Item {
                     }
                     background: Rectangle {
                         implicitHeight: 30; implicitWidth: Math.max(60, whoBtn.contentItem.implicitWidth + 24)
-                        color: hop.shareTarget === whoBtn.g.id ? hop.accent : (whoBtn.hovered ? Theme.hover : "transparent")
-                        border { width: 1; color: hop.shareTarget === whoBtn.g.id ? hop.accent : Theme.line }
+                        color: hop.shareTarget === whoBtn.g.id ? Theme.accent : (whoBtn.hovered ? Theme.hover : "transparent")
+                        border { width: 1; color: hop.shareTarget === whoBtn.g.id ? Theme.accent : Theme.line }
                     }
                 }
             }
@@ -202,15 +249,23 @@ Item {
                 objectName: "shareDone"
                 hoverEnabled: true
                 onClicked: hop.shareMode = false
-                contentItem: Label { text: "done"; color: shareDone.hovered ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 15; underline: shareDone.hovered } }
+                contentItem: Label { text: "done"; color: shareDone.hovered ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: 15; underline: shareDone.hovered } }
                 background: Item {}
             }
         }
 
         // ARTISTS · ALBUMS · SONGS · PLAYLISTS (genres: later)
+        PillRow {
+            visible: root.phone && root.collectionTab === "music"
+            Layout.fillWidth: true; Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad
+            namePrefix: "pillMode_"
+            items: [["albums", "albums"], ["artists", "artists"], ["songs", "songs"], ["playlists", "playlists"]]
+            current: root.mode
+            onPicked: function (v) { root.mode = v; root.phoneStep = 0 }
+        }
         RowLayout {
-            visible: root.collectionTab === "music"
-            Layout.leftMargin: 48; Layout.topMargin: 10
+            visible: !root.phone && root.collectionTab === "music"
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 10
             spacing: 24
             Repeater {
                 model: [["ARTISTS", "artists"], ["ALBUMS", "albums"], ["SONGS", "songs"], ["GENRES", ""], ["PLAYLISTS", "playlists"]]
@@ -228,9 +283,9 @@ Item {
                     contentItem: Label {
                         text: tab.modelData[0]
                         color: tab.on ? Theme.strong : (!tab.enabled ? Theme.faint : (tab.hovered ? Theme.text2 : Theme.tabIdle))
-                        font { family: Theme.font; pixelSize: 15; letterSpacing: 1 }
+                        font { family: Theme.font; pixelSize: Theme.fs(15); letterSpacing: 1 }
                         bottomPadding: 4
-                        Rectangle { visible: tab.on; anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 2; color: hop.accent }
+                        Rectangle { visible: tab.on; anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 2; color: Theme.accent }
                     }
                 }
             }
@@ -240,24 +295,24 @@ Item {
         ColumnLayout {
             visible: root.collectionTab === "music" && hop.librarySize === 0 && !hop.scanning
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.topMargin: 40
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 18
             Label {
                 text: hop.folders.length === 0 ? "add your music" : "no songs found yet"
-                color: Theme.text; font { family: Theme.font; pixelSize: 56; weight: Font.Light }
+                color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(56); weight: Font.Light }
             }
             Label {
                 text: hop.folders.length === 0
                       ? "pick a folder and hop-tunes will find your songs. nothing is uploaded anywhere."
                       : "hop-tunes looked in " + hop.folders.join(", ") + " and found no audio files."
-                color: Theme.muted; font { family: Theme.font; pixelSize: 18 }
-                wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(18) }
+                wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }
             Button {
                 text: "choose a music folder…"
                 onClicked: root.addFolderRequested()
-                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 18; weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
+                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(18); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitHeight: 52; implicitWidth: 260; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
             }
             Item { Layout.fillHeight: true }
         }
@@ -266,10 +321,10 @@ Item {
         ColumnLayout {
             visible: root.collectionTab === "music" && hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.topMargin: 40
+            Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 12
-            Label { text: "nothing matches \u201c" + hop.searchText + "\u201d"; color: Theme.text; font { family: Theme.font; pixelSize: 40; weight: Font.Light } }
-            Label { text: "search looks at titles, artists, albums and genres."; color: Theme.muted; font { family: Theme.font; pixelSize: 16 } }
+            Label { text: "nothing matches \u201c" + hop.searchText + "\u201d"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(40); weight: Font.Light } }
+            Label { text: "search looks at titles, artists, albums and genres."; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) } }
             Item { Layout.fillHeight: true }
         }
 
@@ -277,7 +332,7 @@ Item {
             onAddFolderRequested: function (c) { root.addVideoCategoryFolderRequested(c) }
             visible: root.collectionTab === "videos"
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
         }
 
         Repeater {
@@ -295,7 +350,7 @@ Item {
                     else hop.playSectionItem(secView.kind, row)
                 }
                 Layout.fillWidth: true; Layout.fillHeight: true
-                Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+                Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
             }
         }
         SharedView {
@@ -310,15 +365,16 @@ Item {
         StackLayout {
             visible: root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
             Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
             currentIndex: ["artists", "albums", "songs", "playlists"].indexOf(root.mode)
 
             // ---- artists › albums › songs ----
             RowLayout {
-                spacing: 32
+                spacing: root.phone ? 0 : 32
                 ListView {
                     id: artistList
-                    Layout.preferredWidth: 240; Layout.fillHeight: true
+                    visible: !root.phone || root.phoneStep === 0
+                    Layout.preferredWidth: 240; Layout.fillWidth: root.phone; Layout.fillHeight: true
                     clip: true
                     model: hop.artists
                     currentIndex: hop.selectedArtist
@@ -331,9 +387,9 @@ Item {
                         required property int index
                         required property string name
                         readonly property bool sel: index === hop.selectedArtist
-                        width: artistList.width; height: 40
+                        width: artistList.width; height: root.phone ? 52 : 40
                         leftPadding: 10
-                        onClicked: hop.selectArtist(index)
+                        onClicked: { hop.selectArtist(index); root.phoneStep = 1 }
                         Accessible.name: name
                         MouseArea {
                             anchors.fill: parent; acceptedButtons: Qt.RightButton
@@ -341,18 +397,28 @@ Item {
                         }
                         background: Rectangle { color: ad.sel || ad.hovered ? Theme.hover : "transparent" }
                         contentItem: Label { text: ad.name; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
-                                             color: ad.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
+                                             color: ad.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) } }
                     }
                 }
 
                 ColumnLayout {
-                    Layout.preferredWidth: 300; Layout.fillHeight: true
+                    visible: !root.phone || root.phoneStep === 1
+                    Layout.preferredWidth: 300; Layout.fillWidth: root.phone; Layout.fillHeight: true
                     spacing: 6
-                    Label { text: hop.selectedArtistName; color: Theme.text; font { family: Theme.font; pixelSize: 30; weight: Font.Light }
+                    AbstractButton {   // phones: back to the artists
+                        visible: root.phone
+                        objectName: "backToArtists"
+                        implicitHeight: 44
+                        onClicked: root.phoneStep = 0
+                        Accessible.name: "back to artists"
+                        background: Item {}
+                        contentItem: Label { text: "‹  artists"; color: Theme.accent; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(18) } }
+                    }
+                    Label { text: hop.selectedArtistName; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(30); weight: Font.Light }
                             wrapMode: Text.WordWrap; maximumLineCount: 2; elide: Text.ElideRight; Layout.fillWidth: true }
                     Label {
                         text: hop.artistAlbums.count + (hop.artistAlbums.count === 1 ? " album" : " albums")
-                        color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                        color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
                     }
                     GridView {
                         id: albumGrid
@@ -369,7 +435,7 @@ Item {
                             required property int year
                             readonly property bool sel: index === hop.selectedAlbum
                             width: albumGrid.cellWidth - 14; height: albumGrid.cellHeight
-                            onClicked: hop.selectAlbum(index)
+                            onClicked: { hop.selectAlbum(index); root.phoneStep = 2 }
                             onDoubleClicked: { hop.selectAlbum(index); hop.playAlbum(0) }
                             Accessible.name: title
                             MouseArea {
@@ -383,15 +449,15 @@ Item {
                                 AbstractButton {
                                     id: imageBtn
                                     objectName: "albumImageBtn_" + alb.index
-                                    visible: !hop.guest
+                                    visible: !hop.guest && !Theme.compact
                                     hoverEnabled: true
                                     Layout.fillWidth: true; Layout.preferredHeight: 18
                                     Accessible.name: "change album cover"
                                     onClicked: { hop.selectAlbum(alb.index); albumArtDialog.open() }
                                     contentItem: Label {
                                         text: "image"; horizontalAlignment: Text.AlignHCenter
-                                        color: imageBtn.hovered ? hop.accent : Theme.muted
-                                        font { family: Theme.font; pixelSize: 12; underline: imageBtn.hovered }
+                                        color: imageBtn.hovered ? Theme.accent : Theme.muted
+                                        font { family: Theme.font; pixelSize: Theme.fs(12); underline: imageBtn.hovered }
                                     }
                                     background: Item {}
                                 }
@@ -402,12 +468,12 @@ Item {
                                     Layout.fillWidth: true
                                     readOnly: hop.guest
                                     selectByMouse: true
-                                    color: alb.sel ? hop.accent : Theme.text
-                                    font { family: Theme.font; pixelSize: 15 }
+                                    color: alb.sel ? Theme.accent : Theme.text
+                                    font { family: Theme.font; pixelSize: Theme.fs(15) }
                                     leftPadding: 0; rightPadding: 0; topPadding: 2; bottomPadding: 2
                                     background: Rectangle {
                                         implicitHeight: 22; color: "transparent"
-                                        border { width: titleEdit.activeFocus ? 1 : 0; color: hop.accent }
+                                        border { width: titleEdit.activeFocus ? 1 : 0; color: Theme.accent }
                                     }
                                     Accessible.name: "album title"
                                     onAccepted: {
@@ -417,26 +483,36 @@ Item {
                                         focus = false
                                     }
                                 }
-                                Label { text: alb.year > 0 ? alb.year : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+                                Label { text: alb.year > 0 ? alb.year : ""; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                             }
                         }
                     }
                 }
 
                 ColumnLayout {
+                    visible: !root.phone || root.phoneStep === 2
                     Layout.fillWidth: true; Layout.fillHeight: true
                     spacing: 0
+                    AbstractButton {   // phones: back to this artist's albums
+                        visible: root.phone
+                        objectName: "backToAlbums"
+                        implicitHeight: 44
+                        onClicked: root.phoneStep = 1
+                        Accessible.name: "back to albums"
+                        background: Item {}
+                        contentItem: Label { text: "‹  albums"; color: Theme.accent; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: Theme.fs(18) } }
+                    }
                     RowLayout {
                         Layout.fillWidth: true; Layout.bottomMargin: 10
                         Label { text: hop.selectedAlbumTitle; Layout.fillWidth: true; elide: Text.ElideRight
-                                color: Theme.text; font { family: Theme.font; pixelSize: 22 } }
+                                color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(22) } }
                         Button {
                             text: "play album"
                             enabled: hop.albumSongs.count > 0
                             onClicked: hop.playAlbum(0)
-                            contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: 15; weight: Font.Medium }
+                            contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(15); weight: Font.Medium }
                                                  horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                            background: Rectangle { implicitWidth: 120; implicitHeight: 40; color: parent.hovered ? Qt.lighter(hop.accent, 1.08) : hop.accent }
+                            background: Rectangle { implicitWidth: 120; implicitHeight: 40; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
                         }
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: Theme.line }
@@ -470,8 +546,8 @@ Item {
                 id: allAlbums
                 clip: true
                 model: hop.allAlbums
-                readonly property int columns: Math.max(3, Math.floor(width / 200))
-                cellWidth: width / columns; cellHeight: cellWidth + 52
+                readonly property int columns: root.phone ? 2 : Math.max(3, Math.floor(width / 200))
+                cellWidth: width / columns; cellHeight: cellWidth + (Theme.compact ? 56 : 52)
                 boundsBehavior: Flickable.StopAtBounds
                 ScrollBar.vertical: ScrollBar {}
                 delegate: AbstractButton {
@@ -480,8 +556,8 @@ Item {
                     required property string title
                     required property string artist
                     required property string art
-                    width: allAlbums.cellWidth - 18; height: allAlbums.cellHeight
-                    onClicked: { hop.openAlbum(index); root.mode = "artists" }
+                    width: allAlbums.cellWidth - (Theme.compact ? 14 : 18); height: allAlbums.cellHeight
+                    onClicked: { hop.openAlbum(index); root.mode = "artists"; root.phoneStep = 2 }
                     Accessible.name: title + ", " + artist
                     ShareTick { x: 6; y: 6; paths: hop.albumPaths(tile.index) }
                     MouseArea {
@@ -493,8 +569,9 @@ Item {
                         spacing: 4
                         AlbumArt { key: tile.title; source: tile.art; Layout.fillWidth: true; Layout.preferredHeight: width
                                    opacity: tile.hovered ? 0.85 : 1 }
-                        Label { text: tile.title; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.text; font { family: Theme.font; pixelSize: 15 } }
-                        Label { text: tile.artist; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.muted; font { family: Theme.font; pixelSize: 13 } }
+                        Label { text: tile.title; Layout.fillWidth: true; Layout.topMargin: Theme.compact ? 4 : 0; elide: Text.ElideRight; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 17 : Theme.fs(15) } }
+                        Label { text: tile.artist; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.compact ? 14 : Theme.fs(13) } }
+                        Item { Layout.fillHeight: true }
                     }
                 }
             }
@@ -511,16 +588,17 @@ Item {
                 focus: true
 
                 header: Rectangle {
-                    width: list.width; height: 34; color: "transparent"
+                    visible: !Theme.compact
+                    width: list.width; height: Theme.compact ? 0 : 34; color: "transparent"
                     RowLayout {
                         anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
                         spacing: 16
-                        Label { text: "#"; Layout.preferredWidth: 28; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
-                        Label { text: "title"; Layout.fillWidth: true; Layout.preferredWidth: 4; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
-                        Label { text: "artist"; Layout.fillWidth: true; Layout.preferredWidth: 3; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
-                        Label { text: "album"; Layout.fillWidth: true; Layout.preferredWidth: 3; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                        Label { text: "#"; Layout.preferredWidth: 28; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                        Label { text: "title"; Layout.fillWidth: true; Layout.preferredWidth: 4; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                        Label { text: "artist"; Layout.fillWidth: true; Layout.preferredWidth: 3; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                        Label { text: "album"; Layout.fillWidth: true; Layout.preferredWidth: 3; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                         Item { Layout.preferredWidth: 27 }
-                        Label { text: "length"; Layout.preferredWidth: 56; horizontalAlignment: Text.AlignRight; color: Theme.dim; font { family: Theme.font; pixelSize: 13 } }
+                        Label { text: "length"; Layout.preferredWidth: 56; horizontalAlignment: Text.AlignRight; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     }
                     Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 1; color: Theme.line }
                 }
@@ -559,19 +637,19 @@ Item {
         MenuItem {
             text: "play all by " + artistMenu.artist
             onTriggered: hop.playTile("artist", artistMenu.artist)
-            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 15 } leftPadding: 6 }
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
             background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
         }
         MenuItem {
             text: "smart DJ from " + artistMenu.artist
             onTriggered: hop.startDj(artistMenu.artist)
-            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 15 } leftPadding: 6 }
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
             background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
         }
         MenuItem {
             text: artistMenu.pinned ? "unpin from quickplay" : "pin to quickplay"
             onTriggered: artistMenu.pinned ? hop.unpinTile("artist", artistMenu.artist) : hop.pinTile("artist", artistMenu.artist, artistMenu.artist)
-            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 15 } leftPadding: 6 }
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
             background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
         }
     }

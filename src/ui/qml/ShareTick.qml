@@ -12,8 +12,8 @@ Rectangle {
     visible: hop.shareMode
     z: 20
     width: 24; height: 24
-    color: state === 0 ? Qt.rgba(0, 0, 0, 0.55) : hop.accent
-    border { width: 2; color: state === 0 ? "white" : hop.accent }
+    color: state === 0 ? Qt.rgba(0, 0, 0, 0.55) : Theme.accent
+    border { width: 2; color: state === 0 ? "white" : Theme.accent }
     Accessible.role: Accessible.CheckBox
     Accessible.name: "share with " + hop.shareTargetName
     Accessible.checked: state === 2

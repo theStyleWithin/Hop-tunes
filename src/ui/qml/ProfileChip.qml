@@ -24,7 +24,7 @@ AbstractButton {
                 anchors.verticalCenter: parent.verticalCenter
                 text: hop.profile.name || ""
                 color: chip.hovered ? Theme.text : Theme.muted
-                font { family: Theme.font; pixelSize: 18 }
+                font { family: Theme.font; pixelSize: Theme.fs(18) }
             }
             ProfileAvatar { profile: hop.profile; size: chip.avatarSize }
         }

@@ -2,12 +2,19 @@
 #include "App.h"
 #include "core/Paths.h"
 #include "core/ProfileStore.h"
+#ifdef HOPTUNES_HAVE_GST
 #include "platform/Mpris.h"
+#endif
 #ifdef Q_OS_WIN
 #include "platform/WinRuntime.h"
 #endif
 #include "ui/MpvVideoItem.h"
 
+#ifdef Q_OS_ANDROID
+#include <QJniEnvironment>
+#include <QJniObject>
+#include <QCoreApplication>
+#endif
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QFont>
@@ -23,7 +30,9 @@
 
 #include <cstdio>
 
+#ifdef HOPTUNES_HAVE_GST
 #include <gst/gst.h>
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -76,6 +85,7 @@ int main(int argc, char *argv[])
             return 1;
         }
     }
+#ifdef HOPTUNES_HAVE_GST
     gst_init(&argc, &argv);
     // The GStreamer video fallback's QML type (GstVideoSurfaceView.qml, used when
     // HOPTUNES_HAVE_MPV is off) only self-registers once its plugin .so is actually
@@ -83,8 +93,26 @@ int main(int argc, char *argv[])
     // whichever engine ends up active. Force the load now, before QGuiApplication exists
     // (verified necessary in exactly that order, not after).
     if (GstElement *probe = gst_element_factory_make("qml6glsink", nullptr)) gst_object_unref(probe);
+#endif
 
     QGuiApplication app(argc, argv);
+#ifdef Q_OS_ANDROID
+    {   // reading your own music, films and pictures needs the media permissions (asked once)
+        const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+        const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
+        const QStringList perms = sdk >= 33
+            ? QStringList{QStringLiteral("android.permission.READ_MEDIA_AUDIO"), QStringLiteral("android.permission.READ_MEDIA_VIDEO"),
+                          QStringLiteral("android.permission.READ_MEDIA_IMAGES")}
+            : QStringList{QStringLiteral("android.permission.READ_EXTERNAL_STORAGE")};
+        QJniEnvironment env;
+        jobjectArray arr = env->NewObjectArray(perms.size(), env->FindClass("java/lang/String"), nullptr);
+        for (int i = 0; i < perms.size(); ++i) {
+            const QJniObject name = QJniObject::fromString(perms[i]);
+            env->SetObjectArrayElement(arr, i, name.object<jstring>());
+        }
+        activity.callMethod<void>("requestPermissions", "([Ljava/lang/String;I)V", arr, jint(1));
+    }
+#endif
     QGuiApplication::setApplicationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setOrganizationName(QStringLiteral("hop-tunes"));
     QGuiApplication::setApplicationDisplayName(QStringLiteral("Hop-tunes"));
@@ -103,11 +131,15 @@ int main(int argc, char *argv[])
 
     // One window per session: a second launch hands its files to the running one.
     const bool devRun = qEnvironmentVariableIsSet("HOPTUNES_SCREENSHOT") || qEnvironmentVariableIsSet("HOPTUNES_NO_MPRIS");
+#ifdef HOPTUNES_HAVE_GST
     if (!devRun) {
         QStringList uris;
         for (const QString &f : files) uris << (f.startsWith(QLatin1String("file:")) ? f : QUrl::fromLocalFile(f).toString());
         if (hop::Mpris::forwardToRunningInstance(uris)) return 0;
     }
+#else
+    Q_UNUSED(devRun)
+#endif
 
     // The design uses Jost (SIL OFL), bundled so the app looks the same on every distro.
     // Its internal family name is "Jost*"; the QML asks for "Jost".
@@ -135,6 +167,7 @@ int main(int argc, char *argv[])
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return 1;
 
+#ifdef HOPTUNES_HAVE_GST
     // Media keys / desktop media widgets.
     hop::Mpris mpris(hopApp.player());
     QObject::connect(&mpris, &hop::Mpris::quitRequested, &app, &QCoreApplication::quit);
@@ -143,6 +176,7 @@ int main(int argc, char *argv[])
         if (auto *w = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) { w->show(); w->raise(); w->requestActivate(); }
     });
     mpris.start();
+#endif
     hopApp.openFiles(files);   // played now, or once a profile is open
 
     // Developer hook: HOPTUNES_AUTOPLAY=<row> starts playing that song once the library has loaded.

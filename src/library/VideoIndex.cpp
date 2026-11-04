@@ -118,11 +118,11 @@ QHash<QString, VideoIndex::FileStamp> VideoIndex::stampsUnder(const QString &fol
     QHash<QString, FileStamp> out;
     if (!m_db) return out;
     const QString f = normFolder(folder);
-    Stmt s(m_db, "SELECT path, id, mtime, size FROM video WHERE path >= ?1 AND path < ?2");
+    Stmt s(m_db, "SELECT path, id, mtime, size, duration_ms, thumb FROM video WHERE path >= ?1 AND path < ?2");
     s.bind(1, lowerBound(f));
     s.bind(2, upperBound(f));
     while (s.step() == SQLITE_ROW)
-        out.insert(s.str(0), FileStamp{s.i64(1), s.i64(2), s.i64(3)});
+        out.insert(s.str(0), FileStamp{s.i64(1), s.i64(2), s.i64(3), s.i64(4), s.str(5)});
     return out;
 }
 

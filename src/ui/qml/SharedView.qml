@@ -29,7 +29,7 @@ Item {
             RowLayout {
                 spacing: 8
                 Label { text: "shared with me"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
-                Label { text: "beta"; color: hop.accent; font { family: Theme.font; pixelSize: 12 } }
+                Label { text: "beta"; color: Theme.accent; font { family: Theme.font; pixelSize: 12 } }
             }
             ListView {
                 id: hostList
@@ -51,7 +51,7 @@ Item {
                     contentItem: ColumnLayout {
                         spacing: 0
                         Label { text: hd.modelData.name; elide: Text.ElideRight; Layout.fillWidth: true
-                                color: hd.sel ? hop.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
+                                color: hd.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: 18 } }
                         Label { text: hd.modelData.address + ":" + hd.modelData.port; elide: Text.ElideRight; Layout.fillWidth: true
                                 color: Theme.dim; font { family: Theme.font; pixelSize: 12 } }
                     }
@@ -75,7 +75,7 @@ Item {
                     visible: root.host !== null
                     hoverEnabled: true
                     onClicked: hop.openSharedHost(hop.sharedHost)
-                    contentItem: Label { text: "refresh"; color: refreshBtn.hovered ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: 14; underline: refreshBtn.hovered } }
+                    contentItem: Label { text: "refresh"; color: refreshBtn.hovered ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: 14; underline: refreshBtn.hovered } }
                     background: Item {}
                 }
                 AbstractButton {
@@ -84,7 +84,7 @@ Item {
                     visible: root.host !== null && !addrField.visible
                     hoverEnabled: true
                     onClicked: { addrField.text = root.host.address + ":" + root.host.port; addrField.visible = true; addrField.forceActiveFocus(); addrField.selectAll() }
-                    contentItem: Label { text: "change address"; color: addrBtn.hovered ? hop.accent : Theme.muted; font { family: Theme.font; pixelSize: 14; underline: addrBtn.hovered } }
+                    contentItem: Label { text: "change address"; color: addrBtn.hovered ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: 14; underline: addrBtn.hovered } }
                     background: Item {}
                 }
                 TextField {
@@ -98,7 +98,7 @@ Item {
                     onAccepted: { root.addressMsg = hop.setSharedHostAddress(hop.sharedHost, text); if (root.addressMsg === "") visible = false }
                     Keys.onEscapePressed: { visible = false; root.addressMsg = "" }
                     onActiveFocusChanged: if (!activeFocus) visible = false
-                    background: Rectangle { color: Theme.panel; border { width: 2; color: hop.accent } }
+                    background: Rectangle { color: Theme.panel; border { width: 2; color: Theme.accent } }
                 }
                 AbstractButton {
                     id: leaveBtn
@@ -124,9 +124,9 @@ Item {
                     visible: !!hop.sharedParty.item && !hop.partyFollowing
                     hoverEnabled: true
                     onClicked: hop.joinParty()
-                    contentItem: Label { text: "join the party"; color: joinParty.hovered ? Theme.ink : hop.accent; font { family: Theme.font; pixelSize: 15 }
+                    contentItem: Label { text: "join the party"; color: joinParty.hovered ? Theme.ink : Theme.accent; font { family: Theme.font; pixelSize: 15 }
                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                    background: Rectangle { implicitHeight: 30; implicitWidth: 130; color: joinParty.hovered ? hop.accent : "transparent"; border { width: 1; color: hop.accent } }
+                    background: Rectangle { implicitHeight: 30; implicitWidth: 130; color: joinParty.hovered ? Theme.accent : "transparent"; border { width: 1; color: Theme.accent } }
                 }
             }
             Label { visible: root.addressMsg !== ""; text: root.addressMsg; color: Theme.danger; font { family: Theme.font; pixelSize: 14 } }

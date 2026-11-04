@@ -7,6 +7,8 @@ Rectangle {
     id: root
     property var profile: ({})
     property int size: 48
+    property bool round: false             // phones: a circle
+    property color cornerColor: Theme.bg   // what shows outside the circle
     implicitWidth: size; implicitHeight: size
     width: size; height: size
     color: profile.accent || "#4fd1c5"
@@ -27,5 +29,21 @@ Rectangle {
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
+    }
+    Canvas {   // the circle
+        id: mask
+        anchors.fill: parent
+        visible: root.round
+        onPaint: {
+            var g = getContext("2d")
+            g.reset()
+            g.fillStyle = root.cornerColor
+            g.fillRect(0, 0, width, height)
+            g.globalCompositeOperation = "destination-out"
+            g.beginPath(); g.arc(width / 2, height / 2, Math.min(width, height) / 2, 0, 2 * Math.PI); g.fill()
+        }
+        onWidthChanged: requestPaint()
+        onHeightChanged: requestPaint()
+        Connections { target: root; function onCornerColorChanged() { mask.requestPaint() } }
     }
 }
