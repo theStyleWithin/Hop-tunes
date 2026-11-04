@@ -17,6 +17,11 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   has no Android version, so it drew a dark layer over everything and nothing could be tapped. Android now opens the
   system's own folder chooser instead; desktop is unchanged. (A first fix was not enough on one phone, so this
   patch also repaints the window when you return from the chooser and starts the scan only after that first paint.)
+- **Android: "Hop-tunes isn't responding" after choosing a folder.** The real cause: right after a folder was
+  chosen, the app walked the whole folder tree and set up a live-update watch on every sub-folder, on the thread
+  that draws the screen. A big music (or storage) folder kept that thread busy for so long that Android reported the
+  app as frozen. Phones no longer watch folders live (they scan at start-up and on "rescan now"); desktop keeps
+  live updates.
 
 ### Changed
 - **Phones: you make your profile first and choose your music folder afterwards**, in the collection, instead of

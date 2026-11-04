@@ -108,6 +108,12 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     // Live library updates (spec §6): a local inotify watch, nothing more — see
     // LibraryWatcher's header comment. Debounced, so one rescan covers a whole copy.
     connect(&m_watcher, &LibraryWatcher::changed, this, [this] { rescan(); });
+#ifdef Q_OS_ANDROID
+    // Walking the chosen tree and adding a watch per folder ran on the UI thread and froze the app after a
+    // folder was chosen (a big music or storage folder). Phones skip live watching: scan at start and on demand.
+    m_watcher.setMaxDirectories(0);
+    DiagLog::note(QStringLiteral("live folder watching is off on Android"));
+#endif
     for (TrackListModel *m : {&m_songs, &m_albumSongs, &m_playlistSongs}) m->setStats(&m_stats);
     m_openTimer.setSingleShot(true);
     m_openTimer.setInterval(250);
