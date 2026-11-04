@@ -33,6 +33,7 @@ ItemDelegate {
     Keys.onMenuPressed: row.menu(row, 40, row.height)
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.RightButton; onClicked: function (mouse) { row.menu(row, mouse.x, mouse.y) } }
     Accessible.name: title + (artist ? ", " + artist : "")
+    ShareTick { x: 4; anchors.verticalCenter: parent.verticalCenter; paths: row.path ? [row.path] : [] }
 
     background: Rectangle {
         color: row.hovered || (row.ListView.isCurrentItem && row.ListView.view && row.ListView.view.activeFocus) ? Theme.hover : "transparent"

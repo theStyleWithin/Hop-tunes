@@ -105,6 +105,17 @@ The video player has its own **volume slider** (next to the play button), separa
 
 The **videos** tab has five sub sections: **movies, shows, cartoons** (western animation), **anime** and **other videos** (for example videos you saved from YouTube to keep). Each has its own folders: use *choose a folder* (or *+ add folder*) inside the section, or the matching list under **settings**. Your existing video folders are your *movies*. A video belongs to the category whose folder is closest to it, so you can put an *Anime* folder inside a bigger movies folder and add it under anime. Everything still works the same in every category: movie pages, thumbnails, resume, chat and comments.
 
+## Party Watch (beta): sharing with guests
+
+**Settings › sharing** (marked *party watch beta*) lets people you trust watch and listen to part of your library from their own Hop-tunes. It is **off every time you start Hop-tunes**, nothing is shared until you tick it, and guests can only **stream**: no downloading, nothing saved on their computer.
+
+* **Invite:** switch sharing on, choose how long an invite lasts, press *make an invite code* and send the `hop://…` link yourself. Each guest gets their own private key and their own list.
+* **Choose what they see:** once you have a guest, a **share** button appears in the collection. Turn it on, pick the guest at the top, and tick videos, albums or songs. Ticks are remembered. A guest sees only what is ticked; the rest does not exist for them.
+* **As a guest:** Settings › sharing › *join someone's library*: paste the link. A **shared** tab appears in the collection with what the host chose. Films, shows and songs play straight from the host.
+* **Away from home:** see [connecting from outside your home](party-watch-internet.md) for port forwarding and firewall steps.
+* **Watch party:** switch *watch party* on in Settings › sharing, then play a film. A guest who may see it gets "[you] is watching …" with a *join the party* button and stays in step with your pausing and seeking.
+* **Not there yet (beta):** pictures, books and podcasts for guests, and a watch party for music.
+
 ## Comments under videos
 
 **settings → video settings → comments** has three choices, and it only shows in the *window* and *theater* styles (never fullscreen):

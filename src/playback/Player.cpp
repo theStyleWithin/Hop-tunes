@@ -20,6 +20,8 @@ constexpr guint kFlagSoftVolume = 1u << 4;
 
 QByteArray toUri(const QString &path)
 {
+    // a shared song arrives as an address on this computer only (the sharing proxy); everything else is a file
+    if (path.startsWith(QLatin1String("http://127.0.0.1:"))) return path.toUtf8();
     GError *err = nullptr;
     gchar *uri = gst_filename_to_uri(path.toUtf8().constData(), &err);
     if (err) g_error_free(err);
