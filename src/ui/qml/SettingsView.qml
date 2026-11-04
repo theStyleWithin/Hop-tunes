@@ -189,7 +189,7 @@ Item {
                     spacing: 10
                     Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 100
                     Repeater {
-                        model: Theme.accents
+                        model: hop.accents
                         delegate: AbstractButton {
                             required property string modelData
                             width: 32; height: 32
@@ -603,6 +603,10 @@ Item {
             PlainButton { visible: root.confirmRemove; text: "remove"; danger: true; onClicked: { root.confirmRemove = false; root.profileMsg = hop.removeProfile() } }
         }
 
+        ColumnLayout {   // Party Watch (beta) is desktop only for now, so phones do not get this section
+            visible: !Theme.compact
+            Layout.fillWidth: true
+            spacing: 18
         // ---- sharing (the host's side) -----------------------------------------------
         Connections { target: hop; function onSharingChanged() { if (!hop.sharing) root.invite = ({}) } }
         RowLayout {
@@ -859,6 +863,8 @@ Item {
                 wrapMode: Text.WordWrap; Layout.maximumWidth: 640
             }
         }
+
+        }   // end of the sharing section (desktop only: Party Watch is not on Android)
 
         // ---- about -------------------------------------------------------------------
         Label { text: "about"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 28 }

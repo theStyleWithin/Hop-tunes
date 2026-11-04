@@ -133,7 +133,7 @@ Rectangle {
         visible: gate.mode === "create"
         anchors { fill: parent; leftMargin: 72; rightMargin: 72; topMargin: 64; bottomMargin: 48 }
         spacing: 14
-        property string accent: Theme.accents[0]
+        property string accent: hop.accents[0]
         property url folder: hop.suggestedFolderUrl
 
         Label {
@@ -177,7 +177,7 @@ Rectangle {
                     spacing: 10
                     Layout.fillWidth: true
                     Repeater {
-                        model: Theme.accents
+                        model: hop.accents
                         delegate: AbstractButton {
                             required property string modelData
                             width: Theme.compact ? 44 : 36; height: width
