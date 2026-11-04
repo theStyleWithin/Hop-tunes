@@ -18,6 +18,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   system's own folder chooser instead; desktop is unchanged. (A first fix was not enough on one phone, so this
   patch also repaints the window when you return from the chooser and starts the scan only after that first paint.)
 
+### Changed
+- **Phones: you make your profile first and choose your music folder afterwards**, in the collection, instead of
+  on the profile form (the profile still starts with the phone's Music folder). Desktop is unchanged.
+
 ### Added
 - **Settings › diagnostics on phones:** a small log of what the app did and any errors, kept on the phone only,
   with buttons to show it and copy it (this run or the last one), so a problem can be reported without a terminal.

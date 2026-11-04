@@ -221,6 +221,16 @@ private slots:
         QCOMPARE(gateMode(), QStringLiteral("create"));
         QCOMPARE(m_app->suggestedFolder(), QFileInfo(m_home.filePath(QStringLiteral("Music"))).canonicalFilePath());
 
+        // desktop: the music folder is chosen on this form; phones leave it for the collection
+        QTRY_VERIFY(item("createFolderBlock") && item("createFolderBlock")->isVisible());
+        window()->setProperty("forceMobile", true);
+        window()->resize(412, 880);
+        QTRY_VERIFY(!item("createFolderBlock")->isVisible());
+        QVERIFY(item("createButton")->isVisible());
+        window()->setProperty("forceMobile", false);
+        window()->resize(1280, 800);
+        QTRY_VERIFY(item("createFolderBlock")->isVisible());
+
         type("profileName", QStringLiteral("Jo"));
         QVERIFY(click("usePin"));
         type("pin1", QStringLiteral("2468"));

@@ -42,6 +42,11 @@ int main(int argc, char *argv[])
     // must be set before QGuiApplication exists.
     // HOPTUNES_SOFTWARE_RENDER=1 draws without OpenGL (headless smoke tests, machines with no usable
     // GPU driver); video through libmpv needs the OpenGL path, everything else works.
+#ifdef Q_OS_ANDROID
+    // Returning from another screen (the system folder chooser) froze the app on one phone ("isn't responding").
+    // The single-threaded render loop avoids a GUI/render thread hand-over that can stall there. A guess, logged.
+    if (!qEnvironmentVariableIsSet("QSG_RENDER_LOOP")) qputenv("QSG_RENDER_LOOP", "basic");
+#endif
     QQuickWindow::setGraphicsApi(qEnvironmentVariableIsSet("HOPTUNES_SOFTWARE_RENDER")
                                      ? QSGRendererInterface::Software : QSGRendererInterface::OpenGL);
 #ifdef Q_OS_WIN
@@ -101,6 +106,7 @@ int main(int argc, char *argv[])
     // Phones have no terminal: keep a small log (settings > diagnostics). Elsewhere only when asked for.
 #ifdef Q_OS_ANDROID
     hop::DiagLog::install(hop::Paths::dataDir());
+    hop::DiagLog::note(QStringLiteral("render loop: ") + qEnvironmentVariable("QSG_RENDER_LOOP"));
 #else
     if (qEnvironmentVariableIsSet("HOPTUNES_DIAG")) hop::DiagLog::install(hop::Paths::dataDir());
 #endif

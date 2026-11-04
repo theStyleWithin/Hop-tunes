@@ -193,17 +193,25 @@ Rectangle {
             }
         }
 
-        Label { text: "music folder"; color: createForm.accent; font { family: Theme.font; pixelSize: Theme.fs(20) } Layout.topMargin: 18 }
-        RowLayout {
-            spacing: 14
+        // Phones: the profile is made first and the music folder is chosen afterwards, in the collection
+        // (the profile still starts with the phone's own Music folder, so nothing is lost).
+        ColumnLayout {
+            objectName: "createFolderBlock"
+            visible: !Theme.compact
             Layout.fillWidth: true
-            Label {
-                text: createForm.folder.toString() ? decodeURIComponent(createForm.folder.toString().replace(/^file:\/\//, "")) : "no folder yet"
-                color: createForm.folder.toString() ? Theme.text : Theme.dim
-                font { family: Theme.font; pixelSize: Theme.fs(17) }
-                elide: Text.ElideMiddle; Layout.maximumWidth: 520; Layout.fillWidth: true
+            spacing: 14
+            Label { text: "music folder"; color: createForm.accent; font { family: Theme.font; pixelSize: Theme.fs(20) } Layout.topMargin: 18 }
+            RowLayout {
+                spacing: 14
+                Layout.fillWidth: true
+                Label {
+                    text: createForm.folder.toString() ? decodeURIComponent(createForm.folder.toString().replace(/^file:\/\//, "")) : "no folder yet"
+                    color: createForm.folder.toString() ? Theme.text : Theme.dim
+                    font { family: Theme.font; pixelSize: Theme.fs(17) }
+                    elide: Text.ElideMiddle; Layout.maximumWidth: 520; Layout.fillWidth: true
+                }
+                PlainButton { text: "choose…"; onClicked: createFolderDialog.open() }
             }
-            PlainButton { text: "choose…"; onClicked: createFolderDialog.open() }
         }
 
         CheckBox {
