@@ -15,6 +15,8 @@
 typedef struct _GstElement GstElement;
 typedef struct _GstBus GstBus;
 
+class TestPlayer;   // tests reach the audio-thread hand-off directly
+
 namespace hop {
 
 // Music playback on GStreamer playbin3 (spec §5).
@@ -141,6 +143,9 @@ signals:
 
 private:
     static void onAboutToFinish(GstElement *playbin, void *self);
+    // Android only (no GStreamer): called on the audio thread when the next song has just started, so the queue
+    // position moves on even while the app is in the background and its main loop is paused.
+    static void onStreamStartedThread(GstElement *playbin, void *self);
     GstElement *makeBin();
     GstElement *makeGainFilter() const;
     void applyGainFilter(GstElement *bin);
@@ -173,6 +178,8 @@ private:
     int m_index = -1;
     mutable QMutex m_gaplessMutex;   // guards queue, index and bins against the streaming thread
     int m_pendingIndex = -1;         // set in about-to-finish, applied at STREAM_START
+    friend class ::TestPlayer;
+    std::atomic<bool> m_uiDirty{false};   // the audio thread already moved to the next song; the UI has not been told yet
 
     std::atomic<bool> m_switching{false};   // a state change is in progress: about-to-finish keeps out
     std::atomic<int> m_repeat{RepeatOff};

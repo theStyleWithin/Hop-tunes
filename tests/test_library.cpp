@@ -2,6 +2,7 @@
 // Unit tests for the library layer: track index + incremental scanner.
 #include "library/CollectionModels.h"
 #include "library/CoverArt.h"
+#include "library/LibraryWatcher.h"
 #include "library/Scanner.h"
 #include "library/TagReader.h"
 #include "library/TrackIndex.h"
@@ -73,6 +74,20 @@ Track makeTrack(const QString &path, const QString &albumArtist, const QString &
 class TestLibrary : public QObject {
     Q_OBJECT
 private slots:
+    // Switched off (Android), the watcher watches nothing and does not walk the folders at all.
+    void aSwitchedOffWatcherWatchesNothing()
+    {
+        QTemporaryDir dir;
+        QVERIFY(QDir().mkpath(dir.path() + QStringLiteral("/a/b/c")));
+        hop::LibraryWatcher on;
+        on.setFolders({dir.path()});
+        QCOMPARE(on.watchedCount(), 4);   // the folder and its three subfolders
+        hop::LibraryWatcher off;
+        off.setMaxDirectories(0);
+        off.setFolders({dir.path()});
+        QCOMPARE(off.watchedCount(), 0);
+    }
+
     void indexOrdersByAlbum()
     {
         TrackIndex idx;

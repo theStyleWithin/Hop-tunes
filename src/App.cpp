@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#include "core/DiagLog.h"
+#include <QClipboard>
+#include <QGuiApplication>
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
 #include <QCoreApplication>
+#include <QtCore/private/qandroidextras_p.h>
 #endif
 
 #include "core/Paths.h"
+#include "library/ProfileArchive.h"
 #include "library/Smart.h"
 #include "library/TagReader.h"
 #include "library/VideoProbe.h"
@@ -27,6 +32,7 @@
 #include <QNetworkInterface>
 #include <QFileInfo>
 #include <QRandomGenerator>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
@@ -47,14 +53,20 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_partyTimer, &QTimer::timeout, this, &App::pollParty);
     m_scanner.setArtCacheDir(Paths::artCacheDir());
     connect(&m_scanner, &Scanner::started, this, &App::scanningChanged);
+    connect(&m_scanner, &Scanner::started, this, [] { DiagLog::note(QStringLiteral("music scan started")); });
     connect(&m_scanner, &Scanner::progress, this, [this](int done, int total) {
         m_scanDone = done;
         m_scanTotal = total;
         emit scanProgressChanged();
     });
-    connect(&m_scanner, &Scanner::finished, this, [this](int added, int updated, int removed, int) {
+    connect(&m_scanner, &Scanner::finished, this, [this](int added, int updated, int removed, int total) {
+        DiagLog::note(QStringLiteral("music scan finished: +%1 ~%2 -%3, %4 songs").arg(added).arg(updated).arg(removed).arg(total));
         emit scanningChanged();
-        if (added || updated || removed || m_songs.count() == 0) reload();
+        if (added || updated || removed || m_songs.count() == 0) {
+            QElapsedTimer t; t.start();
+            reload();
+            DiagLog::note(QStringLiteral("library reloaded in %1 ms").arg(t.elapsed()));
+        }
         if (m_rescanPending) { m_rescanPending = false; rescan(); }
         m_watcher.setFolders(watchedFolders());   // pick up any subfolder the scan just found
     });
@@ -100,6 +112,12 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     // Live library updates (spec §6): a local inotify watch, nothing more — see
     // LibraryWatcher's header comment. Debounced, so one rescan covers a whole copy.
     connect(&m_watcher, &LibraryWatcher::changed, this, [this] { rescan(); });
+#ifdef Q_OS_ANDROID
+    // Walking the chosen tree and adding a watch per folder ran on the UI thread and froze the app after a
+    // folder was chosen (a big music or storage folder). Phones skip live watching: scan at start and on demand.
+    m_watcher.setMaxDirectories(0);
+    DiagLog::note(QStringLiteral("live folder watching is off on Android"));
+#endif
     for (TrackListModel *m : {&m_songs, &m_albumSongs, &m_playlistSongs}) m->setStats(&m_stats);
     m_openTimer.setSingleShot(true);
     m_openTimer.setInterval(250);
@@ -335,6 +353,7 @@ void App::openGuest() { activate({}, true); }
 void App::activate(const QString &id, bool guest)
 {
     leaveProfile();
+    m_exportVerifiedFor.clear();
     m_profileId = id;
     m_guest = guest;
     const QJsonObject s = guest ? QJsonObject{} : m_store.settings(id);
@@ -611,17 +630,154 @@ QString App::removeProfile()
     return ok ? QString() : m_store.lastError();
 }
 
+// ---- eject / export / import ------------------------------------------------------------------
+
+namespace {
+QString fileTarget(const QUrl &u) { return u.isLocalFile() ? u.toLocalFile() : u.toString(); }
+}
+
+QString App::suggestedExportName() const
+{
+    QString n = m_store.find(m_profileId) ? m_store.find(m_profileId)->name : QStringLiteral("profile");
+    n.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9._-]+")), QStringLiteral("-"));
+    return QStringLiteral("hop-tunes-%1-%2.hoptunes.json").arg(n, QDate::currentDate().toString(Qt::ISODate));
+}
+
+QVariantMap App::exportProfileTo(const QUrl &file)
+{
+    auto bad = [](const QString &why) { return QVariantMap{{QStringLiteral("ok"), false}, {QStringLiteral("error"), why}}; };
+    const Profile *p = m_store.find(m_profileId);
+    if (!p || !m_db.isOpen()) return bad(QStringLiteral("open a profile first (a guest keeps nothing to save)"));
+    if (file.isEmpty()) return bad(QStringLiteral("choose where to save the file"));
+    m_exportVerifiedFor.clear();
+    saveProfileSettings();
+
+    ProfileArchive a;
+    a.name = p->name;
+    a.accent = p->accent;
+    a.appVersion = QCoreApplication::applicationVersion();
+    a.exportedAt = QDateTime::currentMSecsSinceEpoch();
+    if (p->hasAvatar) {
+        QFile av(m_store.avatarPath(p->id));
+        if (av.open(QIODevice::ReadOnly)) a.avatarPng = av.readAll();
+    }
+    a.settings = m_store.settings(p->id);
+    a.data = m_db.exportData();
+    const QByteArray bytes = a.toBytes();
+
+    const QString target = fileTarget(file);
+    {
+        QFile out(target);
+        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return bad(QStringLiteral("could not write there: %1").arg(out.errorString()));
+        if (out.write(bytes) != bytes.size() || !out.flush()) return bad(QStringLiteral("the file could not be written completely"));
+    }
+    // Read it back and check it, so "saved" means saved.
+    QFile in(target);
+    if (!in.open(QIODevice::ReadOnly)) return bad(QStringLiteral("the file was written but cannot be read back"));
+    const QByteArray back = in.readAll();
+    ProfileArchive check;
+    QString err;
+    if (back != bytes || !ProfileArchive::parse(back, &check, &err))
+        return bad(QStringLiteral("the saved file did not check out. nothing was removed"));
+    m_exportVerifiedFor = p->id;
+    const QString where = file.isLocalFile() ? QFileInfo(target).absoluteFilePath() : QFileInfo(file.path()).fileName();
+    return {{QStringLiteral("ok"), true}, {QStringLiteral("error"), QString()}, {QStringLiteral("name"), p->name},
+            {QStringLiteral("bytes"), qint64(bytes.size())}, {QStringLiteral("where"), where}};
+}
+
+QString App::ejectProfile(bool haveTheFile)
+{
+    if (m_profileId.isEmpty()) return QStringLiteral("no profile open");
+    if (!haveTheFile) return QStringLiteral("confirm that you have the file first");
+    if (m_exportVerifiedFor != m_profileId) return QStringLiteral("save the profile to a file first");
+    m_exportVerifiedFor.clear();
+    return removeProfile();
+}
+
+QVariantMap App::inspectProfileFile(const QUrl &file)
+{
+    auto bad = [](const QString &why) { return QVariantMap{{QStringLiteral("ok"), false}, {QStringLiteral("error"), why}}; };
+    QFile in(fileTarget(file));
+    if (!in.open(QIODevice::ReadOnly)) return bad(QStringLiteral("could not open that file"));
+    if (in.size() > ProfileArchive::kMaxFileBytes) return bad(QStringLiteral("that file is too big to be a hop-tunes profile"));
+    ProfileArchive a;
+    QString err;
+    if (!ProfileArchive::parse(in.readAll(), &a, &err)) return bad(err);
+    // Prove the data would import before offering to: try it on a throwaway in-memory database.
+    ProfileDb probe;
+    if (!probe.open(QStringLiteral(":memory:")) || !probe.importData(a.data, &err)) return bad(err);
+    QStringList folders = a.folders(), missing;
+    for (const QString &f : folders) if (!QFileInfo(f).isDir()) missing << f;
+    QString suggested = a.name;
+    for (int n = 2;; ++n) {
+        bool taken = false;
+        for (const Profile &pr : m_store.profiles()) taken = taken || pr.name.compare(suggested, Qt::CaseInsensitive) == 0;
+        if (!taken) break;
+        suggested = QStringLiteral("%1 (%2)").arg(a.name).arg(n);
+    }
+    return {{QStringLiteral("ok"), true}, {QStringLiteral("error"), QString()}, {QStringLiteral("name"), a.name},
+            {QStringLiteral("suggestedName"), suggested}, {QStringLiteral("accent"), a.accent},
+            {QStringLiteral("playlists"), a.rowCount(QStringLiteral("playlist"))},
+            {QStringLiteral("songsPlayed"), a.rowCount(QStringLiteral("stats"))},
+            {QStringLiteral("history"), a.rowCount(QStringLiteral("history"))},
+            {QStringLiteral("pins"), a.rowCount(QStringLiteral("pin"))},
+            {QStringLiteral("folders"), folders}, {QStringLiteral("missing"), missing},
+            {QStringLiteral("exportedAt"), a.exportedAt}, {QStringLiteral("version"), a.appVersion}};
+}
+
+QString App::importProfile(const QUrl &file, const QString &name, const QString &pin)
+{
+    QFile in(fileTarget(file));
+    if (!in.open(QIODevice::ReadOnly)) return QStringLiteral("could not open that file");
+    ProfileArchive a;
+    QString err;
+    if (in.size() > ProfileArchive::kMaxFileBytes || !ProfileArchive::parse(in.readAll(), &a, &err)) return err.isEmpty() ? QStringLiteral("that file is too big") : err;
+    const QString chosen = name.trimmed().isEmpty() ? a.name : name.trimmed();
+    if (!ProfileStore::isValidName(chosen)) return QStringLiteral("give the profile a name (up to 40 characters)");
+    for (const Profile &p : m_store.profiles())
+        if (p.name.compare(chosen, Qt::CaseInsensitive) == 0) return QStringLiteral("there is already a profile with that name. pick another name, nothing was changed");
+    if (!pin.isEmpty() && !ProfileStore::isValidPin(pin)) return QStringLiteral("a PIN is 4 to 8 digits");
+
+    const QString id = m_store.create(chosen, a.accent, pin);
+    if (id.isEmpty()) return m_store.lastError();
+    auto undo = [&](const QString &why) { m_store.remove(id); emit profilesChanged(); return why; };
+
+    {
+        ProfileDb db;
+        if (!db.open(m_store.dirFor(id) + QStringLiteral("/profile.sqlite")) || !db.importData(a.data, &err))
+            return undo(err.isEmpty() ? db.lastError() : err);
+    }
+    if (!a.avatarPng.isEmpty()) {
+        QFile av(m_store.avatarPath(id));
+        if (av.open(QIODevice::WriteOnly) && av.write(a.avatarPng) == a.avatarPng.size()) {
+            av.close();
+            QFile::setPermissions(av.fileName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+            m_store.setHasAvatar(id, true);
+        }
+    }
+    if (!m_store.saveSettings(id, a.settings)) return undo(m_store.lastError());
+    emit profilesChanged();
+    activate(id, false);
+    return {};
+}
+
 QString App::version() const { return QCoreApplication::applicationVersion(); }
 
 void App::addFolder(const QUrl &folder)
 {
     const QString path = QFileInfo(Paths::folderPath(folder))
                              .canonicalFilePath();
+    DiagLog::note(QStringLiteral("addFolder %1 -> %2").arg(folder.toString(), path.isEmpty() ? QStringLiteral("(not readable)") : path));
     if (path.isEmpty() || m_folders.contains(path)) return;
     m_folders << path;
     saveFolders();
     emit foldersChanged();
+#ifdef Q_OS_ANDROID
+    // let the screen paint after the chooser's return before the scan starts (a freshly resumed window)
+    QMetaObject::invokeMethod(this, [this] { rescan(); }, Qt::QueuedConnection);
+#else
     rescan();
+#endif
 }
 
 void App::removeFolder(const QString &path)
@@ -1081,8 +1237,10 @@ QString App::videoPlayerTitle() const
 
 QString App::videoEngine() const
 {
-#ifdef HOPTUNES_HAVE_MPV
+#if defined(HOPTUNES_HAVE_MPV)
     return QStringLiteral("mpv");
+#elif defined(Q_OS_ANDROID)
+    return QStringLiteral("qt");   // Qt Multimedia (AndroidVideoSurface.qml)
 #else
     return GstVideoPlayer::available() ? QStringLiteral("gstreamer") : QStringLiteral("none");
 #endif
@@ -1129,6 +1287,36 @@ void App::requestOrientation(const QString &mode)
     if (activity.isValid()) activity.callMethod<void>("setRequestedOrientation", "(I)V", v);
 #else
     Q_UNUSED(mode)
+#endif
+}
+
+QString App::diagLog() const { return DiagLog::current(); }
+QString App::diagPreviousLog() const { return DiagLog::previous(); }
+void App::copyText(const QString &text) { if (QClipboard *c = QGuiApplication::clipboard()) c->setText(text); }
+
+bool App::pickAndroidFolder(const QString &token)
+{
+    DiagLog::note(QStringLiteral("folder chooser opened (token %1)").arg(token));
+#ifdef Q_OS_ANDROID
+    // ACTION_OPEN_DOCUMENT_TREE: the system's own folder chooser. It returns a tree address that
+    // Paths::folderPath turns into a plain path (the media permissions make that path readable).
+    QJniObject intent("android/content/Intent", "(Ljava/lang/String;)V",
+                      QJniObject::fromString(QStringLiteral("android.intent.action.OPEN_DOCUMENT_TREE")).object<jstring>());
+    if (!intent.isValid()) return false;
+    constexpr int kRequest = 4711;
+    QtAndroidPrivate::startActivity(intent, kRequest, [this, token](int, int resultCode, const QJniObject &data) {
+        QUrl url;
+        if (resultCode == -1 /* RESULT_OK */ && data.isValid()) {
+            const QJniObject uri = data.callObjectMethod("getData", "()Landroid/net/Uri;");
+            if (uri.isValid()) url = QUrl(uri.toString());
+        }
+        DiagLog::note(QStringLiteral("folder chooser answered: result %1, %2").arg(resultCode).arg(url.isEmpty() ? QStringLiteral("no folder") : url.toString()));
+        QMetaObject::invokeMethod(this, [this, token, url] { emit androidFolderPicked(token, url); }, Qt::QueuedConnection);
+    });
+    return true;
+#else
+    Q_UNUSED(token)
+    return false;
 #endif
 }
 

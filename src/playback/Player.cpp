@@ -98,6 +98,9 @@ GstElement *Player::makeBin()
     }
     applyGainFilter(bin);
     g_signal_connect(bin, "about-to-finish", G_CALLBACK(&Player::onAboutToFinish), this);
+#ifndef HOPTUNES_HAVE_GST
+    g_signal_connect(bin, "hop-stream-started", G_CALLBACK(&Player::onStreamStartedThread), this);
+#endif
     return bin;
 }
 
@@ -449,6 +452,16 @@ void Player::onAboutToFinish(GstElement *playbin, void *self)
     g_object_set(playbin, "uri", uri.constData(), nullptr);
 }
 
+void Player::onStreamStartedThread(GstElement *playbin, void *self)
+{
+    auto *p = static_cast<Player *>(self);
+    QMutexLocker lock(&p->m_gaplessMutex);
+    if (playbin != p->m_playbin || p->m_pendingIndex < 0) return;
+    p->m_index = p->m_pendingIndex;       // the audio thread is already playing it
+    p->m_pendingIndex = -1;
+    p->m_uiDirty = true;                  // pollBus tells the screen when the main loop runs again
+}
+
 // ---- crossfade ---------------------------------------------------------------------------
 
 void Player::startFade(int next)
@@ -526,7 +539,7 @@ void Player::pollBus()
                 pending = m_pendingIndex;
                 if (pending >= 0) { m_index = pending; m_pendingIndex = -1; }
             }
-            if (pending >= 0) {
+            if (pending >= 0 || m_uiDirty.exchange(false)) {
                 m_position = 0;
                 m_duration = m_queue[m_index].durationMs;
                 emit positionChanged();

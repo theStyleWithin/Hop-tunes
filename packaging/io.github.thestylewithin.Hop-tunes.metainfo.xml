@@ -82,6 +82,15 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.3" date="2026-11-04">
+      <description>
+        <p>Video on Android, and a fix for choosing folders there.</p>
+        <ul>
+          <li>Videos now play on Android.</li>
+          <li>Android: choosing a folder no longer turns the screen grey; it uses the system folder chooser.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.2" date="2026-10-30">
       <description>
         <p>Hop-tunes comes to Android phones and tablets.</p>

@@ -46,11 +46,13 @@ endif()
 # ---- core library: no GUI, no GStreamer (unit-testable) ---------------------
 add_library(hoptunes_core STATIC
     src/core/Paths.h          src/core/Paths.cpp
+    src/core/DiagLog.h        src/core/DiagLog.cpp
     src/core/ProfileStore.h src/core/ProfileStore.cpp
     src/library/Track.h
     src/core/Sql.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/library/ProfileDb.h   src/library/ProfileDb.cpp
+    src/library/ProfileArchive.h src/library/ProfileArchive.cpp
     src/library/Smart.h       src/library/Smart.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
     src/library/CoverArt.h    src/library/CoverArt.cpp
@@ -160,6 +162,7 @@ if(HOPTUNES_BUILD_APP)
     )
     if(ANDROID)
         qt_add_executable(hop-tunes ${HOPTUNES_APP_FILES})   # a shared library the Android app loads
+        target_link_libraries(hop-tunes PRIVATE Qt6::CorePrivate)   # the system folder chooser (App::pickAndroidFolder)
         set_target_properties(hop-tunes PROPERTIES
             QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
             QT_ANDROID_ABIS "arm64-v8a"

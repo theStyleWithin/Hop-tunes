@@ -59,6 +59,24 @@ Item {
                              horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
     }
     readonly property bool phone: Theme.compact
+    // One step back for the phone's back button. Anything open (a picture, a book, an album) closes first, then the
+    // song / album / artist panes step back, then another tab returns to music. At the top of music nothing happens.
+    function goBack() {
+        if (pictureViewer.visible) { pictureViewer.close(); return }
+        if (ebookReader.visible) { ebookReader.close(); return }
+        if (root.collectionTab !== "music") {
+            if (root.collectionTab === "pictures" && hop.pictureAlbum !== "") { hop.closePictureAlbum(); return }
+            root.collectionTab = "music"
+            return
+        }
+        if (root.mode === "playlists") { if (playlistsPane.phoneStep > 0) playlistsPane.phoneStep = 0; return }
+        if (root.phoneStep > 0) root.phoneStep = root.phoneStep - 1
+    }
+    // Phones: while the first scan runs and nothing is listed yet, only the title, the tabs, the scan note and the
+    // pills are on screen. Without something to take the spare height the layout spreads them far apart, so a
+    // spacer below keeps them together at the top. (forceScanning is for tests.)
+    property bool forceScanning: false
+    readonly property bool scanningEmpty: root.collectionTab === "music" && (root.forceScanning || (hop.librarySize === 0 && hop.scanning))
     onPhoneChanged: if (phone && mode === "artists") { mode = "albums"; phoneStep = 0 }
 
     ColumnLayout {
@@ -84,7 +102,7 @@ Item {
         }
 
         Label {
-            visible: root.phone && hop.scanning && root.collectionTab === "music"
+            visible: root.phone && (hop.scanning || root.forceScanning) && root.collectionTab === "music"
             text: hop.scanTotal > 0 ? "scanning " + hop.scanDone + " / " + hop.scanTotal : "scanning…"
             color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
             Layout.leftMargin: Theme.pad
@@ -293,7 +311,7 @@ Item {
 
         // empty state
         ColumnLayout {
-            visible: root.collectionTab === "music" && hop.librarySize === 0 && !hop.scanning
+            visible: root.collectionTab === "music" && hop.librarySize === 0 && !root.scanningEmpty && !hop.scanning
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 18
@@ -319,7 +337,7 @@ Item {
 
         // no search hits
         ColumnLayout {
-            visible: root.collectionTab === "music" && hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
+            visible: !root.scanningEmpty && root.collectionTab === "music" && hop.librarySize > 0 && hop.songs.count === 0 && root.mode !== "playlists"
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 12
@@ -359,11 +377,13 @@ Item {
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: 48; Layout.rightMargin: 48; Layout.topMargin: 18
         }
+        Item { objectName: "scanSpacer"; visible: root.phone && root.scanningEmpty; Layout.fillHeight: true }
+
         PictureViewer { id: pictureViewer; model: hop.pictureAlbumItems }
         EbookReader { id: ebookReader }
 
         StackLayout {
-            visible: root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
+            visible: !root.scanningEmpty && root.collectionTab === "music" && hop.librarySize > 0 && (hop.songs.count > 0 || root.mode === "playlists")
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
             currentIndex: ["artists", "albums", "songs", "playlists"].indexOf(root.mode)
@@ -619,6 +639,7 @@ Item {
 
             // ---- playlists ----
             PlaylistsPane {
+                id: playlistsPane
                 onSongMenu: function (paths, path, hearted, row, count, playFn, src, x, y) {
                     menu.paths = paths; menu.heartPath = path; menu.hearted = hearted; menu.pinKind = ""
                     menu.playlistRow = row; menu.playlistCount = count; menu.playFn = playFn

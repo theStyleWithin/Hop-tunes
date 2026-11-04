@@ -5,6 +5,10 @@
 
 #include <QDateTime>
 #include <QFile>
+#include <QJsonArray>
+#include <QSet>
+
+#include <cmath>
 
 #include <sqlite3.h>
 
@@ -660,6 +664,130 @@ bool ProfileDb::setSongOrder(const QStringList &paths)
     }
     if (!ok) { exec("ROLLBACK"); return false; }
     return exec("COMMIT");
+}
+
+// ---- export / import ----------------------------------------------------------------------
+
+namespace {
+
+// One entry per table in the profile file. Column kinds: 't' text, 'i' integer. Columns that
+// hold a picture path on this device (album covers) are simply not listed, so they stay empty.
+// Everything else in the profile database that is not listed here is never exported.
+struct TableSpec {
+    const char *name;
+    const char *cols;      // e.g. "ti" = text, integer
+    const char *names;     // comma separated column names, in the same order
+};
+
+const TableSpec kTables[] = {
+    {"stats",             "tiiii", "path,play_count,skip_count,last_played,hearted"},
+    {"history",           "ti",    "path,played_at"},
+    {"playlist",          "itiit", "id,name,smart,created,rules"},
+    {"playlist_item",     "iit",   "playlist_id,pos,path"},
+    {"pin",               "ttti",  "kind,ref,label,pos"},
+    {"video_progress",    "tiii",  "path,position_ms,duration_ms,updated_at"},
+    {"album_override",    "tt",    "ref,title"},
+    {"album_track_order", "tit",   "ref,pos,path"},
+    {"song_order",        "it",    "pos,path"},
+    {"item_played",       "ti",    "path,played_at"},
+    {"video_meta",        "tt",    "path,json"},
+    {"video_comment",     "tti",   "path,text,at"},
+};
+
+constexpr int kMaxRowsPerTable = 2'000'000;
+constexpr int kMaxTextLength = 200'000;
+
+QStringList columnNames(const TableSpec &t) { return QString::fromLatin1(t.names).split(QLatin1Char(',')); }
+
+} // namespace
+
+QJsonObject ProfileDb::exportData() const
+{
+    QJsonObject out;
+    if (!m_db) return out;
+    for (const TableSpec &t : kTables) {
+        const QStringList cols = columnNames(t);
+        QJsonArray rows;
+        Stmt s(m_db, qPrintable(QStringLiteral("SELECT %1 FROM %2").arg(cols.join(QLatin1Char(',')), QString::fromLatin1(t.name))));
+        if (!s.ok()) continue;
+        while (s.step() == SQLITE_ROW) {
+            QJsonArray row;
+            for (int i = 0; i < cols.size(); ++i)
+                row.append(t.cols[i] == 't' ? QJsonValue(s.str(i)) : QJsonValue(double(s.i64(i))));
+            rows.append(row);
+        }
+        out.insert(QString::fromLatin1(t.name), rows);
+    }
+    return out;
+}
+
+bool ProfileDb::importData(const QJsonObject &data, QString *error)
+{
+    auto fail = [&](const QString &why) { if (error) *error = why; return false; };
+    if (!m_db) return fail(QStringLiteral("no profile database"));
+    // Pass 1: validate everything before a single row is written.
+    for (auto it = data.constBegin(); it != data.constEnd(); ++it) {
+        bool known = false;
+        for (const TableSpec &t : kTables) known = known || it.key() == QLatin1String(t.name);
+        if (!known) return fail(QStringLiteral("the file has a section this version does not know (%1)").arg(it.key()));
+    }
+    for (const TableSpec &t : kTables) {
+        const QJsonValue v = data.value(QLatin1String(t.name));
+        if (v.isUndefined()) continue;
+        if (!v.isArray()) return fail(QStringLiteral("the %1 section is not a list").arg(QLatin1String(t.name)));
+        const QJsonArray rows = v.toArray();
+        if (rows.size() > kMaxRowsPerTable) return fail(QStringLiteral("the %1 section is too large").arg(QLatin1String(t.name)));
+        const int n = int(strlen(t.cols));
+        for (const QJsonValue &rv : rows) {
+            if (!rv.isArray() || rv.toArray().size() != n)
+                return fail(QStringLiteral("a row in %1 is malformed").arg(QLatin1String(t.name)));
+            const QJsonArray row = rv.toArray();
+            for (int i = 0; i < n; ++i) {
+                if (t.cols[i] == 't') {
+                    if (!row[i].isString() || row[i].toString().size() > kMaxTextLength)
+                        return fail(QStringLiteral("a row in %1 is malformed").arg(QLatin1String(t.name)));
+                } else {
+                    const double d = row[i].toDouble(-1e300);
+                    if (!row[i].isDouble() || d != std::floor(d) || d < -9e15 || d > 9e15)
+                        return fail(QStringLiteral("a row in %1 is malformed").arg(QLatin1String(t.name)));
+                }
+            }
+        }
+    }
+    // playlist items must belong to a playlist in the same file
+    QSet<qint64> ids;
+    for (const QJsonValue &rv : data.value(QLatin1String("playlist")).toArray()) ids.insert(qint64(rv.toArray()[0].toDouble()));
+    if (ids.size() != data.value(QLatin1String("playlist")).toArray().size())
+        return fail(QStringLiteral("two playlists share an id"));
+    for (const QJsonValue &rv : data.value(QLatin1String("playlist_item")).toArray())
+        if (!ids.contains(qint64(rv.toArray()[0].toDouble()))) return fail(QStringLiteral("a playlist item has no playlist"));
+
+    // Pass 2: write, all or nothing.
+    if (!exec("BEGIN")) return fail(m_error);
+    bool ok = true;
+    for (const TableSpec &t : kTables) {
+        const QJsonArray rows = data.value(QLatin1String(t.name)).toArray();
+        if (rows.isEmpty()) continue;
+        const QStringList cols = columnNames(t);
+        QStringList marks;
+        for (int i = 0; i < cols.size(); ++i) marks << QStringLiteral("?%1").arg(i + 1);
+        Stmt ins(m_db, qPrintable(QStringLiteral("INSERT OR REPLACE INTO %1(%2) VALUES(%3)")
+                                       .arg(QString::fromLatin1(t.name), cols.join(QLatin1Char(',')), marks.join(QLatin1Char(',')))));
+        if (!ins.ok()) { ok = false; break; }
+        for (const QJsonValue &rv : rows) {
+            const QJsonArray row = rv.toArray();
+            for (int i = 0; i < cols.size(); ++i) {
+                if (t.cols[i] == 't') ins.bind(i + 1, row[i].toString());
+                else ins.bind(i + 1, qint64(row[i].toDouble()));
+            }
+            ok = ins.run();
+            ins.reset();
+            if (!ok) break;
+        }
+        if (!ok) break;
+    }
+    if (!ok) { const QString why = m_error; exec("ROLLBACK"); return fail(why.isEmpty() ? QStringLiteral("could not write the profile data") : why); }
+    return exec("COMMIT") ? true : fail(m_error);
 }
 
 } // namespace hop

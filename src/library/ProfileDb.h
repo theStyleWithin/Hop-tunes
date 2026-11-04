@@ -5,6 +5,7 @@
 #include "library/Video.h"
 
 #include <QHash>
+#include <QJsonObject>
 #include <QList>
 #include <QString>
 #include <QStringList>
@@ -142,6 +143,13 @@ public:
     // a manual order for the whole-library "songs" list, per profile; empty: natural order
     QStringList songOrder() const;
     bool setSongOrder(const QStringList &paths);
+
+    // Eject / export / import (the profile file a person can keep). exportData() writes every
+    // table listed in the file format; picture paths (album covers, picked thumbnails) are left
+    // out because they point at this device. importData() validates the whole document first and
+    // refuses it, changing nothing, if anything is off; it only fills an empty database.
+    QJsonObject exportData() const;
+    bool importData(const QJsonObject &data, QString *error = nullptr);
 
 private:
     bool exec(const char *sql);

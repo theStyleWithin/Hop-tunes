@@ -263,7 +263,14 @@ public:
     void setVideoViewStyle(const QString &style);
     QString videoOrientation() const { return m_videoOrientation; }
     void setVideoOrientation(const QString &mode);
-    Q_INVOKABLE void requestOrientation(const QString &mode);   // Android: turns the screen; elsewhere nothing
+    Q_INVOKABLE void requestOrientation(const QString &mode);
+    // Android: the system folder chooser (the Qt dialog has no usable Android version). The answer comes back
+    // as androidFolderPicked(token, folder); a cancelled choice answers with an empty address.
+    Q_INVOKABLE bool pickAndroidFolder(const QString &token);
+    // The diagnostic log (phones: settings > diagnostics), and copying text to the clipboard.
+    Q_INVOKABLE QString diagLog() const;
+    Q_INVOKABLE QString diagPreviousLog() const;
+    Q_INVOKABLE void copyText(const QString &text);   // Android: turns the screen; elsewhere nothing
     QString navStyle() const { return m_navStyle; }
     void setNavStyle(const QString &style);
     QString statusNote() const { return m_statusNote; }
@@ -372,6 +379,16 @@ public:
     Q_INVOKABLE QString setProfileAvatar(const QUrl &image);    // empty url removes
     Q_INVOKABLE QString removeProfile();                    // the open profile; never touches music
 
+    // Eject / export / import. The file holds the profile's name, colour, picture, settings and
+    // everything it remembers (stats, history, playlists, pins, resume points, edits, comments),
+    // never the PIN, music, videos or pictures. exportProfileTo() saves, reads the file back and
+    // checks it; only after that does ejectProfile(true) remove the profile from this device.
+    Q_INVOKABLE QVariantMap exportProfileTo(const QUrl &file);        // ok, error, name, bytes, where
+    Q_INVOKABLE QString ejectProfile(bool haveTheFile);               // "" on success
+    Q_INVOKABLE QVariantMap inspectProfileFile(const QUrl &file);     // ok, error, name, accent, counts, folders, missing
+    Q_INVOKABLE QString importProfile(const QUrl &file, const QString &name, const QString &pin);   // never overwrites
+    Q_INVOKABLE QString suggestedExportName() const;                  // "hop-tunes-<name>-<date>.hoptunes.json"
+
     Q_INVOKABLE void selectArtist(int row);
     Q_INVOKABLE void selectAlbum(int row);          // row in artistAlbums
     Q_INVOKABLE void openAlbum(int allAlbumsRow);   // from the albums grid: select its artist + album
@@ -473,6 +490,7 @@ signals:
     void shareJoinChanged();
     void shareModeChanged();
     void shareRevisionChanged();
+    void androidFolderPicked(const QString &token, const QUrl &folder);
     void videoOrientationChanged();
     void navStyleChanged();
     void statusNoteChanged();
@@ -579,6 +597,7 @@ private:
     quint32 m_djRound = 0;
     struct Listen { QString path; qint64 maxPos = 0; qint64 duration = 0; bool counted = false; } m_listen;
     QString m_profileId;          // empty when no profile is open
+    QString m_exportVerifiedFor;  // profile id whose export was saved and read back; unlocks ejectProfile()
     bool m_guest = false;
     QStringList m_legacyFolders;  // pre-profile (M1/M2) setting, adopted by the first profile
     struct PinLock { int fails = 0; qint64 until = 0; };
