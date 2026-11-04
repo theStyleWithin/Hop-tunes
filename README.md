@@ -99,6 +99,16 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 
 More renders, plus the original design targets, are in [`design/`](design/).
 
+**On Android: the phone layout**
+
+Renders of the Android app's phone layout (it adapts to tablets, and has a side drawer as an alternative to the bottom bar).
+
+| music | videos | now playing | video player | video details |
+|---|---|---|---|---|
+| ![android music](design/app/android-music.png) | ![android videos](design/app/android-videos.png) | ![android now playing](design/app/android-now-playing.png) | ![android video player](design/app/android-video-player.png) | ![android video details](design/app/android-video-details.png) |
+
+> **[Download the Android app (`Hop-tunes-android.apk`)](https://github.com/theStyleWithin/Hop-tunes/releases/latest/download/Hop-tunes-android.apk)**: the newest one, for Android 7 and newer on 64-bit phones and tablets. Open the file to install it; Android may ask you to allow installs from this source.
+
 ## Building
 
 Hop-tunes is C++20 + Qt 6 (QML) + GStreamer + TagLib + SQLite.

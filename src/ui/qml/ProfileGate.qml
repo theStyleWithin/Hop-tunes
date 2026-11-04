@@ -14,6 +14,8 @@ Rectangle {
     property string mode: hop.profiles.length === 0 ? "create" : "pick"
     property var pinProfile: ({})
     property string error: ""
+    property var importInfo: null     // inspectProfileFile() result of the chosen file
+    property url importFile
 
     function show(m) { error = ""; mode = m }
     function choose(p) {
@@ -23,6 +25,18 @@ Rectangle {
     Connections {
         target: hop
         function onProfileChanged() { if (!hop.profileReady) gate.show(hop.profiles.length === 0 ? "create" : "pick") }
+    }
+
+    FileDialog {
+        id: importDialog
+        title: "choose a hop-tunes profile file"
+        nameFilters: ["hop-tunes profile (*.json)", "all files (*)"]
+        onAccepted: {
+            gate.importFile = selectedFile
+            gate.importInfo = hop.inspectProfileFile(selectedFile)
+            gate.error = gate.importInfo.ok ? "" : gate.importInfo.error
+            if (gate.importInfo.ok) { importName.text = gate.importInfo.suggestedName; importPin.text = ""; gate.show("import") }
+        }
     }
 
     // ---- picker --------------------------------------------------------------------
@@ -88,6 +102,7 @@ Rectangle {
             spacing: 16
             Layout.fillWidth: true
             PlainButton { objectName: "guestButton"; text: "listen as guest"; onClicked: hop.openGuest() }
+            PlainButton { objectName: "importProfile"; text: "import a profile…"; onClicked: importDialog.open() }
             Label { text: "guest mode keeps no history and saves nothing."; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) } }
         }
         Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) } }
@@ -262,6 +277,59 @@ Rectangle {
                 }
             }
             PlainButton { visible: hop.profiles.length === 0; text: "just listen as guest"; onClicked: hop.openGuest() }
+            PlainButton { objectName: "importProfileFirst"; visible: hop.profiles.length === 0; text: "import a profile…"; onClicked: importDialog.open() }
+        }
+    }
+
+    // ---- import ----------------------------------------------------------------------
+    ColumnLayout {
+        id: importForm
+        objectName: "importForm"
+        visible: gate.mode === "import"
+        anchors { fill: parent; leftMargin: Theme.compact ? 20 : 72; rightMargin: Theme.compact ? 20 : 72; topMargin: Theme.compact ? 32 : 64; bottomMargin: 48 }
+        spacing: 12
+        Label { text: "import a profile"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(40); weight: Font.Light }
+                wrapMode: Text.WordWrap; Layout.fillWidth: true }
+        Label {
+            visible: !!gate.importInfo && gate.importInfo.ok
+            text: gate.importInfo && gate.importInfo.ok
+                  ? "found \u201c" + gate.importInfo.name + "\u201d: " + gate.importInfo.playlists + " playlists, "
+                    + gate.importInfo.songsPlayed + " songs with play counts, " + gate.importInfo.pins + " pins."
+                  : ""
+            color: Theme.text; wrapMode: Text.WordWrap; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(17) }
+        }
+        Label {
+            objectName: "importMissing"
+            visible: !!gate.importInfo && gate.importInfo.ok && gate.importInfo.missing.length > 0
+            text: gate.importInfo && gate.importInfo.ok
+                  ? "these folders are not on this device, so add them again from your collection afterwards (your playlists find their songs by path):\n" + gate.importInfo.missing.join("\n")
+                  : ""
+            color: Theme.muted; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) }
+        }
+        TextField {
+            id: importName
+            objectName: "importName"
+            placeholderText: "profile name"
+            maximumLength: 40
+            Layout.fillWidth: true; Layout.maximumWidth: 420
+            color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) }
+            background: Rectangle { color: "transparent"; border { width: 2; color: Theme.border } implicitHeight: 44 }
+        }
+        PinField { id: importPin; objectName: "importPin"; hint: "PIN (optional, 4\u20138 digits)" }
+        Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; wrapMode: Text.WordWrap; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+        Item { Layout.fillHeight: true }
+        Flow {
+            spacing: 12; Layout.fillWidth: true
+            PlainButton { text: "cancel"; onClicked: gate.show(hop.profiles.length === 0 ? "create" : "pick") }
+            PlainButton {
+                objectName: "importButton"
+                text: "import"; primary: true
+                enabled: importName.text.trim().length > 0
+                onClicked: {
+                    gate.error = hop.importProfile(gate.importFile, importName.text, importPin.text)
+                    if (gate.error === "") importPin.text = ""
+                }
+            }
         }
     }
 }

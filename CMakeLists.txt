@@ -51,6 +51,7 @@ add_library(hoptunes_core STATIC
     src/core/Sql.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/library/ProfileDb.h   src/library/ProfileDb.cpp
+    src/library/ProfileArchive.h src/library/ProfileArchive.cpp
     src/library/Smart.h       src/library/Smart.cpp
     src/library/TagReader.h   src/library/TagReader.cpp
     src/library/CoverArt.h    src/library/CoverArt.cpp

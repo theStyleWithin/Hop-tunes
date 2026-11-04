@@ -10,6 +10,7 @@
 #endif
 
 #include "core/Paths.h"
+#include "library/ProfileArchive.h"
 #include "library/Smart.h"
 #include "library/TagReader.h"
 #include "library/VideoProbe.h"
@@ -30,6 +31,7 @@
 #include <QJsonDocument>
 #include <QFileInfo>
 #include <QRandomGenerator>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
@@ -349,6 +351,7 @@ void App::openGuest() { activate({}, true); }
 void App::activate(const QString &id, bool guest)
 {
     leaveProfile();
+    m_exportVerifiedFor.clear();
     m_profileId = id;
     m_guest = guest;
     const QJsonObject s = guest ? QJsonObject{} : m_store.settings(id);
@@ -613,6 +616,137 @@ QString App::removeProfile()
     emit profilesChanged();
     emit profileChanged();
     return ok ? QString() : m_store.lastError();
+}
+
+// ---- eject / export / import ------------------------------------------------------------------
+
+namespace {
+QString fileTarget(const QUrl &u) { return u.isLocalFile() ? u.toLocalFile() : u.toString(); }
+}
+
+QString App::suggestedExportName() const
+{
+    QString n = m_store.find(m_profileId) ? m_store.find(m_profileId)->name : QStringLiteral("profile");
+    n.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9._-]+")), QStringLiteral("-"));
+    return QStringLiteral("hop-tunes-%1-%2.hoptunes.json").arg(n, QDate::currentDate().toString(Qt::ISODate));
+}
+
+QVariantMap App::exportProfileTo(const QUrl &file)
+{
+    auto bad = [](const QString &why) { return QVariantMap{{QStringLiteral("ok"), false}, {QStringLiteral("error"), why}}; };
+    const Profile *p = m_store.find(m_profileId);
+    if (!p || !m_db.isOpen()) return bad(QStringLiteral("open a profile first (a guest keeps nothing to save)"));
+    if (file.isEmpty()) return bad(QStringLiteral("choose where to save the file"));
+    m_exportVerifiedFor.clear();
+    saveProfileSettings();
+
+    ProfileArchive a;
+    a.name = p->name;
+    a.accent = p->accent;
+    a.appVersion = QCoreApplication::applicationVersion();
+    a.exportedAt = QDateTime::currentMSecsSinceEpoch();
+    if (p->hasAvatar) {
+        QFile av(m_store.avatarPath(p->id));
+        if (av.open(QIODevice::ReadOnly)) a.avatarPng = av.readAll();
+    }
+    a.settings = m_store.settings(p->id);
+    a.data = m_db.exportData();
+    const QByteArray bytes = a.toBytes();
+
+    const QString target = fileTarget(file);
+    {
+        QFile out(target);
+        if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) return bad(QStringLiteral("could not write there: %1").arg(out.errorString()));
+        if (out.write(bytes) != bytes.size() || !out.flush()) return bad(QStringLiteral("the file could not be written completely"));
+    }
+    // Read it back and check it, so "saved" means saved.
+    QFile in(target);
+    if (!in.open(QIODevice::ReadOnly)) return bad(QStringLiteral("the file was written but cannot be read back"));
+    const QByteArray back = in.readAll();
+    ProfileArchive check;
+    QString err;
+    if (back != bytes || !ProfileArchive::parse(back, &check, &err))
+        return bad(QStringLiteral("the saved file did not check out. nothing was removed"));
+    m_exportVerifiedFor = p->id;
+    const QString where = file.isLocalFile() ? QFileInfo(target).absoluteFilePath() : QFileInfo(file.path()).fileName();
+    return {{QStringLiteral("ok"), true}, {QStringLiteral("error"), QString()}, {QStringLiteral("name"), p->name},
+            {QStringLiteral("bytes"), qint64(bytes.size())}, {QStringLiteral("where"), where}};
+}
+
+QString App::ejectProfile(bool haveTheFile)
+{
+    if (m_profileId.isEmpty()) return QStringLiteral("no profile open");
+    if (!haveTheFile) return QStringLiteral("confirm that you have the file first");
+    if (m_exportVerifiedFor != m_profileId) return QStringLiteral("save the profile to a file first");
+    m_exportVerifiedFor.clear();
+    return removeProfile();
+}
+
+QVariantMap App::inspectProfileFile(const QUrl &file)
+{
+    auto bad = [](const QString &why) { return QVariantMap{{QStringLiteral("ok"), false}, {QStringLiteral("error"), why}}; };
+    QFile in(fileTarget(file));
+    if (!in.open(QIODevice::ReadOnly)) return bad(QStringLiteral("could not open that file"));
+    if (in.size() > ProfileArchive::kMaxFileBytes) return bad(QStringLiteral("that file is too big to be a hop-tunes profile"));
+    ProfileArchive a;
+    QString err;
+    if (!ProfileArchive::parse(in.readAll(), &a, &err)) return bad(err);
+    // Prove the data would import before offering to: try it on a throwaway in-memory database.
+    ProfileDb probe;
+    if (!probe.open(QStringLiteral(":memory:")) || !probe.importData(a.data, &err)) return bad(err);
+    QStringList folders = a.folders(), missing;
+    for (const QString &f : folders) if (!QFileInfo(f).isDir()) missing << f;
+    QString suggested = a.name;
+    for (int n = 2;; ++n) {
+        bool taken = false;
+        for (const Profile &pr : m_store.profiles()) taken = taken || pr.name.compare(suggested, Qt::CaseInsensitive) == 0;
+        if (!taken) break;
+        suggested = QStringLiteral("%1 (%2)").arg(a.name).arg(n);
+    }
+    return {{QStringLiteral("ok"), true}, {QStringLiteral("error"), QString()}, {QStringLiteral("name"), a.name},
+            {QStringLiteral("suggestedName"), suggested}, {QStringLiteral("accent"), a.accent},
+            {QStringLiteral("playlists"), a.rowCount(QStringLiteral("playlist"))},
+            {QStringLiteral("songsPlayed"), a.rowCount(QStringLiteral("stats"))},
+            {QStringLiteral("history"), a.rowCount(QStringLiteral("history"))},
+            {QStringLiteral("pins"), a.rowCount(QStringLiteral("pin"))},
+            {QStringLiteral("folders"), folders}, {QStringLiteral("missing"), missing},
+            {QStringLiteral("exportedAt"), a.exportedAt}, {QStringLiteral("version"), a.appVersion}};
+}
+
+QString App::importProfile(const QUrl &file, const QString &name, const QString &pin)
+{
+    QFile in(fileTarget(file));
+    if (!in.open(QIODevice::ReadOnly)) return QStringLiteral("could not open that file");
+    ProfileArchive a;
+    QString err;
+    if (in.size() > ProfileArchive::kMaxFileBytes || !ProfileArchive::parse(in.readAll(), &a, &err)) return err.isEmpty() ? QStringLiteral("that file is too big") : err;
+    const QString chosen = name.trimmed().isEmpty() ? a.name : name.trimmed();
+    if (!ProfileStore::isValidName(chosen)) return QStringLiteral("give the profile a name (up to 40 characters)");
+    for (const Profile &p : m_store.profiles())
+        if (p.name.compare(chosen, Qt::CaseInsensitive) == 0) return QStringLiteral("there is already a profile with that name. pick another name, nothing was changed");
+    if (!pin.isEmpty() && !ProfileStore::isValidPin(pin)) return QStringLiteral("a PIN is 4 to 8 digits");
+
+    const QString id = m_store.create(chosen, a.accent, pin);
+    if (id.isEmpty()) return m_store.lastError();
+    auto undo = [&](const QString &why) { m_store.remove(id); emit profilesChanged(); return why; };
+
+    {
+        ProfileDb db;
+        if (!db.open(m_store.dirFor(id) + QStringLiteral("/profile.sqlite")) || !db.importData(a.data, &err))
+            return undo(err.isEmpty() ? db.lastError() : err);
+    }
+    if (!a.avatarPng.isEmpty()) {
+        QFile av(m_store.avatarPath(id));
+        if (av.open(QIODevice::WriteOnly) && av.write(a.avatarPng) == a.avatarPng.size()) {
+            av.close();
+            QFile::setPermissions(av.fileName(), QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+            m_store.setHasAvatar(id, true);
+        }
+    }
+    if (!m_store.saveSettings(id, a.settings)) return undo(m_store.lastError());
+    emit profilesChanged();
+    activate(id, false);
+    return {};
 }
 
 QString App::version() const { return QCoreApplication::applicationVersion(); }
