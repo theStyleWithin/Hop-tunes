@@ -1191,6 +1191,47 @@ private slots:
         QTest::qWait(400);
     }
 
+    // Phones: the Android back button steps back through the app and never leaves it (leaving closed the screen
+    // and left a grey window behind). At the top of the music collection it does nothing.
+    void theBackButtonStepsBackAndNeverLeavesTheApp()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); } } restore{w, before};
+        w->setProperty("forceMobile", true);
+        w->resize(412, 880);
+        w->setProperty("view", QStringLiteral("collection"));
+        QObject *cv = item("collectionView");
+        QVERIFY(cv);
+        QVERIFY(click("pillTab_music"));
+        QVERIFY(click("pillMode_artists"));
+        auto back = [&] { QVariant r; QVERIFY(QMetaObject::invokeMethod(w, "goBack", Q_RETURN_ARG(QVariant, r))); QVERIFY(r.toBool()); };
+
+        cv->setProperty("phoneStep", 2);                 // an artist's songs
+        back(); QCOMPARE(cv->property("phoneStep").toInt(), 1);
+        back(); QCOMPARE(cv->property("phoneStep").toInt(), 0);
+        back(); QCOMPARE(cv->property("phoneStep").toInt(), 0);   // the top: nothing more to go back to
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
+
+        cv->setProperty("collectionTab", QStringLiteral("videos"));
+        back(); QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
+
+        w->setProperty("view", QStringLiteral("settings"));
+        back(); QCOMPARE(w->property("view").toString(), QStringLiteral("profile"));
+        back(); QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        w->setProperty("view", QStringLiteral("now playing"));
+        back(); QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+
+        // the real thing: the system's back arrives as a close request, which the window must refuse
+        cv->setProperty("phoneStep", 1);
+        w->close();
+        QTest::qWait(100);
+        QVERIFY(w->isVisible());
+        QCOMPARE(cv->property("phoneStep").toInt(), 0);
+    }
+
     // Phones, first scan: the title, tabs, scan note and pills stay together at the top instead of being spread
     // over the whole screen.
     void phoneCollectionStaysCompactWhileScanning()

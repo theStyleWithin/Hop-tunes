@@ -59,6 +59,19 @@ Item {
                              horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
     }
     readonly property bool phone: Theme.compact
+    // One step back for the phone's back button. Anything open (a picture, a book, an album) closes first, then the
+    // song / album / artist panes step back, then another tab returns to music. At the top of music nothing happens.
+    function goBack() {
+        if (pictureViewer.visible) { pictureViewer.close(); return }
+        if (ebookReader.visible) { ebookReader.close(); return }
+        if (root.collectionTab !== "music") {
+            if (root.collectionTab === "pictures" && hop.pictureAlbum !== "") { hop.closePictureAlbum(); return }
+            root.collectionTab = "music"
+            return
+        }
+        if (root.mode === "playlists") { if (playlistsPane.phoneStep > 0) playlistsPane.phoneStep = 0; return }
+        if (root.phoneStep > 0) root.phoneStep = root.phoneStep - 1
+    }
     // Phones: while the first scan runs and nothing is listed yet, only the title, the tabs, the scan note and the
     // pills are on screen. Without something to take the spare height the layout spreads them far apart, so a
     // spacer below keeps them together at the top. (forceScanning is for tests.)
@@ -550,6 +563,7 @@ Item {
 
             // ---- playlists ----
             PlaylistsPane {
+                id: playlistsPane
                 onSongMenu: function (paths, path, hearted, row, count, playFn, src, x, y) {
                     menu.paths = paths; menu.heartPath = path; menu.hearted = hearted; menu.pinKind = ""
                     menu.playlistRow = row; menu.playlistCount = count; menu.playFn = playFn

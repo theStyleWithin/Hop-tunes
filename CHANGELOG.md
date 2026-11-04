@@ -13,6 +13,13 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   a length or a picture in the list on Android.
 
 ### Fixed
+- **Android: the app going completely grey after pressing "back".** The back button used to close the app's
+  screen and leave a grey window behind. Back now steps back through the app instead (a song list to its albums to
+  the artists, a picture or book closes, a film's page closes, settings go back to profile) and never leaves the
+  app; at the top of the music collection it does nothing, and from another collection tab it returns to music.
+  Desktop is unchanged.
+- **Android: Hop-tunes had no icon on the home screen / app list.** It now has the same icon as the desktop app
+  (a round / adaptive version for newer Android).
 - **Android: music did not move on to the next song (or repeat) while the screen was off, until you woke the
   phone.** Android pauses the app's main loop in the background, and the queue was driven from that loop. The
   hand-off to the next song now runs on the music player's own thread, so loop and the queue keep going with the
