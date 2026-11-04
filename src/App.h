@@ -232,7 +232,10 @@ public:
     void setVideoViewStyle(const QString &style);
     QString videoOrientation() const { return m_videoOrientation; }
     void setVideoOrientation(const QString &mode);
-    Q_INVOKABLE void requestOrientation(const QString &mode);   // Android: turns the screen; elsewhere nothing
+    Q_INVOKABLE void requestOrientation(const QString &mode);
+    // Android: the system folder chooser (the Qt dialog has no usable Android version). The answer comes back
+    // as androidFolderPicked(token, folder); a cancelled choice answers with an empty address.
+    Q_INVOKABLE bool pickAndroidFolder(const QString &token);   // Android: turns the screen; elsewhere nothing
     QString navStyle() const { return m_navStyle; }
     void setNavStyle(const QString &style);
     QString statusNote() const { return m_statusNote; }
@@ -385,6 +388,7 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void videoChatChanged();
+    void androidFolderPicked(const QString &token, const QUrl &folder);
     void videoOrientationChanged();
     void navStyleChanged();
     void statusNoteChanged();

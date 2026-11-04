@@ -4,6 +4,19 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-11-04
+
+### Added
+- **Video playback on Android.** Films, shows and the rest now play on the phone: the picture, play and pause,
+  jump back or forward 10 seconds, tap the bar to seek, and your place is remembered and resumed. Volume stops at
+  100 % there (the boost past 100 % is desktop only), and subtitles are not on Android yet. Films still show without
+  a length or a picture in the list on Android.
+
+### Fixed
+- **Android: adding a folder turned the whole screen grey and left the app unusable.** The folder chooser Qt provides
+  has no Android version, so it drew a dark layer over everything and nothing could be tapped. Android now opens the
+  system's own folder chooser instead; desktop is unchanged.
+
 ## [1.7.2] - 2026-10-30
 
 ### Added

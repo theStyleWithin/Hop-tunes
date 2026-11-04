@@ -15,9 +15,29 @@ Rectangle {
     property bool landscape: width > height
     property string tab: "nextup"           // nextup | chat | comments
     property bool chatShown: true
-    property real position: 0
-    property real duration: 0
+    // the picture: Qt Multimedia on Android (AndroidVideoSurface.qml, loaded by source so the desktop never needs it)
     readonly property bool engine: hop.videoEngine !== "none"
+    readonly property var surface: surfaceLoader.item
+    readonly property real position: surface ? surface.position : 0
+    readonly property real duration: surface ? surface.duration : 0
+    readonly property bool playing: surface ? !surface.paused : false
+    property string loadedPath: ""
+    function openCurrent() {
+        if (!surface || !hop.videoPlayerPath) return
+        loadedPath = hop.videoPlayerPath
+        surface.setResumePosition(hop.videoPlayerResumeMs)
+        surface.volume = hop.videoVolume
+        surface.source = hop.videoPlayerPath
+        surface.play()
+    }
+    Connections {
+        target: hop
+        function onVideoPlayerChanged() {
+            if (hop.videoPlayerOpen && root.loadedPath !== "" && hop.videoPlayerPath !== root.loadedPath) root.openCurrent()
+            if (!hop.videoPlayerOpen) root.loadedPath = ""
+        }
+        function onVideoVolumeChanged() { if (root.surface) root.surface.volume = hop.videoVolume }
+    }
 
     function close() { hop.closeVideoPlayer(root.position, root.duration) }
     function rotate() { hop.requestOrientation(root.landscape ? "portrait" : "landscape") }
@@ -41,11 +61,19 @@ Rectangle {
         width: root.width
         height: root.landscape ? root.height : Math.round(root.width * 9 / 16) + 6
         Rectangle { anchors.fill: parent; color: "black" }
+        Loader {
+            id: surfaceLoader
+            anchors.fill: parent
+            active: hop.videoEngine === "qt" && hop.videoPlayerOpen
+            source: "AndroidVideoSurface.qml"
+            onLoaded: root.openCurrent()
+        }
+        MouseArea { anchors.fill: parent; onClicked: if (root.surface) root.surface.togglePause() }
         Label {
             visible: !root.engine
             anchors.centerIn: parent; width: parent.width - 80
             horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-            text: "video playback is not on Android yet"
+            text: "no video engine is available in this build"
             color: "#c8c8ce"; font { family: Theme.font; pixelSize: 16 }
         }
         // top: close, title (landscape), rotate, subtitles
@@ -83,18 +111,19 @@ Rectangle {
             Rectangle {
                 width: 64; height: 64; radius: 32; color: "#66000000"; anchors.verticalCenter: parent.verticalCenter
                 TransportButton { anchors.fill: parent; glyph: "prev"; iconSize: 24; Accessible.name: "back 10 seconds"
-                                  onClicked: root.position = Math.max(0, root.position - 10000) }
+                                  onClicked: if (root.surface) root.surface.seek(root.position - 10000) }
             }
             TransportButton {
                 objectName: "phonePlayerPlay"
-                glyph: "pause"; round: true; filled: true; iconSize: 26
+                glyph: root.playing ? "pause" : "play"; round: true; filled: true; iconSize: 26
                 implicitWidth: root.landscape ? 80 : 64
+                onClicked: if (root.surface) root.surface.togglePause()
                 Accessible.name: "play or pause"
             }
             Rectangle {
                 width: 64; height: 64; radius: 32; color: "#66000000"; anchors.verticalCenter: parent.verticalCenter
                 TransportButton { anchors.fill: parent; glyph: "next"; iconSize: 24; Accessible.name: "forward 10 seconds"
-                                  onClicked: root.position = root.position + 10000 }
+                                  onClicked: if (root.surface) root.surface.seek(root.position + 10000) }
             }
         }
         // bottom: time and a thin progress bar
@@ -110,9 +139,14 @@ Rectangle {
                 Label { text: root.info.length || ""; color: "white"; font { family: Theme.font; pixelSize: 14 } }
             }
             Rectangle {
+                id: bar
                 Layout.fillWidth: true; implicitHeight: 5; radius: 2; color: "#55ffffff"
                 Rectangle { height: parent.height; radius: 2; color: Theme.accent
                             width: root.duration > 0 ? parent.width * Math.min(1, root.position / root.duration) : 0 }
+                MouseArea {   // tap the bar to jump
+                    anchors { fill: parent; topMargin: -14; bottomMargin: -14 }
+                    onClicked: function (m) { if (root.surface && root.duration > 0) root.surface.seek(root.duration * m.x / bar.width) }
+                }
             }
         }
         // landscape: the pretend live chat on the right edge

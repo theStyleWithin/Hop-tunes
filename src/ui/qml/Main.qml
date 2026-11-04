@@ -30,13 +30,13 @@ ApplicationWindow {
         return views.indexOf(v) >= 0 ? v : "collection"
     }
 
-    FolderDialog {
+    FolderPick {
         id: videoFolderDialog
         title: "choose a video folder"
         onAccepted: hop.addVideoFolder(selectedFolder)
     }
     // Folder picker for the videos tab: movies, shows, cartoons, anime and other videos each have their own.
-    FolderDialog {
+    FolderPick {
         id: videoCategoryFolderDialog
         property string category: "movies"
         title: "choose a folder"
@@ -54,14 +54,15 @@ ApplicationWindow {
         sectionFolderDialog.open()
     }
     // Folder picker for the pictures / audiobooks / ebooks / podcasts sections.
-    FolderDialog {
+    FolderPick {
         id: sectionFolderDialog
         property string kind: ""
         title: "choose a folder"
         onAccepted: hop.addSectionFolder(kind, selectedFolder)
     }
-    FolderDialog {
+    FolderPick {
         id: folderDialog
+        objectName: "musicFolderPick"
         title: "choose a music folder"
         onAccepted: hop.addFolder(selectedFolder)
     }

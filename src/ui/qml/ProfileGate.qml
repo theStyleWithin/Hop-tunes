@@ -123,7 +123,7 @@ Rectangle {
     }
 
     // ---- create ----------------------------------------------------------------------
-    FolderDialog {
+    FolderPick {
         id: createFolderDialog
         title: "choose your music folder"
         onAccepted: createForm.folder = selectedFolder

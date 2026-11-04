@@ -3,6 +3,7 @@
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
 #include <QCoreApplication>
+#include <QtCore/private/qandroidextras_p.h>
 #endif
 
 #include "core/Paths.h"
@@ -1068,8 +1069,10 @@ QString App::videoPlayerTitle() const
 
 QString App::videoEngine() const
 {
-#ifdef HOPTUNES_HAVE_MPV
+#if defined(HOPTUNES_HAVE_MPV)
     return QStringLiteral("mpv");
+#elif defined(Q_OS_ANDROID)
+    return QStringLiteral("qt");   // Qt Multimedia (AndroidVideoSurface.qml)
 #else
     return GstVideoPlayer::available() ? QStringLiteral("gstreamer") : QStringLiteral("none");
 #endif
@@ -1114,6 +1117,30 @@ void App::requestOrientation(const QString &mode)
     if (activity.isValid()) activity.callMethod<void>("setRequestedOrientation", "(I)V", v);
 #else
     Q_UNUSED(mode)
+#endif
+}
+
+bool App::pickAndroidFolder(const QString &token)
+{
+#ifdef Q_OS_ANDROID
+    // ACTION_OPEN_DOCUMENT_TREE: the system's own folder chooser. It returns a tree address that
+    // Paths::folderPath turns into a plain path (the media permissions make that path readable).
+    QJniObject intent("android/content/Intent", "(Ljava/lang/String;)V",
+                      QJniObject::fromString(QStringLiteral("android.intent.action.OPEN_DOCUMENT_TREE")).object<jstring>());
+    if (!intent.isValid()) return false;
+    constexpr int kRequest = 4711;
+    QtAndroidPrivate::startActivity(intent, kRequest, [this, token](int, int resultCode, const QJniObject &data) {
+        QUrl url;
+        if (resultCode == -1 /* RESULT_OK */ && data.isValid()) {
+            const QJniObject uri = data.callObjectMethod("getData", "()Landroid/net/Uri;");
+            if (uri.isValid()) url = QUrl(uri.toString());
+        }
+        QMetaObject::invokeMethod(this, [this, token, url] { emit androidFolderPicked(token, url); }, Qt::QueuedConnection);
+    });
+    return true;
+#else
+    Q_UNUSED(token)
+    return false;
 #endif
 }
 

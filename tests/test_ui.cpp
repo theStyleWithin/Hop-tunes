@@ -1173,6 +1173,30 @@ private slots:
         QTest::qWait(400);
     }
 
+    // Android's folder chooser is the system one (the Qt dialog dims the whole screen there): its answer
+    // arrives as a signal carrying the token the question was asked with, and adds the folder.
+    void systemFolderChooserAnswersAddTheFolder()
+    {
+        auto *pick = item("musicFolderPick");
+        QVERIFY(pick);
+        const QString token = pick->property("token").toString();
+        QVERIFY(!token.isEmpty());
+        const QString dir = m_home.filePath(QStringLiteral("PickedMusic"));
+        QVERIFY(QDir().mkpath(dir));
+        QVERIFY(writeWav(dir + QStringLiteral("/p.wav"), 1000));
+        const int before = m_app->folders().size();
+
+        emit m_app->androidFolderPicked(QStringLiteral("someone else"), QUrl::fromLocalFile(dir));   // not ours
+        emit m_app->androidFolderPicked(token, QUrl());                                                 // cancelled
+        QTest::qWait(100);
+        QCOMPARE(m_app->folders().size(), before);
+
+        emit m_app->androidFolderPicked(token, QUrl::fromLocalFile(dir));
+        QTRY_COMPARE(m_app->folders().size(), before + 1);
+        QVERIFY(m_app->folders().contains(QFileInfo(dir).canonicalFilePath()));
+        m_app->removeFolder(QFileInfo(dir).canonicalFilePath());
+    }
+
     // Pictures (and the other new sections) have their own folder list and their own
     // "choose a folder" button, separate from the music and video folders.
     void sectionsHaveTheirOwnFolders()
