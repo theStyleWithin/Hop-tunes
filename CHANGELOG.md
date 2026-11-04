@@ -15,6 +15,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   never overwrites a profile (a taken name is refused), lets you pick a new name and a PIN, and lists any music
   folders that are not on this device. The PIN is never put in the file, and music, videos and pictures stay where
   they are. Cover and thumbnail pictures you picked are not exported (their files live on the old device).
+- A short, optional support note at the very bottom of Settings (a tip link and a Locals page; no popups, nothing
+  nagging, and no shame in freeloading).
 - **Video playback on Android.** Films, shows and the rest now play on the phone: the picture, play and pause,
   jump back or forward 10 seconds, tap the bar to seek, and your place is remembered and resumed. Volume stops at
   100 % there (the boost past 100 % is desktop only), and subtitles are not on Android yet. Films still show without

@@ -378,6 +378,8 @@ private slots:
         QTRY_VERIFY(item("exportProfile") && item("exportProfile")->isVisible());
         QVERIFY(item("ejectProfile") && item("ejectProfile")->isVisible());
         QVERIFY(!item("confirmEject")->isVisible());   // nothing to confirm until a file is saved
+        QVERIFY(item("tipNote") && item("tipNote")->property("text").toString().contains(QStringLiteral("Normand64"))
+                && item("tipNote")->property("text").toString().contains(QStringLiteral("locals.com/gamehopper")));
         shot("settings-eject");
 
         // nothing leaves until the file is saved AND the person says they have it

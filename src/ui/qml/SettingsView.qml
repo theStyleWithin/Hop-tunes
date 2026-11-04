@@ -745,6 +745,15 @@ Item {
                 + "Zune is a trademark of Microsoft Corporation."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
+        Label {
+            objectName: "tipNote"
+            Layout.topMargin: 6
+            Layout.fillWidth: true; Layout.maximumWidth: 760; Layout.minimumWidth: 0
+            wrapMode: Text.WordWrap
+            text: "If you enjoy hoptunes, a tip of any amount is appreciated: Cash App $Normand64. "
+                + "You can also support my Locals at locals.com/gamehopper. There is no shame in freeloading."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         Item { height: 18; width: 1 }
     }
     }
