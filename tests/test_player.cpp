@@ -58,6 +58,38 @@ private slots:
             QSKIP("Hop-tunes does not use playbin3 before GStreamer 1.22 (known gapless bug)");
     }
 
+    // Android: while the app is in the background the audio thread moves to the next song by itself and only commits
+    // the queue position (Player::onStreamStartedThread); the screen hears about it when the main loop runs again.
+    void anAdvanceCommittedOnTheAudioThreadReachesTheScreenLater()
+    {
+        QTemporaryDir dir;
+        const QString a = dir.filePath(QStringLiteral("a.wav")), b = dir.filePath(QStringLiteral("b.wav"));
+        QVERIFY(writeWav(a, 3000));
+        QVERIFY(writeWav(b, 3000));
+        Player p;
+        QSignalSpy current(&p, &Player::currentChanged);
+        QSignalSpy started(&p, &Player::trackStarted);
+        p.setQueue({wavTrack(a, 1, 3000), wavTrack(b, 2, 3000)}, 0);
+        QCOMPARE(p.currentIndex(), 0);
+        const int currentBefore = current.count(), startedBefore = started.count();
+
+        {   // what the audio thread does after the first song ends
+            QMutexLocker lock(&p.m_gaplessMutex);
+            p.m_pendingIndex = 1;
+        }
+        Player::onStreamStartedThread(p.m_playbin, &p);
+        QCOMPARE(p.m_index, 1);                 // the queue already moved on
+        QVERIFY(p.m_pendingIndex < 0);
+        QVERIFY(p.m_uiDirty.load());
+        QCOMPARE(current.count(), currentBefore);   // but the screen has not been told yet
+
+        gst_bus_post(p.m_bus, gst_message_new_stream_start(GST_OBJECT(p.m_playbin)));   // the main loop is back
+        QTRY_VERIFY_WITH_TIMEOUT(current.count() > currentBefore, 3000);
+        QVERIFY(started.count() > startedBefore);
+        QVERIFY(!p.m_uiDirty.load());
+        QCOMPARE(p.currentTrackId(), qint64(2));
+    }
+
     void emptyPlayer()
     {
         Player p;

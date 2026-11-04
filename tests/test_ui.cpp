@@ -1151,6 +1151,14 @@ private slots:
         m_app->playVideo(0);
         QTest::qWait(800);
         shot("mock-player-portrait-nextup");
+        {   // upright: the picture is clear; play / pause, rotate and subtitles are under it, not over it
+            const qreal pictureBottom = qRound(420 * 9.0 / 16) + 6;
+            for (const char *name : {"phonePlayerPlay", "phonePlayerRotate", "phonePlayerCC", "phonePlayerBack", "phonePlayerForward"}) {
+                QQuickItem *it = item(name);
+                QVERIFY2(it && it->isVisible(), name);
+                QVERIFY2(it->mapToScene(QPointF(0, 0)).y() >= pictureBottom - 1, name);
+            }
+        }
         QVERIFY(click("phoneTab_comments"));
         QTest::qWait(500);
         shot("mock-player-portrait-comments");

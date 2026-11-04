@@ -42,10 +42,15 @@ enum GstMessageType { GST_MESSAGE_UNKNOWN = 0, GST_MESSAGE_EOS = 1, GST_MESSAGE_
 #define GST_OBJECT(o) (static_cast<void *>(o))
 #define GST_MESSAGE_TYPE(m) (static_cast<GstMessageType>((m)->type))
 #define G_CALLBACK(f) (reinterpret_cast<GCallback>(f))
-#define g_signal_connect(i, s, c, d) (static_cast<void>(sizeof(i) + sizeof(c) + sizeof(d)))
-#define g_signal_handlers_disconnect_by_data(i, d) (static_cast<void>(sizeof(i) + sizeof(d)))
+// The shim knows two signals: "about-to-finish" (the song is ending; the callback may set the next "uri") and
+// "hop-stream-started" (the next song has just started). Both run on the shim's own audio thread, not the main
+// thread, so the queue keeps moving while the app is in the background (Qt pauses the main loop there).
+#define g_signal_connect(i, s, c, d) hop_shim_connect((i), (s), (c), (d))
+#define g_signal_handlers_disconnect_by_data(i, d) hop_shim_disconnect((i), (d))
 
 void g_object_set(void *obj, const char *first, ...);   // "uri", "volume" matter here; the rest are accepted and ignored
+unsigned long hop_shim_connect(void *obj, const char *signal, GCallback cb, void *data);
+void hop_shim_disconnect(void *obj, void *data);
 void g_free(void *p);
 void g_error_free(GError *e);
 gboolean gst_is_initialized();

@@ -16,7 +16,8 @@ Item {
     readonly property bool drawerOpen: drawer.opened
     function closeDrawer() { drawer.close() }
     signal picked(string v)
-    readonly property var glyphs: ({ "collection": "♪", "now playing": "◎", "search": "⌕", "profile": "☺", "quickplay": "★", "settings": "⚙" })
+    readonly property var glyphs: ({ "quickplay": "★", "settings": "⚙" })
+    readonly property var icons: ({ "collection": "note", "now playing": "now", "search": "search", "profile": "person" })
 
     // ---- bottom bar (phones) -----------------------------------------------------------
     Rectangle {
@@ -46,7 +47,8 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 56; height: 30; radius: 15
                             color: tab.on ? Theme.hover : "transparent"
-                            Label { anchors.centerIn: parent; text: root.glyphs[tab.modelData] || "•"; color: tab.on ? Theme.strong : Theme.dim; font.pixelSize: Theme.fs(18) }
+                            Icon { anchors.centerIn: parent; visible: !!root.icons[tab.modelData]; kind: root.icons[tab.modelData] || "note"; ink: tab.on ? Theme.strong : Theme.dim; width: 22; height: 22 }
+                            Label { anchors.centerIn: parent; visible: !root.icons[tab.modelData]; text: root.glyphs[tab.modelData] || "•"; color: tab.on ? Theme.strong : Theme.dim; font.pixelSize: Theme.fs(18) }
                         }
                         Label { anchors.horizontalCenter: parent.horizontalCenter; text: tab.modelData; color: tab.on ? Theme.strong : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     }
@@ -125,14 +127,16 @@ Item {
                 visible: !it.rail
                 anchors { verticalCenter: parent.verticalCenter; left: parent.left; leftMargin: 14 }
                 spacing: 14
-                Label { text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.muted; font.pixelSize: Theme.fs(18) }
+                Icon { visible: !!root.icons[it.modelData]; kind: root.icons[it.modelData] || "note"; ink: it.on ? Theme.strong : Theme.muted; width: 20; height: 20 }
+                Label { visible: !root.icons[it.modelData]; text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.muted; font.pixelSize: Theme.fs(18) }
                 Label { text: it.modelData; color: it.on ? Theme.strong : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(18) } }
             }
             Column {
                 visible: it.rail
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: 2
-                Label { anchors.horizontalCenter: parent.horizontalCenter; text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.dim; font.pixelSize: Theme.fs(18) }
+                Icon { anchors.horizontalCenter: parent.horizontalCenter; visible: !!root.icons[it.modelData]; kind: root.icons[it.modelData] || "note"; ink: it.on ? Theme.strong : Theme.dim; width: 20; height: 20 }
+                Label { anchors.horizontalCenter: parent.horizontalCenter; visible: !root.icons[it.modelData]; text: root.glyphs[it.modelData] || "•"; color: it.on ? Theme.strong : Theme.dim; font.pixelSize: Theme.fs(18) }
                 Label { anchors.horizontalCenter: parent.horizontalCenter; text: it.modelData; color: it.on ? Theme.strong : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(11) } }
             }
         }

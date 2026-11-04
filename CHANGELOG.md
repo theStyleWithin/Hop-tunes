@@ -13,6 +13,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   a length or a picture in the list on Android.
 
 ### Fixed
+- **Android: music did not move on to the next song (or repeat) while the screen was off, until you woke the
+  phone.** Android pauses the app's main loop in the background, and the queue was driven from that loop. The
+  hand-off to the next song now runs on the music player's own thread, so loop and the queue keep going with the
+  screen off. (With crossfade switched on, songs from different albums still wait for the screen.)
 - **Android: adding a folder turned the whole screen grey and left the app unusable.** The folder chooser Qt provides
   has no Android version, so it drew a dark layer over everything and nothing could be tapped. Android now opens the
   system's own folder chooser instead; desktop is unchanged. (A first fix was not enough on one phone, so this
@@ -24,6 +28,13 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   live updates.
 
 ### Changed
+- **Phones: the video player keeps the picture clear.** The round buttons no longer sit over the film. Held
+  upright, only the close arrow, the time and a thin progress bar are on the picture; play / pause sits just
+  under it, rotate and subtitles are at the right end of the title row, and the button row has play, back 10 s,
+  subtitles, forward 10 s and volume. Turned sideways, the controls show when you tap the picture and hide
+  again after a few seconds while the film plays.
+- **Phones: the close arrow, rotate and search icons are drawn instead of typed**, so they no longer show as
+  empty boxes on phones whose font lacks those symbols.
 - **Phones: the collection stays together during the first scan.** The title, tabs, "scanning…" note and the
   albums / artists / songs / playlists pills used to be spread far apart down the screen while the library was
   being scanned for the first time; they now sit together at the top.

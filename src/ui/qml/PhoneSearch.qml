@@ -27,7 +27,7 @@ Item {
             background: Rectangle {
                 implicitHeight: 48; radius: 24; color: Theme.panel
                 border { width: field.activeFocus ? 2 : 1; color: field.activeFocus ? Theme.accent : Theme.line }
-                Label { x: 14; anchors.verticalCenter: parent.verticalCenter; text: "⌕"; color: Theme.dim; font.pixelSize: 20 }
+                Icon { x: 14; anchors.verticalCenter: parent.verticalCenter; kind: "search"; ink: Theme.dim; width: 20; height: 20 }
             }
         }
         Label {
