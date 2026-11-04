@@ -25,6 +25,13 @@ void LibraryWatcher::onPathChanged()
 
 void LibraryWatcher::setFolders(const QStringList &folders)
 {
+    if (m_maxDirs == 0) {   // watching is switched off
+        if (!m_watched.isEmpty()) {
+            if (!m_watcher->directories().isEmpty()) m_watcher->removePaths(m_watcher->directories());
+            m_watched.clear();
+        }
+        return;
+    }
     QSet<QString> want;
     for (const QString &folder : folders) {
         if (folder.isEmpty()) continue;

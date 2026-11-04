@@ -18,6 +18,9 @@
     <file>qml/StatusNote.qml</file>
     <file>qml/MobileNav.qml</file>
     <file>qml/PillRow.qml</file>
+    <file>qml/Icon.qml</file>
+    <file>qml/AndroidVideoSurface.qml</file>
+    <file>qml/FolderPick.qml</file>
     <file>qml/PhoneSearch.qml</file>
     <file>qml/PhoneVideoPlayer.qml</file>
     <file>qml/PhoneVideoDetail.qml</file>

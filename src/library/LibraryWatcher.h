@@ -30,12 +30,20 @@ public:
     // repeatedly (e.g. after each rescan) — a no-op if the directory set hasn't changed.
     void setFolders(const QStringList &folders);
 
+    // Off switch for devices where watching a whole tree is too heavy: with 0 nothing is watched (the library is
+    // still rescanned at start-up and by "rescan now"). Walking a big tree and adding a watch per folder happens
+    // on the calling (UI) thread, which froze Hop-tunes on Android ("isn't responding") after choosing a folder.
+    // The default is unlimited, which is the desktop behaviour.
+    void setMaxDirectories(int count) { m_maxDirs = count; }
+    int watchedCount() const { return int(m_watched.size()); }
+
 signals:
     // Something changed under a watched folder; debounced (~1.5 s after the last event).
     void changed();
 
 private:
     void onPathChanged();
+    int m_maxDirs = -1;
 
     QFileSystemWatcher *m_watcher;
     QTimer m_debounce;

@@ -20,6 +20,28 @@ ApplicationWindow {
     title: hop.player.hasTrack ? hop.player.title + " · Hop-tunes" : "Hop-tunes"
     color: view === "now playing" && !Theme.compact ? Theme.bgDeep : Theme.bg
 
+    // The Android back button (and a phone's back gesture) steps back through the app and never leaves it: leaving
+    // by "back" closed the screen and left a grey window behind. At the top of the music collection it does nothing.
+    // Returns true when it did something. Desktop windows close as usual.
+    function goBack() {
+        if (!hop.profileReady) {
+            if (gate.mode === "create" && hop.profiles.length > 0) gate.show("pick")
+            else if (gate.mode === "pin") gate.show("pick")
+            return true
+        }
+        if (hop.videoPlayerOpen) { videoView.goBack(); return true }
+        if (hop.videoDetailRow >= 0) { hop.closeVideoDetail(); return true }
+        if (view === "settings" || view === "quickplay") { view = "profile"; return true }
+        if (view !== "collection") { view = "collection"; return true }
+        collectionView.goBack()
+        return true
+    }
+    onClosing: function (close) {
+        if (!mobileNav) return
+        close.accepted = false
+        goBack()
+    }
+
     readonly property var views: ["collection", "now playing", "quickplay", "settings"]
     // phones and tablets: the bottom bar / drawer shows these four, as in the mockups; quickplay and settings are reached from profile
     readonly property var navViews: ["collection", "now playing", "search", "profile"]
@@ -30,13 +52,13 @@ ApplicationWindow {
         return views.indexOf(v) >= 0 ? v : "collection"
     }
 
-    FolderDialog {
+    FolderPick {
         id: videoFolderDialog
         title: "choose a video folder"
         onAccepted: hop.addVideoFolder(selectedFolder)
     }
     // Folder picker for the videos tab: movies, shows, cartoons, anime and other videos each have their own.
-    FolderDialog {
+    FolderPick {
         id: videoCategoryFolderDialog
         property string category: "movies"
         title: "choose a folder"
@@ -54,14 +76,15 @@ ApplicationWindow {
         sectionFolderDialog.open()
     }
     // Folder picker for the pictures / audiobooks / ebooks / podcasts sections.
-    FolderDialog {
+    FolderPick {
         id: sectionFolderDialog
         property string kind: ""
         title: "choose a folder"
         onAccepted: hop.addSectionFolder(kind, selectedFolder)
     }
-    FolderDialog {
+    FolderPick {
         id: folderDialog
+        objectName: "musicFolderPick"
         title: "choose a music folder"
         onAccepted: hop.addFolder(selectedFolder)
     }
@@ -75,12 +98,14 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+,"; enabled: hop.profileReady; onActivated: win.view = "settings" }
 
     ProfileGate {
+        id: gate
         anchors.fill: parent
         visible: !hop.profileReady
         z: 10
     }
 
     VideoPlayerView {
+        id: videoView
         anchors.fill: parent
         visible: hop.profileReady && hop.videoPlayerOpen
         z: 20
@@ -150,7 +175,7 @@ ApplicationWindow {
                 NumberAnimation { target: stack; property: "opacity"; from: 0.0; to: 1.0; duration: Theme.motion; easing.type: Easing.OutCubic }
                 NumberAnimation { target: slide; property: "x"; from: 28; to: 0; duration: Theme.motion; easing.type: Easing.OutCubic }
             }
-            CollectionView { id: collectionView; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            CollectionView { id: collectionView; objectName: "collectionView"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
             SettingsView { objectName: "settingsView"; onBack: win.view = "profile"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }

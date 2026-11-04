@@ -19,9 +19,13 @@ Rectangle {
     clip: true
 
     PhoneVideoPlayer {   // phones: the layout from the mockups
+        id: phonePlayer
         visible: Theme.compact && hop.videoPlayerOpen
         anchors.fill: parent
     }
+
+    // phones: the back button closes the player (the picture and the position are saved)
+    function goBack() { if (phonePlayer.visible) phonePlayer.close() }
 
     Loader {
         id: loader

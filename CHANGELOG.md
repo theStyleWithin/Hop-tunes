@@ -4,6 +4,54 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-11-04
+
+### Added
+- **Video playback on Android.** Films, shows and the rest now play on the phone: the picture, play and pause,
+  jump back or forward 10 seconds, tap the bar to seek, and your place is remembered and resumed. Volume stops at
+  100 % there (the boost past 100 % is desktop only), and subtitles are not on Android yet. Films still show without
+  a length or a picture in the list on Android.
+
+### Fixed
+- **Android: the app going completely grey after pressing "back".** The back button used to close the app's
+  screen and leave a grey window behind. Back now steps back through the app instead (a song list to its albums to
+  the artists, a picture or book closes, a film's page closes, settings go back to profile) and never leaves the
+  app; at the top of the music collection it does nothing, and from another collection tab it returns to music.
+  Desktop is unchanged.
+- **Android: Hop-tunes had no icon on the home screen / app list.** It now has the same icon as the desktop app
+  (a round / adaptive version for newer Android).
+- **Android: music did not move on to the next song (or repeat) while the screen was off, until you woke the
+  phone.** Android pauses the app's main loop in the background, and the queue was driven from that loop. The
+  hand-off to the next song now runs on the music player's own thread, so loop and the queue keep going with the
+  screen off. (With crossfade switched on, songs from different albums still wait for the screen.)
+- **Android: adding a folder turned the whole screen grey and left the app unusable.** The folder chooser Qt provides
+  has no Android version, so it drew a dark layer over everything and nothing could be tapped. Android now opens the
+  system's own folder chooser instead; desktop is unchanged. (A first fix was not enough on one phone, so this
+  patch also repaints the window when you return from the chooser and starts the scan only after that first paint.)
+- **Android: "Hop-tunes isn't responding" after choosing a folder.** The real cause: right after a folder was
+  chosen, the app walked the whole folder tree and set up a live-update watch on every sub-folder, on the thread
+  that draws the screen. A big music (or storage) folder kept that thread busy for so long that Android reported the
+  app as frozen. Phones no longer watch folders live (they scan at start-up and on "rescan now"); desktop keeps
+  live updates.
+
+### Changed
+- **Phones: the video player keeps the picture clear.** The round buttons no longer sit over the film. Held
+  upright, only the close arrow, the time and a thin progress bar are on the picture; play / pause sits just
+  under it, rotate and subtitles are at the right end of the title row, and the button row has play, back 10 s,
+  subtitles, forward 10 s and volume. Turned sideways, the controls show when you tap the picture and hide
+  again after a few seconds while the film plays.
+- **Phones: the close arrow, rotate and search icons are drawn instead of typed**, so they no longer show as
+  empty boxes on phones whose font lacks those symbols.
+- **Phones: the collection stays together during the first scan.** The title, tabs, "scanning…" note and the
+  albums / artists / songs / playlists pills used to be spread far apart down the screen while the library was
+  being scanned for the first time; they now sit together at the top.
+- **Phones: you make your profile first and choose your music folder afterwards**, in the collection, instead of
+  on the profile form (the profile still starts with the phone's Music folder). Desktop is unchanged.
+
+### Added
+- **Settings › diagnostics on phones:** a small log of what the app did and any errors, kept on the phone only,
+  with buttons to show it and copy it (this run or the last one), so a problem can be reported without a terminal.
+
 ## [1.7.2] - 2026-10-30
 
 ### Added

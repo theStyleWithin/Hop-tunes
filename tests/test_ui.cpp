@@ -221,6 +221,16 @@ private slots:
         QCOMPARE(gateMode(), QStringLiteral("create"));
         QCOMPARE(m_app->suggestedFolder(), QFileInfo(m_home.filePath(QStringLiteral("Music"))).canonicalFilePath());
 
+        // desktop: the music folder is chosen on this form; phones leave it for the collection
+        QTRY_VERIFY(item("createFolderBlock") && item("createFolderBlock")->isVisible());
+        window()->setProperty("forceMobile", true);
+        window()->resize(412, 880);
+        QTRY_VERIFY(!item("createFolderBlock")->isVisible());
+        QVERIFY(item("createButton")->isVisible());
+        window()->setProperty("forceMobile", false);
+        window()->resize(1280, 800);
+        QTRY_VERIFY(item("createFolderBlock")->isVisible());
+
         type("profileName", QStringLiteral("Jo"));
         QVERIFY(click("usePin"));
         type("pin1", QStringLiteral("2468"));
@@ -1141,6 +1151,14 @@ private slots:
         m_app->playVideo(0);
         QTest::qWait(800);
         shot("mock-player-portrait-nextup");
+        {   // upright: the picture is clear; play / pause, rotate and subtitles are under it, not over it
+            const qreal pictureBottom = qRound(420 * 9.0 / 16) + 6;
+            for (const char *name : {"phonePlayerPlay", "phonePlayerRotate", "phonePlayerCC", "phonePlayerBack", "phonePlayerForward"}) {
+                QQuickItem *it = item(name);
+                QVERIFY2(it && it->isVisible(), name);
+                QVERIFY2(it->mapToScene(QPointF(0, 0)).y() >= pictureBottom - 1, name);
+            }
+        }
         QVERIFY(click("phoneTab_comments"));
         QTest::qWait(500);
         shot("mock-player-portrait-comments");
@@ -1171,6 +1189,99 @@ private slots:
         w->resize(before);
         QTRY_COMPARE(w->size(), before);
         QTest::qWait(400);
+    }
+
+    // Phones: the Android back button steps back through the app and never leaves it (leaving closed the screen
+    // and left a grey window behind). At the top of the music collection it does nothing.
+    void theBackButtonStepsBackAndNeverLeavesTheApp()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); } } restore{w, before};
+        w->setProperty("forceMobile", true);
+        w->resize(412, 880);
+        w->setProperty("view", QStringLiteral("collection"));
+        QObject *cv = item("collectionView");
+        QVERIFY(cv);
+        QVERIFY(click("pillTab_music"));
+        QVERIFY(click("pillMode_artists"));
+        auto back = [&] { QVariant r; QVERIFY(QMetaObject::invokeMethod(w, "goBack", Q_RETURN_ARG(QVariant, r))); QVERIFY(r.toBool()); };
+
+        cv->setProperty("phoneStep", 2);                 // an artist's songs
+        back(); QCOMPARE(cv->property("phoneStep").toInt(), 1);
+        back(); QCOMPARE(cv->property("phoneStep").toInt(), 0);
+        back(); QCOMPARE(cv->property("phoneStep").toInt(), 0);   // the top: nothing more to go back to
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
+
+        cv->setProperty("collectionTab", QStringLiteral("videos"));
+        back(); QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
+
+        w->setProperty("view", QStringLiteral("settings"));
+        back(); QCOMPARE(w->property("view").toString(), QStringLiteral("profile"));
+        back(); QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        w->setProperty("view", QStringLiteral("now playing"));
+        back(); QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+
+        // the real thing: the system's back arrives as a close request, which the window must refuse
+        cv->setProperty("phoneStep", 1);
+        w->close();
+        QTest::qWait(100);
+        QVERIFY(w->isVisible());
+        QCOMPARE(cv->property("phoneStep").toInt(), 0);
+    }
+
+    // Phones, first scan: the title, tabs, scan note and pills stay together at the top instead of being spread
+    // over the whole screen.
+    void phoneCollectionStaysCompactWhileScanning()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size; QObject *cv;
+            ~Restore() { cv->setProperty("forceScanning", false); w->setProperty("forceMobile", false); w->resize(size); } };
+        w->setProperty("view", QStringLiteral("collection"));
+        QObject *cv = item("collectionView");
+        QVERIFY(cv);
+        Restore restore{w, before, cv};
+        w->setProperty("forceMobile", true);
+        w->resize(412, 880);
+        QTRY_COMPARE(w->width(), 412);
+        QVERIFY(click("pillTab_music"));
+        cv->setProperty("forceScanning", true);
+        QTRY_VERIFY(item("scanSpacer") && item("scanSpacer")->isVisible());
+        QTest::qWait(300);
+        shot("phone-scanning");
+        auto topOf = [&](const char *name) { auto *i = item(name); return i->mapToScene(QPointF(0, 0)).y(); };
+        const qreal tabs = topOf("pillTab_music");
+        const qreal pills = topOf("pillMode_albums");
+        QVERIFY2(pills - tabs < 200, qPrintable(QStringLiteral("tabs at %1, pills at %2").arg(tabs).arg(pills)));
+        QVERIFY(tabs < 200);
+    }
+
+    // Android's folder chooser is the system one (the Qt dialog dims the whole screen there): its answer
+    // arrives as a signal carrying the token the question was asked with, and adds the folder.
+    void systemFolderChooserAnswersAddTheFolder()
+    {
+        auto *pick = item("musicFolderPick");
+        QVERIFY(pick);
+        const QString token = pick->property("token").toString();
+        QVERIFY(!token.isEmpty());
+        const QString dir = m_home.filePath(QStringLiteral("PickedMusic"));
+        QVERIFY(QDir().mkpath(dir));
+        QVERIFY(writeWav(dir + QStringLiteral("/p.wav"), 1000));
+        const int before = m_app->folders().size();
+
+        emit m_app->androidFolderPicked(QStringLiteral("someone else"), QUrl::fromLocalFile(dir));   // not ours
+        emit m_app->androidFolderPicked(token, QUrl());                                                 // cancelled
+        QTest::qWait(100);
+        QCOMPARE(m_app->folders().size(), before);
+
+        emit m_app->androidFolderPicked(token, QUrl::fromLocalFile(dir));
+        QTRY_COMPARE(m_app->folders().size(), before + 1);
+        QVERIFY(m_app->diagLog().isEmpty() || m_app->diagLog().contains(QStringLiteral("addFolder")));   // logged when the log is on
+        QVERIFY(m_app->folders().contains(QFileInfo(dir).canonicalFilePath()));
+        m_app->removeFolder(QFileInfo(dir).canonicalFilePath());
     }
 
     // Pictures (and the other new sections) have their own folder list and their own

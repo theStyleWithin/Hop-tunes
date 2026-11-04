@@ -26,7 +26,7 @@ Item {
                 onClicked: root.back()
                 Accessible.name: "back"
                 background: Item {}
-                contentItem: Label { text: "⌄"; color: Theme.text2; font.pixelSize: 26; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Item { Icon { anchors.centerIn: parent; kind: "down"; ink: Theme.text2; width: 26; height: 26 } }
             }
             Label { text: "now playing"; color: Theme.muted; font { family: Theme.font; pixelSize: 20 } }
             Item { Layout.fillWidth: true }

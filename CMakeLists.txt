@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(hop-tunes VERSION 1.7.2 LANGUAGES CXX)
+project(hop-tunes VERSION 1.7.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -45,6 +45,7 @@ endif()
 # ---- core library: no GUI, no GStreamer (unit-testable) ---------------------
 add_library(hoptunes_core STATIC
     src/core/Paths.h          src/core/Paths.cpp
+    src/core/DiagLog.h        src/core/DiagLog.cpp
     src/core/ProfileStore.h src/core/ProfileStore.cpp
     src/library/Track.h
     src/core/Sql.h
@@ -156,6 +157,7 @@ if(HOPTUNES_BUILD_APP)
     )
     if(ANDROID)
         qt_add_executable(hop-tunes ${HOPTUNES_APP_FILES})   # a shared library the Android app loads
+        target_link_libraries(hop-tunes PRIVATE Qt6::CorePrivate)   # the system folder chooser (App::pickAndroidFolder)
         set_target_properties(hop-tunes PROPERTIES
             QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
             QT_ANDROID_ABIS "arm64-v8a"
