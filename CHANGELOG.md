@@ -7,6 +7,14 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [1.7.3] - 2026-11-04
 
 ### Added
+- **Eject profile, save a copy, and import a profile** (desktop and Android). Settings › "take your profile with
+  you" saves a plain `.hoptunes.json` file with your name, colour, picture, settings, playlists, hearts, play counts,
+  history, pins, resume points, edits and comments. "save a copy…" just writes it. "eject profile…" saves it,
+  reads the file back to check it, and only after you tick "I have the file and it is safe" removes the profile
+  from the device. Importing is on the profile picker ("import a profile…"): it checks the whole file first,
+  never overwrites a profile (a taken name is refused), lets you pick a new name and a PIN, and lists any music
+  folders that are not on this device. The PIN is never put in the file, and music, videos and pictures stay where
+  they are. Cover and thumbnail pictures you picked are not exported (their files live on the old device).
 - **Video playback on Android.** Films, shows and the rest now play on the phone: the picture, play and pause,
   jump back or forward 10 seconds, tap the bar to seek, and your place is remembered and resumed. Volume stops at
   100 % there (the boost past 100 % is desktop only), and subtitles are not on Android yet. Films still show without

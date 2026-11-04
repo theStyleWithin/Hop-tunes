@@ -15,6 +15,10 @@ Item {
 
     property string profileMsg: ""
     property bool confirmRemove: false
+    // eject / export: "" idle, "export" or "eject" while a saved file is being shown
+    property string keepMode: ""
+    property var keepResult: null
+    property bool haveFile: false
 
     // A settings row: label and control side by side; on phones it is a rounded card with the control under its label.
     component SRow: Rectangle {
@@ -72,6 +76,17 @@ Item {
             }
             }
         }
+    }
+
+    FileDialog {
+        id: keepDialog
+        title: root.keepMode === "eject" ? "save your profile before it goes" : "save a copy of your profile"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        currentFile: "file://" + hop.suggestedExportName()
+        nameFilters: ["hop-tunes profile (*.json)"]
+        onAccepted: { root.haveFile = false; root.keepResult = hop.exportProfileTo(selectedFile) }
+        onRejected: if (!root.keepResult || !root.keepResult.ok) root.keepMode = ""
     }
 
     FileDialog {
@@ -250,6 +265,68 @@ Item {
         }
         }
         Label { visible: root.profileMsg !== ""; text: root.profileMsg; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+
+        // ---- keep your profile: export a copy, or eject it from this device -------------
+        ColumnLayout {
+            visible: !hop.guest
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            Layout.topMargin: 24
+            spacing: 10
+            Label { text: "take your profile with you"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+            Label {
+                text: "a profile file holds your name, colour, picture, settings, playlists, hearts, history, pins and resume points. not your music, not your PIN. import it on any device, in any version, from the profile picker."
+                color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: Theme.fs(14) }
+            }
+            Flow {
+                Layout.fillWidth: true; spacing: 12
+                visible: root.keepMode === ""
+                PlainButton { objectName: "exportProfile"; text: "save a copy…"; onClicked: { root.keepMode = "export"; root.keepResult = null; keepDialog.open() } }
+                PlainButton { objectName: "ejectProfile"; text: "eject profile…"; danger: true; onClicked: { root.keepMode = "eject"; root.keepResult = null; root.haveFile = false; keepDialog.open() } }
+            }
+            Label {
+                objectName: "keepFailed"
+                visible: root.keepMode !== "" && !!root.keepResult && !root.keepResult.ok
+                text: root.keepResult ? root.keepResult.error : ""
+                color: Theme.danger; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: Theme.fs(15) }
+            }
+            Label {
+                objectName: "keepSaved"
+                visible: root.keepMode !== "" && !!root.keepResult && root.keepResult.ok
+                text: root.keepResult && root.keepResult.ok
+                      ? "saved and checked: " + root.keepResult.where + " (" + Math.max(1, Math.round(root.keepResult.bytes / 1024)) + " KB). keep it somewhere safe."
+                      : ""
+                color: Theme.text; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: Theme.fs(15) }
+            }
+            Label {
+                visible: root.keepMode === "eject" && !!root.keepResult && root.keepResult.ok
+                text: "ejecting removes \u201c" + (hop.profile.name || "") + "\u201d from this device: its settings, playlists and history. your music files are not touched."
+                color: Theme.text2; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: Theme.fs(15) }
+            }
+            PlainButton {
+                objectName: "haveTheFile"
+                visible: root.keepMode === "eject" && !!root.keepResult && root.keepResult.ok
+                text: (root.haveFile ? "\u2611 " : "\u2610 ") + "I have the file and it is safe"
+                onClicked: root.haveFile = !root.haveFile
+            }
+            Flow {
+                Layout.fillWidth: true; spacing: 12
+                visible: root.keepMode !== ""
+                PlainButton {
+                    objectName: "confirmEject"
+                    visible: root.keepMode === "eject" && !!root.keepResult && root.keepResult.ok
+                    enabled: root.haveFile
+                    text: "eject"; danger: true
+                    onClicked: { var m = hop.ejectProfile(root.haveFile); root.keepMode = ""; root.keepResult = null; root.profileMsg = m }
+                }
+                PlainButton { visible: root.keepMode === "eject" && (!root.keepResult || !root.keepResult.ok); text: "try again"; onClicked: keepDialog.open() }
+                PlainButton { text: root.keepMode === "eject" ? "cancel, keep my profile" : "done"; onClicked: { root.keepMode = ""; root.keepResult = null; root.haveFile = false } }
+            }
+        }
+
 
         // ---- playback (spec §5) ------------------------------------------------------
         Label { text: "playback"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }

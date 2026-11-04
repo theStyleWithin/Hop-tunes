@@ -256,6 +256,7 @@ private slots:
         QVERIFY(!m_app->player()->hasTrack());       // playback stops on switch
         QCOMPARE(m_app->songs()->count(), 0);        // nothing from the last profile shows
         QCOMPARE(gateMode(), QStringLiteral("pick"));
+        QVERIFY(item("importProfile") && item("importProfile")->isVisible());   // a profile can come back from a file
 
         QVERIFY(click("tile_Jo"));
         QCOMPARE(gateMode(), QStringLiteral("pin"));
@@ -361,6 +362,65 @@ private slots:
         QVERIFY(!QDir(dir).exists());
         QCOMPARE(m_app->profileStore()->count(), 1);
         QVERIFY(QFile::exists(m_home.filePath(QStringLiteral("Music/A/B/01 Song.wav"))));
+    }
+
+    void ejectKeepsYourProfileAndImportNeverOverwrites()
+    {
+        const int before = m_app->profileStore()->count();
+        QCOMPARE(m_app->createProfile(QStringLiteral("Eje"), QStringLiteral("#ff8800"), QStringLiteral("1357"), {}), QString());
+        QVERIFY(m_app->profileReady());
+        const qint64 pl = m_app->profileDb()->createPlaylist(QStringLiteral("Keep me"));
+        m_app->profileDb()->setPlaylistItems(pl, {QStringLiteral("/m/a.mp3")});
+        m_app->profileDb()->setHearted(QStringLiteral("/m/a.mp3"), true);
+        const QString id = m_app->profile().value("id").toString();
+        const QString file = m_home.filePath(QStringLiteral("eje.hoptunes.json"));
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("exportProfile") && item("exportProfile")->isVisible());
+        QVERIFY(item("ejectProfile") && item("ejectProfile")->isVisible());
+        QVERIFY(!item("confirmEject")->isVisible());   // nothing to confirm until a file is saved
+        shot("settings-eject");
+
+        // nothing leaves until the file is saved AND the person says they have it
+        QVERIFY(!m_app->ejectProfile(true).isEmpty());
+        QCOMPARE(m_app->profileStore()->count(), before + 1);
+        const QVariantMap saved = m_app->exportProfileTo(QUrl::fromLocalFile(file));
+        QVERIFY2(saved.value("ok").toBool(), qPrintable(saved.value("error").toString()));
+        QVERIFY(!m_app->ejectProfile(false).isEmpty());
+        QCOMPARE(m_app->profileStore()->count(), before + 1);
+        QVERIFY(QFile::exists(file));
+        QVERIFY(!QFile(file).readAll().contains("1357"));   // the PIN is not in the file
+        QCOMPARE(m_app->ejectProfile(true), QString());
+        QVERIFY(!m_app->profileReady());
+        QCOMPARE(m_app->profileStore()->count(), before);
+        QVERIFY(!QDir(m_app->profileStore()->dirFor(id)).exists());
+
+        // a bad or hostile file is refused and leaves no half-made profile
+        const QString junk = m_home.filePath(QStringLiteral("junk.json"));
+        { QFile f(junk); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("{\"app\":\"hop-tunes\",\"format\":1,\"profile\":{\"name\":\"X\"},\"settings\":{},\"data\":{\"stats\":[[1]]}}"); }
+        QVERIFY(!m_app->inspectProfileFile(QUrl::fromLocalFile(junk)).value("ok").toBool());
+        QVERIFY(!m_app->importProfile(QUrl::fromLocalFile(junk), QStringLiteral("X"), {}).isEmpty());
+        QCOMPARE(m_app->profileStore()->count(), before);
+
+        // import brings it all back, with a PIN chosen now
+        const QVariantMap info = m_app->inspectProfileFile(QUrl::fromLocalFile(file));
+        QVERIFY(info.value("ok").toBool());
+        QCOMPARE(info.value("name").toString(), QStringLiteral("Eje"));
+        QCOMPARE(info.value("playlists").toInt(), 1);
+        QCOMPARE(m_app->importProfile(QUrl::fromLocalFile(file), QStringLiteral("Eje"), QStringLiteral("2468")), QString());
+        QVERIFY(m_app->profileReady());
+        QCOMPARE(m_app->profile().value("name").toString(), QStringLiteral("Eje"));
+        QVERIFY(m_app->profile().value("hasPin").toBool());
+        QVERIFY(m_app->profileStore()->checkPin(m_app->profile().value("id").toString(), QStringLiteral("2468")));
+        QCOMPARE(m_app->profileDb()->playlists().size(), 1);
+        QVERIFY(m_app->profileDb()->allStats().value(QStringLiteral("/m/a.mp3")).hearted);
+
+        // importing the same name again never overwrites it
+        QVERIFY(!m_app->importProfile(QUrl::fromLocalFile(file), QStringLiteral("eje"), {}).isEmpty());
+        QCOMPARE(m_app->profileStore()->count(), before + 1);
+        QCOMPARE(m_app->inspectProfileFile(QUrl::fromLocalFile(file)).value("suggestedName").toString(), QStringLiteral("Eje (2)"));
+
+        QCOMPARE(m_app->removeProfile(), QString());   // tidy up for the tests after this one
+        QCOMPARE(m_app->profileStore()->count(), before);
     }
 
     // ---- M4: search, hearts, play counts, playlists, smart playlists, quickplay, DJ ----

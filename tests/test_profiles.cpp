@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Local profiles (spec §3): profile list, PIN hashing, per-profile settings, removal.
 #include "core/ProfileStore.h"
+#include "library/ProfileArchive.h"
+#include "library/ProfileDb.h"
 
 #include <QDir>
 #include <QFile>
@@ -143,6 +145,101 @@ private slots:
         f.close();
         ProfileStore s(root);
         QVERIFY(!s.load());   // the app then moves the file aside instead of overwriting it
+    }
+    // ---- eject / export / import -------------------------------------------------------
+    static ProfileArchive sampleArchive(QTemporaryDir &tmp)
+    {
+        ProfileDb db;
+        const bool opened = db.open(tmp.filePath(QStringLiteral("src.sqlite")));
+        Q_ASSERT(opened);
+        if (!opened) qFatal("cannot open test database");
+        db.recordPlay(QStringLiteral("/m/a.mp3"), 1000);
+        db.recordPlay(QStringLiteral("/m/a.mp3"), 2000);
+        db.setHearted(QStringLiteral("/m/a.mp3"), true);
+        const qint64 pl = db.createPlaylist(QStringLiteral("Road trip"));
+        db.setPlaylistItems(pl, {QStringLiteral("/m/a.mp3"), QStringLiteral("/m/b.mp3")});
+        db.pin({QStringLiteral("artist"), QStringLiteral("Ana"), QStringLiteral("Ana")});
+        db.setVideoProgress(QStringLiteral("/v/x.mkv"), 5000, 90000);
+        db.setAlbumOverrideTitle(QStringLiteral("Ana\x1f" "Songs"), QStringLiteral("Better title"));
+        db.setAlbumOverrideArt(QStringLiteral("Ana\x1f" "Songs"), QStringLiteral("/secret/cover.jpg"));
+        db.setVideoThumbOverride(QStringLiteral("/v/x.mkv"), QStringLiteral("/secret/t.jpg"));
+        db.addVideoComment(QStringLiteral("/v/x.mkv"), QStringLiteral("great one"), 42);
+        ProfileArchive a;
+        a.name = QStringLiteral("Ana");
+        a.accent = QStringLiteral("#ff8800");
+        a.appVersion = QStringLiteral("1.7.3");
+        a.settings = {{QStringLiteral("folders"), QJsonArray{QStringLiteral("/nonexistent/music")}}, {QStringLiteral("volume"), 0.5}};
+        a.data = db.exportData();
+        return a;
+    }
+
+    void exportRoundTripsAndKeepsEverythingButPaths()
+    {
+        QTemporaryDir tmp;
+        const ProfileArchive a = sampleArchive(tmp);
+        ProfileArchive b;
+        QString err;
+        QVERIFY2(ProfileArchive::parse(a.toBytes(), &b, &err), qPrintable(err));
+        QCOMPARE(b.name, QStringLiteral("Ana"));
+        QCOMPARE(b.folders(), QStringList{QStringLiteral("/nonexistent/music")});
+        QCOMPARE(b.rowCount(QStringLiteral("playlist")), 1);
+        QCOMPARE(b.rowCount(QStringLiteral("playlist_item")), 2);
+
+        ProfileDb fresh;
+        QVERIFY(fresh.open(tmp.filePath(QStringLiteral("dst.sqlite"))));
+        QVERIFY2(fresh.importData(b.data, &err), qPrintable(err));
+        QCOMPARE(fresh.allStats().value(QStringLiteral("/m/a.mp3")).playCount, 2);
+        QVERIFY(fresh.allStats().value(QStringLiteral("/m/a.mp3")).hearted);
+        QCOMPARE(fresh.playlists().size(), 1);
+        QCOMPARE(fresh.playlistItems(fresh.playlists().first().id).size(), 2);
+        QCOMPARE(fresh.pins().size(), 1);
+        QCOMPARE(fresh.videoProgress(QStringLiteral("/v/x.mkv")).positionMs, qint64(5000));
+        QCOMPARE(fresh.videoComments(QStringLiteral("/v/x.mkv")).size(), 1);
+        // a title travels, a path on the old device does not
+        const auto ov = fresh.albumOverrides().value(QStringLiteral("Ana\x1f" "Songs"));
+        QCOMPARE(ov.title, QStringLiteral("Better title"));
+        QVERIFY(ov.art.isEmpty());
+        QVERIFY(fresh.videoThumbOverrides().isEmpty());
+        QVERIFY(!a.toBytes().contains("secret"));
+        QVERIFY(!a.toBytes().contains("pbkdf2"));
+    }
+
+    void badFilesAreRefusedAndChangeNothing()
+    {
+        QTemporaryDir tmp;
+        const ProfileArchive a = sampleArchive(tmp);
+        ProfileArchive out;
+        QString err;
+        QVERIFY(!ProfileArchive::parse("", &out, &err));
+        QVERIFY(!ProfileArchive::parse("not json at all", &out, &err));
+        QVERIFY(!ProfileArchive::parse("{\"app\":\"other\",\"format\":1}", &out, &err));
+        QVERIFY(!ProfileArchive::parse("{\"app\":\"hop-tunes\",\"format\":99}", &out, &err));
+        QVERIFY(err.contains(QStringLiteral("newer")));
+        QVERIFY(!ProfileArchive::parse("{\"app\":\"hop-tunes\",\"format\":1,\"profile\":{\"name\":\" \"},\"settings\":{},\"data\":{}}", &out, &err));
+
+        int counter = 0;
+        auto tryData = [&](const QJsonObject &data) {
+            ProfileDb db;
+            const QString path = tmp.filePath(QStringLiteral("bad%1.sqlite").arg(++counter));
+            if (!db.open(path)) qFatal("cannot open test database");
+            QString e;
+            const bool ok = db.importData(data, &e);
+            return std::make_pair(ok, db.allStats().size() + db.playlists().size());
+        };
+        QJsonObject d = a.data;
+        d.insert(QStringLiteral("evil_table"), QJsonArray{});
+        QVERIFY(!tryData(d).first);
+        d = a.data;
+        d.insert(QStringLiteral("stats"), QJsonArray{QJsonArray{QStringLiteral("x")}});           // wrong column count
+        QVERIFY(!tryData(d).first);
+        d = a.data;
+        d.insert(QStringLiteral("stats"), QJsonArray{QJsonArray{1, 2, 3, 4, 5}});                 // wrong types
+        auto r = tryData(d);
+        QVERIFY(!r.first);
+        QCOMPARE(r.second, 0);                                                                    // nothing half-imported
+        d = a.data;
+        d.insert(QStringLiteral("playlist_item"), QJsonArray{QJsonArray{999, 0, QStringLiteral("/x")}});   // orphan item
+        QVERIFY(!tryData(d).first);
     }
 };
 
