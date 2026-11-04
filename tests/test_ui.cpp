@@ -1193,6 +1193,7 @@ private slots:
 
         emit m_app->androidFolderPicked(token, QUrl::fromLocalFile(dir));
         QTRY_COMPARE(m_app->folders().size(), before + 1);
+        QVERIFY(m_app->diagLog().isEmpty() || m_app->diagLog().contains(QStringLiteral("addFolder")));   // logged when the log is on
         QVERIFY(m_app->folders().contains(QFileInfo(dir).canonicalFilePath()));
         m_app->removeFolder(QFileInfo(dir).canonicalFilePath());
     }

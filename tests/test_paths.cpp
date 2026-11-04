@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Paths: HOPTUNES_DATA_DIR moves data and cache under one folder (the portable build).
+#include "core/DiagLog.h"
 #include "core/Paths.h"
 
 #include <QTemporaryDir>
@@ -10,6 +11,27 @@ using namespace hop;
 class TestPaths : public QObject {
     Q_OBJECT
 private slots:
+    // The diagnostic log: notes and Qt warnings land in it, a new run keeps the old log as "previous", and it
+    // stays small however much is written.
+    void theDiagnosticLogKeepsNotesWarningsAndThePreviousRun()
+    {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        hop::DiagLog::install(dir.path());
+        hop::DiagLog::note(QStringLiteral("first run note"));
+        qWarning("a qt warning");
+        QVERIFY(hop::DiagLog::current().contains(QStringLiteral("first run note")));
+        QVERIFY(hop::DiagLog::current().contains(QStringLiteral("a qt warning")));
+
+        hop::DiagLog::install(dir.path());   // the next run
+        QVERIFY(!hop::DiagLog::current().contains(QStringLiteral("first run note")));
+        QVERIFY(hop::DiagLog::previous().contains(QStringLiteral("first run note")));
+
+        for (int i = 0; i < 12000; ++i) hop::DiagLog::note(QString(80, QLatin1Char('x')) + QString::number(i));
+        QVERIFY(QFileInfo(dir.path() + QStringLiteral("/hoptunes.log")).size() < 500 * 1024);
+        QVERIFY(hop::DiagLog::current(1 << 20).contains(QStringLiteral("11999")));   // the newest lines survive
+    }
+
     // Android's folder picker hands back content:// tree addresses; they become ordinary paths.
     void androidFolderPickerAddressesBecomePaths()
     {

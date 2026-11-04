@@ -15,7 +15,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ### Fixed
 - **Android: adding a folder turned the whole screen grey and left the app unusable.** The folder chooser Qt provides
   has no Android version, so it drew a dark layer over everything and nothing could be tapped. Android now opens the
-  system's own folder chooser instead; desktop is unchanged.
+  system's own folder chooser instead; desktop is unchanged. (A first fix was not enough on one phone, so this
+  patch also repaints the window when you return from the chooser and starts the scan only after that first paint.)
+
+### Added
+- **Settings › diagnostics on phones:** a small log of what the app did and any errors, kept on the phone only,
+  with buttons to show it and copy it (this run or the last one), so a problem can be reported without a terminal.
 
 ## [1.7.2] - 2026-10-30
 

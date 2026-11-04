@@ -45,6 +45,7 @@ endif()
 # ---- core library: no GUI, no GStreamer (unit-testable) ---------------------
 add_library(hoptunes_core STATIC
     src/core/Paths.h          src/core/Paths.cpp
+    src/core/DiagLog.h        src/core/DiagLog.cpp
     src/core/ProfileStore.h src/core/ProfileStore.cpp
     src/library/Track.h
     src/core/Sql.h

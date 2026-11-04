@@ -601,6 +601,35 @@ Item {
             PlainButton { visible: root.confirmRemove; text: "remove"; danger: true; onClicked: { root.confirmRemove = false; root.profileMsg = hop.removeProfile() } }
         }
 
+        // ---- diagnostics (phones): what the app noted, to copy and send when something goes wrong ----
+        ColumnLayout {
+            visible: Theme.compact
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            spacing: 10
+            property string shown: ""
+            Label { text: "diagnostics"; color: Theme.accent; font { family: Theme.font; pixelSize: 24 }
+                    Layout.topMargin: 10 }
+            Label {
+                text: "a small log of what the app did, kept on this phone only. if something goes wrong, restart the app, open this page, tap copy and paste it to the developer."
+                color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: 14 }
+            }
+            Flow {
+                Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 100
+                spacing: 10
+                PlainButton { objectName: "diagShow"; text: "show this run"; onClicked: parent.parent.shown = hop.diagLog().split("\n").slice(-60).join("\n") }
+                PlainButton { objectName: "diagShowPrev"; text: "show last run"; onClicked: parent.parent.shown = hop.diagPreviousLog().split("\n").slice(-60).join("\n") }
+                PlainButton { objectName: "diagCopy"; text: "copy this run"; onClicked: hop.copyText(hop.diagLog()) }
+                PlainButton { objectName: "diagCopyPrev"; text: "copy last run"; onClicked: hop.copyText(hop.diagPreviousLog()) }
+            }
+            Label {
+                visible: parent.shown !== ""
+                text: parent.shown
+                color: Theme.text2; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: "monospace"; pixelSize: 11 }
+            }
+        }
+
         // ---- about -------------------------------------------------------------------
         Label { text: "about"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 28 }
         Label {

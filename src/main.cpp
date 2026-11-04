@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#include "core/DiagLog.h"
 #include "core/Paths.h"
 #include "core/ProfileStore.h"
 #ifdef HOPTUNES_HAVE_GST
@@ -15,6 +16,7 @@
 #include <QJniObject>
 #include <QCoreApplication>
 #endif
+#include <memory>
 #include <QCommandLineParser>
 #include <QFileInfo>
 #include <QFont>
@@ -96,6 +98,15 @@ int main(int argc, char *argv[])
 #endif
 
     QGuiApplication app(argc, argv);
+    // Phones have no terminal: keep a small log (settings > diagnostics). Elsewhere only when asked for.
+#ifdef Q_OS_ANDROID
+    hop::DiagLog::install(hop::Paths::dataDir());
+#else
+    if (qEnvironmentVariableIsSet("HOPTUNES_DIAG")) hop::DiagLog::install(hop::Paths::dataDir());
+#endif
+    QObject::connect(&app, &QGuiApplication::applicationStateChanged, &app, [](Qt::ApplicationState s) {
+        hop::DiagLog::note(QStringLiteral("app state: %1").arg(int(s)));   // 0 suspended, 1 hidden, 2 inactive, 4 active
+    });
 #ifdef Q_OS_ANDROID
     {   // reading your own music, films and pictures needs the media permissions (asked once)
         const QJniObject activity = QNativeInterface::QAndroidApplication::context();
@@ -166,6 +177,24 @@ int main(int argc, char *argv[])
                      [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
     engine.load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
     if (engine.rootObjects().isEmpty()) return 1;
+    if (auto *w = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst())) {
+        using hop::DiagLog::note;
+        QObject::connect(w, &QQuickWindow::sceneGraphError, w, [](QQuickWindow::SceneGraphError, const QString &m) { note(QStringLiteral("scene graph error: ") + m); });
+        QObject::connect(w, &QQuickWindow::sceneGraphInitialized, w, [] { note(QStringLiteral("scene graph initialised")); });
+        QObject::connect(w, &QQuickWindow::sceneGraphInvalidated, w, [] { note(QStringLiteral("scene graph invalidated")); });
+        QObject::connect(w, &QWindow::visibleChanged, w, [](bool v) { note(QStringLiteral("window visible: %1").arg(v)); });
+        // Coming back from another screen (the system folder chooser): make sure the window repaints.
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged, w, [w](Qt::ApplicationState s) {
+            if (s != Qt::ApplicationActive) return;
+            note(QStringLiteral("active again: repaint requested, window %1x%2").arg(w->width()).arg(w->height()));
+            w->update();
+            w->requestUpdate();
+        });
+        // log the first frame after each resume
+        auto frames = std::make_shared<int>(0);
+        QObject::connect(&app, &QGuiApplication::applicationStateChanged, w, [frames](Qt::ApplicationState s) { if (s == Qt::ApplicationActive) *frames = 0; });
+        QObject::connect(w, &QQuickWindow::frameSwapped, w, [frames] { if (*frames < 3) note(QStringLiteral("frame %1 drawn").arg(++*frames)); });
+    }
 
 #ifdef HOPTUNES_HAVE_GST
     // Media keys / desktop media widgets.

@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#include "core/DiagLog.h"
+#include <QClipboard>
+#include <QGuiApplication>
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
 #include <QCoreApplication>
@@ -46,14 +49,20 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 {
     m_scanner.setArtCacheDir(Paths::artCacheDir());
     connect(&m_scanner, &Scanner::started, this, &App::scanningChanged);
+    connect(&m_scanner, &Scanner::started, this, [] { DiagLog::note(QStringLiteral("music scan started")); });
     connect(&m_scanner, &Scanner::progress, this, [this](int done, int total) {
         m_scanDone = done;
         m_scanTotal = total;
         emit scanProgressChanged();
     });
-    connect(&m_scanner, &Scanner::finished, this, [this](int added, int updated, int removed, int) {
+    connect(&m_scanner, &Scanner::finished, this, [this](int added, int updated, int removed, int total) {
+        DiagLog::note(QStringLiteral("music scan finished: +%1 ~%2 -%3, %4 songs").arg(added).arg(updated).arg(removed).arg(total));
         emit scanningChanged();
-        if (added || updated || removed || m_songs.count() == 0) reload();
+        if (added || updated || removed || m_songs.count() == 0) {
+            QElapsedTimer t; t.start();
+            reload();
+            DiagLog::note(QStringLiteral("library reloaded in %1 ms").arg(t.elapsed()));
+        }
         if (m_rescanPending) { m_rescanPending = false; rescan(); }
         m_watcher.setFolders(watchedFolders());   // pick up any subfolder the scan just found
     });
@@ -606,11 +615,17 @@ void App::addFolder(const QUrl &folder)
 {
     const QString path = QFileInfo(Paths::folderPath(folder))
                              .canonicalFilePath();
+    DiagLog::note(QStringLiteral("addFolder %1 -> %2").arg(folder.toString(), path.isEmpty() ? QStringLiteral("(not readable)") : path));
     if (path.isEmpty() || m_folders.contains(path)) return;
     m_folders << path;
     saveFolders();
     emit foldersChanged();
+#ifdef Q_OS_ANDROID
+    // let the screen paint after the chooser's return before the scan starts (a freshly resumed window)
+    QMetaObject::invokeMethod(this, [this] { rescan(); }, Qt::QueuedConnection);
+#else
     rescan();
+#endif
 }
 
 void App::removeFolder(const QString &path)
@@ -1120,8 +1135,13 @@ void App::requestOrientation(const QString &mode)
 #endif
 }
 
+QString App::diagLog() const { return DiagLog::current(); }
+QString App::diagPreviousLog() const { return DiagLog::previous(); }
+void App::copyText(const QString &text) { if (QClipboard *c = QGuiApplication::clipboard()) c->setText(text); }
+
 bool App::pickAndroidFolder(const QString &token)
 {
+    DiagLog::note(QStringLiteral("folder chooser opened (token %1)").arg(token));
 #ifdef Q_OS_ANDROID
     // ACTION_OPEN_DOCUMENT_TREE: the system's own folder chooser. It returns a tree address that
     // Paths::folderPath turns into a plain path (the media permissions make that path readable).
@@ -1135,6 +1155,7 @@ bool App::pickAndroidFolder(const QString &token)
             const QJniObject uri = data.callObjectMethod("getData", "()Landroid/net/Uri;");
             if (uri.isValid()) url = QUrl(uri.toString());
         }
+        DiagLog::note(QStringLiteral("folder chooser answered: result %1, %2").arg(resultCode).arg(url.isEmpty() ? QStringLiteral("no folder") : url.toString()));
         QMetaObject::invokeMethod(this, [this, token, url] { emit androidFolderPicked(token, url); }, Qt::QueuedConnection);
     });
     return true;
