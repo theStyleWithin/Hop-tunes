@@ -3,8 +3,10 @@
 
 #include <QUrl>
 
+#ifdef HOPTUNES_HAVE_GST
 #include <gst/gst.h>
 #include <gst/pbutils/pbutils.h>
+#endif
 
 namespace hop::VideoProbe {
 
@@ -24,6 +26,7 @@ bool isVideoFile(const QFileInfo &fi)
     return fi.isFile() && videoExtensions().contains(fi.suffix().toLower());
 }
 
+#ifdef HOPTUNES_HAVE_GST
 namespace {
 
 // Best-effort short codec name from the stream's caps (spec §5b lists these formats).
@@ -106,5 +109,9 @@ Info probe(const QString &path)
     g_object_unref(disc);
     return out;
 }
+
+#else   // no GStreamer (Android for now): nothing is probed, videos still list
+Info probe(const QString &) { return {}; }
+#endif
 
 } // namespace hop::VideoProbe

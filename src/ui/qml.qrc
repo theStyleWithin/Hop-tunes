@@ -16,6 +16,13 @@
     <file>qml/ProfileAvatar.qml</file>
     <file>qml/ProfileChip.qml</file>
     <file>qml/StatusNote.qml</file>
+    <file>qml/MobileNav.qml</file>
+    <file>qml/PillRow.qml</file>
+    <file>qml/PhoneSearch.qml</file>
+    <file>qml/PhoneVideoPlayer.qml</file>
+    <file>qml/PhoneVideoDetail.qml</file>
+    <file>qml/PhoneNowPlaying.qml</file>
+    <file>qml/PhoneProfile.qml</file>
     <file>qml/PlainButton.qml</file>
     <file>qml/PinField.qml</file>
     <file>qml/HeartButton.qml</file>

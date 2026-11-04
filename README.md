@@ -13,17 +13,22 @@
 
 The big link above always opens the newest regular release. Pick the file for your system from its **Assets** list (see the table below).
 
+> [!TIP]
+> **Just want the mobile version? Follow this link and enjoy!**
+> **[Download the Android app (`Hop-tunes-android.apk`)](https://github.com/theStyleWithin/Hop-tunes/releases/latest/download/Hop-tunes-android.apk)**: it always gives you the newest one. It is for Android 7 and newer on 64-bit phones and tablets: your music, pictures, books and podcasts in a layout made for the phone, with a bottom bar or a side drawer (your choice in settings). Open the file to install it; Android may ask you to allow installs from this source. **Video playback is not on Android yet** (your films are listed, but they do not play there). The phone version is new, so [tell the developer](https://github.com/theStyleWithin/Hop-tunes/issues) what works and what does not.
+
 > [!NOTE]
 > **Want to try Party Watch (beta)?** Party Watch is an optional, **experimental** idea: share part of your library with guests you trust, who stream it from your computer (no downloading, no accounts, nothing leaves your home unless you open it up), and watch together in step. It **needs more testing**, so it is **not** in the regular release above; the developer would like to add it to the main program once it has proved itself. If you are curious, try the **[Party Watch beta pre-release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v180beta)** (its files have `180beta` in their names). It is off until you switch it on, it has only been tested on Linux, things may change or break, and your feedback on how it works for you is very welcome.
 
 > [!WARNING]
-> **Windows: the developer never tests on Windows.** Hop-tunes is tested on Linux (and Android, once it exists), not Windows. The Windows installer and portable exe are built and run by automated tests only, never by a person on a real PC. **Install at your own risk. Windows testers wanted:** please [open an issue](https://github.com/theStyleWithin/Hop-tunes/issues) to say what works and what doesn't.
+> **Windows: the developer never tests on Windows.** Hop-tunes is tested on Linux (and, for the phone version, on a real Android phone), not Windows. The Windows installer and portable exe are built and run by automated tests only, never by a person on a real PC. **Install at your own risk. Windows testers wanted:** please [open an issue](https://github.com/theStyleWithin/Hop-tunes/issues) to say what works and what doesn't.
 
 | | |
 |---|---|
 | **Flatpak** | `Hop-tunes-x86_64.flatpak` from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases), then `flatpak install --user Hop-tunes-x86_64.flatpak` |
 | **Arch / CachyOS (AUR)** | `yay -S hop-tunes` (or `hop-tunes-git` for the latest code) |
 | **AppImage** | download, `chmod +x`, run. Any x86_64 distro from 2022 on |
+| **Android 7+ (phones and tablets), new** | `Hop-tunes-android.apk` from the latest release (the link above). Music and pictures work; video playback does not yet. See [`docs/android.md`](docs/android.md) |
 | **Windows 10/11 (64-bit), experimental** | `Hop-tunes-Setup-<version>-x64.exe` (installer), or `Hop-tunes-<version>-portable-x64.exe` (one file, no install; keeps its data in a `Hop-tunes-data` folder beside it) from the [releases page](https://github.com/theStyleWithin/Hop-tunes/releases). Not code-signed yet (if SmartScreen warns, choose *More info → Run anyway*), and only ever run by automated tests, never on a real PC by the developer (who uses Linux): reports welcome |
 
 **Tested on 16 distros, with CachyOS first.** See [which distros Hop-tunes runs on](docs/COMPATIBILITY.md). Distros older than 2022 may not work with the AppImage; use the Flatpak there.

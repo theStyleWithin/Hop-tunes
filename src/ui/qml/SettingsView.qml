@@ -7,6 +7,7 @@ import QtQuick.Layouts
 // settings: this profile (name, colour, picture, PIN, remove) and the folders it watches.
 Item {
     id: root
+    signal back()
     signal addFolderRequested()
     signal addVideoFolderRequested()
     signal addVideoCategoryFolderRequested(string category)
@@ -15,6 +16,25 @@ Item {
     property string profileMsg: ""
     property bool confirmRemove: false
 
+    // A settings row: label and control side by side; on phones it is a rounded card with the control under its label.
+    component SRow: Rectangle {
+        id: sr
+        property real spacing: 16
+        default property alias content: sg.data
+        color: Theme.compact ? Theme.panel : "transparent"
+        radius: 12
+        Layout.fillWidth: Theme.compact
+        implicitWidth: sg.implicitWidth + (Theme.compact ? 28 : 0)
+        implicitHeight: sg.implicitHeight + (Theme.compact ? 28 : 0)
+        GridLayout {
+            id: sg
+            anchors { fill: parent; margins: Theme.compact ? 14 : 0 }
+            columns: Theme.compact ? 1 : 99
+            columnSpacing: sr.spacing
+            rowSpacing: 8
+        }
+    }
+
     // Segmented choice: one of a few options, the chosen one filled with the accent.
     component Choice: Row {
         id: ch
@@ -22,6 +42,9 @@ Item {
         property var value
         signal picked(var v)
         spacing: 0
+        Layout.fillWidth: Theme.compact
+        Layout.minimumWidth: 0
+        Layout.preferredWidth: Theme.compact ? 100 : -1
         Repeater {
             model: ch.options
             delegate: Component {   // explicit: Qt 6.4 does not wrap delegates inside inline components
@@ -36,13 +59,15 @@ Item {
                 Accessible.checked: on
                 contentItem: Label {
                     text: ob.modelData[1]; color: ob.on ? Theme.ink : Theme.text
-                    font { family: Theme.font; pixelSize: 15 }
+                    font { family: Theme.font; pixelSize: Theme.fs(15) }
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
+                width: Theme.compact ? Math.floor(ch.width / Math.max(1, ch.options.length)) : implicitWidth
                 background: Rectangle {
-                    implicitWidth: Math.max(90, ob.contentItem.implicitWidth + 28); implicitHeight: 40
-                    color: ob.on ? hop.accent : (ob.hovered ? Theme.hover : "transparent")
-                    border { width: 1; color: ob.on ? hop.accent : Theme.border }
+                    implicitWidth: Math.max(90, ob.contentItem.implicitWidth + 28); implicitHeight: Theme.compact ? 44 : 40
+                    radius: Theme.compact ? 22 : 0
+                    color: ob.on ? Theme.accent : (ob.hovered ? Theme.hover : "transparent")
+                    border { width: 1; color: ob.on ? Theme.accent : (Theme.compact ? Theme.borderSoft : Theme.border) }
                 }
             }
             }
@@ -57,56 +82,110 @@ Item {
     }
 
     Flickable {
+        id: settingsFlick
         anchors.fill: parent
         contentHeight: col.implicitHeight + 40
+        contentWidth: width
+        flickableDirection: Flickable.VerticalFlick
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: ScrollBar { }
 
     ColumnLayout {
         id: col
-        width: parent.width - 96
-        x: 48; y: 28
+        onWidthChanged: Qt.callLater(col.forceLayout)
+        Connections { target: Theme; function onCompactChanged() { Qt.callLater(col.forceLayout) } }
+        width: settingsFlick.width - 2 * Theme.pad
+        x: Theme.pad; y: 28
         spacing: 18
 
+        RowLayout {   // phones: settings is a page under profile
+            visible: Theme.compact
+            AbstractButton {
+                objectName: "settingsBack"
+                implicitHeight: 44
+                onClicked: root.back()
+                Accessible.name: "back to profile"
+                background: Item {}
+                contentItem: Label { text: "‹  profile"; color: Theme.accent; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 18 } }
+            }
+        }
+        Label { visible: Theme.compact; text: "settings"; color: Theme.strong; font { family: Theme.font; pixelSize: 46; weight: Font.Light } }
+        SRow {   // phones and tablets: how you move around (the bottom bar or the side drawer)
+            visible: Window.window !== null && Window.window.mobileNav === true
+            Label { text: "navigation"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }
+            Label { text: "choose how you move around"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } Layout.topMargin: -6 }
+            Choice {
+                objectName: "navStyleChoice"
+                options: [["bar", "bottom bar"], ["drawer", "side drawer"]]
+                value: hop.navStyle
+                onPicked: function (v) { hop.navStyle = v }
+            }
+        }
+        SRow {   // phones: how videos open (the rotate button in the player turns one video either way)
+            visible: Theme.compact
+            Label { text: "video player"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }
+            Label { text: "orientation: how videos open"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } Layout.topMargin: -6 }
+            Choice {
+                objectName: "videoOrientationChoice"
+                options: [["portrait", "portrait"], ["auto", "auto"], ["landscape", "landscape"]]
+                value: hop.videoOrientation
+                onPicked: function (v) { hop.videoOrientation = v }
+            }
+        }
+        SRow {
+            visible: Window.window !== null && Window.window.mobileNav === true
+            Label { text: "on tablets"; color: Theme.text; font { family: Theme.font; pixelSize: 20 } }
+            Label { text: "screens wider than 600 dp show a side rail or a permanent drawer, whichever you pick above"
+                    color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
+                    wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.topMargin: -6 }
+        }
+
         // ---- profile ------------------------------------------------------------
-        Label { text: hop.guest ? "guest mode" : "profile"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } }
+        Label { text: hop.guest ? "guest mode" : "profile"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
         Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
             visible: hop.guest
             text: "guest mode keeps no history and saves nothing. switch profile to create your own."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
         }
-        RowLayout {
+        GridLayout {   // phones: the picture sits above the name
             visible: !hop.guest
-            spacing: 24
+            Layout.fillWidth: true
+            columns: Theme.compact ? 1 : 2
+            columnSpacing: 24; rowSpacing: 12
             AbstractButton {
                 id: avatarBtn
                 hoverEnabled: true
                 onClicked: avatarDialog.open()
                 Accessible.name: "change profile picture"
-                contentItem: ProfileAvatar { profile: hop.profile; size: 112; border { width: avatarBtn.hovered ? 3 : 0; color: Theme.strong } }
+                contentItem: ProfileAvatar { profile: hop.profile; size: Theme.compact ? 80 : 112; border { width: avatarBtn.hovered ? 3 : 0; color: Theme.strong } }
                 background: Item { }
                 ToolTip.visible: hovered; ToolTip.delay: 500; ToolTip.text: "change picture"
             }
             ColumnLayout {
                 spacing: 12
+                Layout.fillWidth: true
                 RowLayout {
                     spacing: 12
+                    Layout.fillWidth: true
                     TextField {
                         id: nameEdit
+                        Layout.fillWidth: true; Layout.maximumWidth: 300; Layout.minimumWidth: 0
                         text: hop.profile.name || ""
                         maximumLength: 40
                         color: Theme.text
-                        font { family: Theme.font; pixelSize: 20 }
-                        implicitWidth: 300
+                        font { family: Theme.font; pixelSize: Theme.fs(20) }
+                        implicitWidth: Theme.compact ? 120 : 300
                         Accessible.name: "profile name"
-                        background: Rectangle { implicitHeight: 46; color: Theme.panel; border { width: nameEdit.activeFocus ? 2 : 1; color: nameEdit.activeFocus ? hop.accent : Theme.line } }
+                        background: Rectangle { implicitHeight: 46; color: Theme.panel; border { width: nameEdit.activeFocus ? 2 : 1; color: nameEdit.activeFocus ? Theme.accent : Theme.line } }
                         onAccepted: root.profileMsg = hop.renameProfile(text)
                     }
                     PlainButton { text: "rename"; enabled: nameEdit.text.trim() !== "" && nameEdit.text !== hop.profile.name; onClicked: root.profileMsg = hop.renameProfile(nameEdit.text) }
                 }
-                Row {
+                Flow {
                     spacing: 10
+                    Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 100
                     Repeater {
                         model: hop.accents
                         delegate: AbstractButton {
@@ -114,7 +193,7 @@ Item {
                             width: 32; height: 32
                             onClicked: root.profileMsg = hop.setProfileAccent(modelData)
                             Accessible.name: "colour " + modelData
-                            background: Rectangle { color: modelData; border { width: hop.accent === modelData ? 3 : 0; color: Theme.strong } }
+                            background: Rectangle { color: modelData; border { width: Theme.accent === modelData ? 3 : 0; color: Theme.strong } }
                         }
                     }
                     Item { width: 14; height: 1 }
@@ -124,15 +203,23 @@ Item {
         }
 
         // PIN
-        ColumnLayout {
+        Item {
             visible: !hop.guest
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            implicitWidth: 100; implicitHeight: pinCol.implicitHeight
+        ColumnLayout {
+            id: pinCol
+            width: parent.width
             spacing: 10
             Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                 text: hop.profile.hasPin ? "this profile is locked with a PIN." : "no PIN. anyone using this computer account can open this profile."
-                color: Theme.text2; font { family: Theme.font; pixelSize: 16 }
+                color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) }
             }
-            RowLayout {
-                spacing: 12
+            GridLayout {
+                columns: Theme.compact ? 1 : 4
+                columnSpacing: 12; rowSpacing: 10
+                Layout.fillWidth: true
                 PinField { id: curPin; visible: !!hop.profile.hasPin; hint: "current PIN" }
                 PinField { id: newPin; hint: hop.profile.hasPin ? "new PIN" : "new PIN (4–8 digits)" }
                 PinField { id: newPin2; hint: "repeat PIN" }
@@ -156,17 +243,19 @@ Item {
                 }
             }
             Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                 text: "a PIN is a privacy curtain, not a lock: anyone who can use this computer account can still read hop-tunes files."
-                color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+                color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
             }
         }
-        Label { visible: root.profileMsg !== ""; text: root.profileMsg; color: Theme.muted; font { family: Theme.font; pixelSize: 15 } }
+        }
+        Label { visible: root.profileMsg !== ""; text: root.profileMsg; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
         // ---- playback (spec §5) ------------------------------------------------------
-        Label { text: "playback"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
-        RowLayout {
+        Label { text: "playback"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        SRow {
             spacing: 16
-            Label { text: "crossfade"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "crossfade"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Slider {
                 id: xfade
                 objectName: "crossfadeSlider"
@@ -178,7 +267,7 @@ Item {
                 background: Rectangle {
                     x: xfade.leftPadding; y: xfade.topPadding + xfade.availableHeight / 2 - height / 2
                     width: xfade.availableWidth; height: 4; color: Theme.track
-                    Rectangle { width: xfade.visualPosition * parent.width; height: parent.height; color: hop.accent }
+                    Rectangle { width: xfade.visualPosition * parent.width; height: parent.height; color: Theme.accent }
                 }
                 handle: Rectangle {
                     x: xfade.leftPadding + xfade.visualPosition * (xfade.availableWidth - width)
@@ -187,17 +276,19 @@ Item {
                 }
             }
             Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                 text: hop.player.crossfadeMs === 0 ? "off (gapless)" : Math.round(hop.player.crossfadeMs / 1000) + " s"
-                color: Theme.muted; font { family: Theme.font; pixelSize: 15 } Layout.preferredWidth: 110
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } Layout.preferredWidth: 110
             }
         }
         Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
             text: "songs from one album always play gapless, without a fade."
-            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
-        RowLayout {
+        SRow {
             spacing: 16
-            Label { text: "even volume"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "even volume"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 enabled: hop.player.replayGainAvailable
                 options: [[0, "off"], [1, "per song"], [2, "per album"]]
@@ -205,9 +296,10 @@ Item {
                 onPicked: function (v) { hop.player.replayGainMode = v }
             }
             Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                 visible: hop.player.replayGainMode !== 0
                 text: "pre-amp " + (hop.player.replayGainPreamp > 0 ? "+" : "") + hop.player.replayGainPreamp.toFixed(0) + " dB"
-                color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
             }
             PlainButton { visible: hop.player.replayGainMode !== 0; text: "−"; implicitWidth: 44; onClicked: hop.player.replayGainPreamp = hop.player.replayGainPreamp - 1 }
             PlainButton { visible: hop.player.replayGainMode !== 0; text: "+"; implicitWidth: 44; onClicked: hop.player.replayGainPreamp = hop.player.replayGainPreamp + 1 }
@@ -216,15 +308,15 @@ Item {
             text: hop.player.replayGainAvailable
                   ? "uses the ReplayGain tags in your files so songs play at a similar loudness. \u201cper album\u201d keeps an album's own quiet and loud parts. takes effect from the next song."
                   : "even volume needs GStreamer's replaygain plugin (gst-plugins-good)."
-            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
-            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 760
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 760
         }
 
         // ---- appearance (spec §4.5) ---------------------------------------------------
-        Label { text: "appearance"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
-        RowLayout {
+        Label { text: "appearance"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        SRow {
             spacing: 16
-            Label { text: "theme"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "theme"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 objectName: "themeChoice"
                 options: hop.systemThemeAvailable ? [["dark", "dark"], ["light", "light"], ["system", "match system"]] : [["dark", "dark"], ["light", "light"]]
@@ -232,9 +324,9 @@ Item {
                 onPicked: function (v) { hop.theme = v }
             }
         }
-        RowLayout {
+        SRow {
             spacing: 16
-            Label { text: "motion"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "motion"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 options: [[false, "animate"], [true, "reduce motion"]]
                 value: hop.reduceMotion
@@ -244,14 +336,14 @@ Item {
         Label {
             visible: hop.guest
             text: "guest mode does not keep these settings."
-            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
 
         // ---- video settings ----------------------------------------------------------
-        Label { text: "video settings"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
-        RowLayout {
+        Label { text: "video settings"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        SRow {
             spacing: 16
-            Label { text: "viewing style"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "viewing style"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 objectName: "videoStyleChoice"
                 options: [["window", "window"], ["theater", "theater"], ["fullscreen", "fullscreen"]]
@@ -263,13 +355,13 @@ Item {
             text: hop.videoViewStyle === "window" ? "the video sits beside a list of your other videos, with the movie's details underneath."
                 : hop.videoViewStyle === "theater" ? "a wide video across the window, with the details and your other videos underneath."
                 : "the video fills the whole screen."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
         }
-        RowLayout {
+        SRow {
             spacing: 16
             Layout.topMargin: 8
-            Label { text: "livestream chat"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "livestream chat"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 objectName: "videoChatChoice"
                 options: [[false, "off"], [true, "on"]]
@@ -280,7 +372,7 @@ Item {
         RowLayout {
             visible: hop.videoChat
             spacing: 16
-            Label { text: "chat look"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "chat look"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 objectName: "videoChatLookChoice"
                 options: [["clean", "clean"], ["lively", "lively"]]
@@ -290,13 +382,13 @@ Item {
         }
         Label {
             text: "a pretend live chat beside the video, as if you were watching a stream. nothing is streamed and nobody in it is real: the chatters are generated on your computer, react to the details you filled in on the movie's page, and answer when you type. clean is plain and tidy; lively adds colours, badges and emote chips."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
         }
-        RowLayout {
+        SRow {
             spacing: 16
             Layout.topMargin: 8
-            Label { text: "comments"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.preferredWidth: 140 }
+            Label { text: "comments"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
             Choice {
                 objectName: "videoCommentsChoice"
                 options: [["off", "off"], ["mine", "only mine"], ["populated", "populated"]]
@@ -306,22 +398,24 @@ Item {
         }
         Label {
             text: "a comments section under the video (window and theater only). off hides it completely. only mine is a box where you can write comments, as many as you like, and nobody ever answers. populated adds made-up commenters and replies, who also answer what you write after a little while. nobody is real; only your own comments are saved."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 14 }
-            wrapMode: Text.WordWrap; Layout.maximumWidth: 640
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
         }
         Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
             text: "while watching: t switches to theater, f to fullscreen, c shows or hides the chat, esc steps back."
-            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
 
         // ---- music folders ---------------------------------------------------------
         // The music scanner's list. Videos use their own list below once one is added; until
         // then they scan these same folders, so existing libraries keep working.
 
-        Label { text: "music folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+        Label { text: "music folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
             text: "hop-tunes reads these folders and never changes or uploads your files."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
         }
 
         Repeater {
@@ -333,42 +427,43 @@ Item {
                 color: Theme.panel
                 RowLayout {
                     anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
-                    Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
                     Button {
                         text: "remove"
                         onClicked: hop.removeFolder(modelData)
                         Accessible.name: "remove " + modelData
-                        contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: 15 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
                     }
                 }
             }
         }
 
-        RowLayout {
+        Flow {
             spacing: 14
+            Layout.fillWidth: true
             Button {
                 text: "+ add folder"
                 onClicked: root.addFolderRequested()
-                contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { implicitWidth: 150; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
             }
             Button {
                 text: hop.scanning ? "scanning…" : "rescan now"
                 enabled: !hop.scanning && hop.folders.length > 0
                 onClicked: hop.rescan()
-                contentItem: Label { text: parent.text; color: parent.enabled ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                contentItem: Label { text: parent.text; color: parent.enabled ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                 background: Rectangle { implicitWidth: 150; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
             }
         }
 
         // ---- video folders ---------------------------------------------------------
         // The movies in the videos tab. Until one is added here it uses the media folders above.
-        Label { text: "movies folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+        Label { text: "movies folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
         Label {
             visible: hop.videoFolders.length === 0
             text: "no movies folders yet."
-            color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
         }
         Repeater {
             model: hop.videoFolders
@@ -379,12 +474,12 @@ Item {
                 color: Theme.panel
                 RowLayout {
                     anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
-                    Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
                     Button {
                         text: "remove"
                         onClicked: hop.removeVideoFolder(modelData)
                         Accessible.name: "remove video folder " + modelData
-                        contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: 15 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                        contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                         background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
                     }
                 }
@@ -393,7 +488,7 @@ Item {
         Button {
             text: "+ add video folder"
             onClicked: root.addVideoFolderRequested()
-            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
             background: Rectangle { implicitWidth: 190; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
         }
 
@@ -407,11 +502,12 @@ Item {
                 readonly property var paths: hop.videoCategoryFolders[modelData] || []
                 Layout.fillWidth: true
                 spacing: 8
-                Label { text: vc.label + " folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+                Label { text: vc.label + " folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
                 Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                     visible: vc.paths.length === 0
                     text: "no " + vc.label + " folders yet."
-                    color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
                 }
                 Repeater {
                     model: vc.paths
@@ -422,12 +518,12 @@ Item {
                         color: Theme.panel
                         RowLayout {
                             anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
-                            Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
                             Button {
                                 text: "remove"
                                 onClicked: hop.removeVideoCategoryFolder(vc.modelData, modelData)
                                 Accessible.name: "remove " + vc.label + " folder " + modelData
-                                contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: 15 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                 background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
                             }
                         }
@@ -437,7 +533,7 @@ Item {
                     objectName: "settingsAddVideoFolder_" + vc.modelData
                     text: "+ add " + vc.label + " folder"
                     onClicked: root.addVideoCategoryFolderRequested(vc.modelData)
-                    contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
                 }
             }
@@ -452,11 +548,12 @@ Item {
                 readonly property var paths: hop.sectionFolders[modelData] || []
                 Layout.fillWidth: true
                 spacing: 8
-                Label { text: sec.modelData + " folders"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 16 }
+                Label { text: sec.modelData + " folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
                 Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                     visible: sec.paths.length === 0
                     text: "no " + sec.modelData + " folders yet."
-                    color: Theme.muted; font { family: Theme.font; pixelSize: 15 }
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
                 }
                 Repeater {
                     model: sec.paths
@@ -467,12 +564,12 @@ Item {
                         color: Theme.panel
                         RowLayout {
                             anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
-                            Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: 17 } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
                             Button {
                                 text: "remove"
                                 onClicked: hop.removeSectionFolder(sec.modelData, modelData)
                                 Accessible.name: "remove " + sec.modelData + " folder " + modelData
-                                contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: 15 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                 background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
                             }
                         }
@@ -482,7 +579,7 @@ Item {
                     objectName: "settingsAddFolder_" + sec.modelData
                     text: "+ add " + sec.modelData + " folder"
                     onClicked: root.addSectionFolderRequested(sec.modelData)
-                    contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: 16 } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
                 }
             }
@@ -495,23 +592,26 @@ Item {
             spacing: 14
             PlainButton { visible: !root.confirmRemove; text: "remove this profile…"; danger: true; onClicked: root.confirmRemove = true }
             Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                 visible: root.confirmRemove
                 text: "remove \u201c" + (hop.profile.name || "") + "\u201d? its settings and history go. your music files are not touched."
-                color: Theme.text2; font { family: Theme.font; pixelSize: 15 }
+                color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) }
             }
             PlainButton { visible: root.confirmRemove; text: "cancel"; onClicked: root.confirmRemove = false }
             PlainButton { visible: root.confirmRemove; text: "remove"; danger: true; onClicked: { root.confirmRemove = false; root.profileMsg = hop.removeProfile() } }
         }
 
         // ---- about -------------------------------------------------------------------
-        Label { text: "about"; color: hop.accent; font { family: Theme.font; pixelSize: 24 } Layout.topMargin: 28 }
+        Label { text: "about"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 28 }
         Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
             objectName: "aboutVersion"
             text: "hop-tunes " + hop.version + " · GPL-3.0-or-later · works offline, no accounts, no tracking"
-            color: Theme.text2; font { family: Theme.font; pixelSize: 15 }
+            color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) }
         }
-        Label { text: "keyboard"; color: Theme.text; font { family: Theme.font; pixelSize: 17 } Layout.topMargin: 6 }
+        Label { visible: !Theme.compact; text: "keyboard"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } Layout.topMargin: 6 }
         GridLayout {
+            visible: !Theme.compact   // a phone has no keyboard shortcuts
             columns: 2; columnSpacing: 28; rowSpacing: 6
             Repeater {
                 model: [["space", "play / pause"], ["ctrl + → / ctrl + ←", "next / previous song"],
@@ -523,8 +623,8 @@ Item {
                         required property var modelData
                         Layout.columnSpan: 2
                         spacing: 28
-                        Label { text: modelData[0]; color: Theme.text; font { family: Theme.font; pixelSize: 14; weight: Font.Medium } Layout.preferredWidth: 190 }
-                        Label { text: modelData[1]; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+                        Label { text: modelData[0]; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14); weight: Font.Medium } Layout.preferredWidth: 190 }
+                        Label { text: modelData[1]; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     }
                 }
             }
@@ -537,7 +637,7 @@ Item {
                 + "see THIRD_PARTY_NOTICES.md for the full list. hop-tunes is inspired by how the Zune software "
                 + "organised music; it is an independent project, not affiliated with or endorsed by Microsoft. "
                 + "Zune is a trademark of Microsoft Corporation."
-            color: Theme.dim; font { family: Theme.font; pixelSize: 13 }
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
         Item { height: 18; width: 1 }
     }

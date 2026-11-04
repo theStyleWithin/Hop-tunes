@@ -7,6 +7,12 @@ import QtQuick
 QtObject {
     readonly property bool light: typeof hop !== "undefined" && hop !== null && hop.lightTheme
     readonly property bool reduceMotion: typeof hop !== "undefined" && hop !== null && hop.reduceMotion
+    // The accent: the profile's colour on desktop and tablets; the design's yellow on phones.
+    readonly property color accent: compact ? "#f2c94c" : (typeof hop !== "undefined" && hop !== null ? hop.accent : "#4fd1c5")
+    property bool compact: false        // phones (set by Main.qml): tighter margins
+    readonly property int pad: compact ? 16 : 48
+    // Type sizes: unchanged on desktop and tablets, scaled down on phones (big titles most).
+    function fs(px) { return !compact ? px : (px >= 40 ? Math.round(px * 0.55) : px >= 26 ? Math.round(px * 0.7) : Math.max(12, Math.round(px * 0.9))) }
     readonly property int motion: reduceMotion ? 0 : 180          // pivot transitions, ms (≤ 200)
 
     readonly property color bg:      light ? "#f4f4f6" : "#111113"

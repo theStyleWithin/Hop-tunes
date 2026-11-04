@@ -27,9 +27,9 @@ Menu {
         contentItem: Label {
             text: mi.text; leftPadding: 6
             color: mi.enabled ? (mi.highlighted ? Theme.strong : Theme.text) : Theme.dim
-            font { family: Theme.font; pixelSize: 15 }
+            font { family: Theme.font; pixelSize: Theme.fs(15) }
         }
-        arrow: Label { x: mi.width - width - 10; anchors.verticalCenter: parent.verticalCenter; visible: !!mi.subMenu; text: "›"; color: Theme.muted; font.pixelSize: 18 }
+        arrow: Label { x: mi.width - width - 10; anchors.verticalCenter: parent.verticalCenter; visible: !!mi.subMenu; text: "›"; color: Theme.muted; font.pixelSize: Theme.fs(18) }
         background: Rectangle { implicitHeight: 36; color: mi.highlighted ? Theme.hover : "transparent" }
     }
     delegate: Component { MItem { } }   // wrapped explicitly: Qt 6.4 does not auto-wrap inline components

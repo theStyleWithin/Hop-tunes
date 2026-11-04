@@ -5,8 +5,26 @@
 #include <QUrl>
 #include <QVariantMap>
 
+#ifdef HOPTUNES_HAVE_GST
 #include <gst/gst.h>
+#endif
 
+#ifndef HOPTUNES_HAVE_GST   // Android for now: no GStreamer, so this engine is never available
+namespace hop {
+GstVideoPlayer::GstVideoPlayer(QObject *parent) : QObject(parent) {}
+GstVideoPlayer::~GstVideoPlayer() = default;
+bool GstVideoPlayer::available() { return false; }
+void GstVideoPlayer::attachSurface(QQuickItem *) {}
+bool GstVideoPlayer::openSource(const QString &, qint64) { return false; }
+void GstVideoPlayer::play() {}
+void GstVideoPlayer::pause() {}
+void GstVideoPlayer::togglePause() {}
+void GstVideoPlayer::seek(qint64) {}
+void GstVideoPlayer::stop() {}
+void GstVideoPlayer::setSubtitleTrack(int) {}
+void GstVideoPlayer::setVolume(int) {}
+} // namespace hop
+#else
 namespace hop {
 
 namespace {
@@ -311,3 +329,4 @@ void GstVideoPlayer::pollBus()
 }
 
 } // namespace hop
+#endif   // HOPTUNES_HAVE_GST

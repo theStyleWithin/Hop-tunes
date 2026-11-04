@@ -123,6 +123,8 @@ class App : public QObject {
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
+    Q_PROPERTY(QString videoOrientation READ videoOrientation WRITE setVideoOrientation NOTIFY videoOrientationChanged)   // phones: how videos open, "portrait" | "auto" | "landscape"
+    Q_PROPERTY(QString navStyle READ navStyle WRITE setNavStyle NOTIFY navStyleChanged)   // phones and tablets: "bar" or "drawer"
     Q_PROPERTY(QString statusNote READ statusNote WRITE setStatusNote NOTIFY statusNoteChanged)   // the profile's private status box
     Q_PROPERTY(int videoVolume READ videoVolume WRITE setVideoVolume NOTIFY videoVolumeChanged)   // the movie volume, 0-150 %, separate from the music volume
     Q_PROPERTY(bool videoChat READ videoChat WRITE setVideoChat NOTIFY videoChatChanged)
@@ -228,6 +230,11 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    QString videoOrientation() const { return m_videoOrientation; }
+    void setVideoOrientation(const QString &mode);
+    Q_INVOKABLE void requestOrientation(const QString &mode);   // Android: turns the screen; elsewhere nothing
+    QString navStyle() const { return m_navStyle; }
+    void setNavStyle(const QString &style);
     QString statusNote() const { return m_statusNote; }
     void setStatusNote(const QString &text);
     int videoVolume() const { return m_videoVolume; }
@@ -378,6 +385,8 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void videoChatChanged();
+    void videoOrientationChanged();
+    void navStyleChanged();
     void statusNoteChanged();
     void videoVolumeChanged();
     void videoCommentsChanged();
@@ -420,6 +429,8 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     QString m_videoComments = QStringLiteral("off");
+    QString m_videoOrientation = QStringLiteral("auto");
+    QString m_navStyle = QStringLiteral("bar");
     QString m_statusNote;
     int m_videoVolume = 100;
     bool m_videoChat = false;

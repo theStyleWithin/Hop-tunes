@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QCoreApplication>
+#endif
 
 #include "core/Paths.h"
 #include "library/Smart.h"
@@ -297,7 +301,7 @@ QString App::createProfile(const QString &name, const QString &accent, const QSt
     QStringList folders;
     if (first) folders = m_legacyFolders;   // adopt the folders from before profiles existed
     const QString chosen = folder.isEmpty() ? QString()
-        : QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString()).canonicalFilePath();
+        : QFileInfo(Paths::folderPath(folder)).canonicalFilePath();
     if (!chosen.isEmpty() && !folders.contains(chosen)) folders.prepend(chosen);
     m_store.saveSettings(id, {{QStringLiteral("folders"), QJsonArray::fromStringList(folders)}});
     if (first && !m_legacyFolders.isEmpty()) QSettings().remove(QStringLiteral("library"));
@@ -367,12 +371,17 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
+    m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
+    if (m_videoOrientation != QLatin1String("portrait") && m_videoOrientation != QLatin1String("landscape")) m_videoOrientation = QStringLiteral("auto");
+    m_navStyle = s.value(QStringLiteral("navStyle")).toString() == QLatin1String("drawer") ? QStringLiteral("drawer") : QStringLiteral("bar");
     m_statusNote = s.value(QStringLiteral("statusNote")).toString().left(300);
     m_videoVolume = qBound(0, s.value(QStringLiteral("videoVolume")).toInt(100), 150);
     m_videoChat = s.value(QStringLiteral("videoChat")).toBool(false);
     m_videoChatLook = s.value(QStringLiteral("videoChatLook")).toString() == QLatin1String("lively") ? QStringLiteral("lively") : QStringLiteral("clean");
     m_loadingSettings = false;
     emit videoChatChanged();
+    emit videoOrientationChanged();
+    emit navStyleChanged();
     emit statusNoteChanged();
     emit videoVolumeChanged();
     emit videoCategoryChanged();
@@ -444,10 +453,14 @@ void App::leaveProfile()
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
     m_videoViewStyle = QStringLiteral("window");
+    m_videoOrientation = QStringLiteral("auto");
+    m_navStyle = QStringLiteral("bar");
     m_statusNote.clear();
     m_videoChat = false;
     m_videoChatLook = QStringLiteral("clean");
     emit videoChatChanged();
+    emit videoOrientationChanged();
+    emit navStyleChanged();
     emit statusNoteChanged();
     m_videoVolume = 100;
     m_videoChat = false;
@@ -495,6 +508,8 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
+    s.insert(QStringLiteral("navStyle"), m_navStyle);
     s.insert(QStringLiteral("statusNote"), m_statusNote);
     s.insert(QStringLiteral("videoVolume"), m_videoVolume);
     s.insert(QStringLiteral("videoChat"), m_videoChat);
@@ -588,7 +603,7 @@ QString App::version() const { return QCoreApplication::applicationVersion(); }
 
 void App::addFolder(const QUrl &folder)
 {
-    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString())
+    const QString path = QFileInfo(Paths::folderPath(folder))
                              .canonicalFilePath();
     if (path.isEmpty() || m_folders.contains(path)) return;
     m_folders << path;
@@ -607,7 +622,7 @@ void App::removeFolder(const QString &path)
 
 void App::addVideoFolder(const QUrl &folder)
 {
-    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString())
+    const QString path = QFileInfo(Paths::folderPath(folder))
                              .canonicalFilePath();
     const QStringList current = videoFolders();
     if (path.isEmpty() || current.contains(path)) return;
@@ -649,7 +664,7 @@ void App::addSectionFolder(const QString &kind, const QUrl &folder)
 {
     const int i = sectionIndexOf(kind);
     if (i < 0) return;
-    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString())
+    const QString path = QFileInfo(Paths::folderPath(folder))
                              .canonicalFilePath();
     if (path.isEmpty() || m_sec[i]->folders.contains(path)) return;
     m_sec[i]->folders << path;
@@ -886,7 +901,7 @@ void App::addVideoCategoryFolder(const QString &category, const QUrl &folder)
 {
     if (category == QLatin1String("movies")) { addVideoFolder(folder); return; }
     if (!videoCategories().contains(category)) return;
-    const QString path = QFileInfo(folder.isLocalFile() ? folder.toLocalFile() : folder.toString()).canonicalFilePath();
+    const QString path = QFileInfo(Paths::folderPath(folder)).canonicalFilePath();
     if (path.isEmpty() || m_videoCatFolders.value(category).contains(path)) return;
     m_videoCatFolders[category] << path;
     saveFolders();
@@ -1079,6 +1094,36 @@ void App::switchVideo(int row, qint64 positionMs, qint64 durationMs)
     if (row < 0 || row >= m_videos.count()) return;
     saveVideoProgress(positionMs, durationMs);
     openVideoFile(m_videos.videos()[row].path);
+}
+
+void App::setVideoOrientation(const QString &mode)
+{
+    const QString v = mode == QLatin1String("portrait") || mode == QLatin1String("landscape") ? mode : QStringLiteral("auto");
+    if (v == m_videoOrientation) return;
+    m_videoOrientation = v;
+    saveProfileSettings();
+    emit videoOrientationChanged();
+}
+
+void App::requestOrientation(const QString &mode)
+{
+#ifdef Q_OS_ANDROID
+    // android.content.pm.ActivityInfo: SCREEN_ORIENTATION_LANDSCAPE 0, PORTRAIT 1, UNSPECIFIED -1 (follows the phone)
+    const jint v = mode == QLatin1String("landscape") ? 0 : (mode == QLatin1String("portrait") ? 1 : -1);
+    const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+    if (activity.isValid()) activity.callMethod<void>("setRequestedOrientation", "(I)V", v);
+#else
+    Q_UNUSED(mode)
+#endif
+}
+
+void App::setNavStyle(const QString &style)
+{
+    const QString v = style == QLatin1String("drawer") ? QStringLiteral("drawer") : QStringLiteral("bar");
+    if (v == m_navStyle) return;
+    m_navStyle = v;
+    saveProfileSettings();
+    emit navStyleChanged();
 }
 
 void App::setStatusNote(const QString &text)
