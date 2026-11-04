@@ -1183,6 +1183,33 @@ private slots:
         QTest::qWait(400);
     }
 
+    // Phones, first scan: the title, tabs, scan note and pills stay together at the top instead of being spread
+    // over the whole screen.
+    void phoneCollectionStaysCompactWhileScanning()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size; QObject *cv;
+            ~Restore() { cv->setProperty("forceScanning", false); w->setProperty("forceMobile", false); w->resize(size); } };
+        w->setProperty("view", QStringLiteral("collection"));
+        QObject *cv = item("collectionView");
+        QVERIFY(cv);
+        Restore restore{w, before, cv};
+        w->setProperty("forceMobile", true);
+        w->resize(412, 880);
+        QTRY_COMPARE(w->width(), 412);
+        QVERIFY(click("pillTab_music"));
+        cv->setProperty("forceScanning", true);
+        QTRY_VERIFY(item("scanSpacer") && item("scanSpacer")->isVisible());
+        QTest::qWait(300);
+        shot("phone-scanning");
+        auto topOf = [&](const char *name) { auto *i = item(name); return i->mapToScene(QPointF(0, 0)).y(); };
+        const qreal tabs = topOf("pillTab_music");
+        const qreal pills = topOf("pillMode_albums");
+        QVERIFY2(pills - tabs < 200, qPrintable(QStringLiteral("tabs at %1, pills at %2").arg(tabs).arg(pills)));
+        QVERIFY(tabs < 200);
+    }
+
     // Android's folder chooser is the system one (the Qt dialog dims the whole screen there): its answer
     // arrives as a signal carrying the token the question was asked with, and adds the folder.
     void systemFolderChooserAnswersAddTheFolder()

@@ -24,6 +24,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   live updates.
 
 ### Changed
+- **Phones: the collection stays together during the first scan.** The title, tabs, "scanning…" note and the
+  albums / artists / songs / playlists pills used to be spread far apart down the screen while the library was
+  being scanned for the first time; they now sit together at the top.
 - **Phones: you make your profile first and choose your music folder afterwards**, in the collection, instead of
   on the profile form (the profile still starts with the phone's Music folder). Desktop is unchanged.
 
