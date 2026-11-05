@@ -82,6 +82,14 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.5" date="2026-11-05">
+      <description>
+        <p>Album Fall covers.</p>
+        <ul>
+          <li>Album Fall: every block takes its own random album cover from your whole library.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.4" date="2026-11-05">
       <description>
         <p>Games and a visualizer in Now playing, fixing artist names, and folder slots.</p>

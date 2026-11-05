@@ -4,6 +4,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-11-05
+
+### Changed
+- **Album Fall:** every block now takes its own random album cover from all your scanned albums (up to 150, shuffled
+  each game), a box of chocolates: you never know which one you get.
+
 ## [1.7.4] - 2026-11-05
 
 ### Added

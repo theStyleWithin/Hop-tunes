@@ -64,6 +64,34 @@ private slots:
         QVERIFY(c.pieceCells().size() <= 3);
     }
 
+    void everyBlockGetsItsOwnRandomCover()
+    {
+        FallBoard b(21);
+        b.setArtCount(40);
+        QSet<int> seen;
+        int perPieceDistinct = 0, pieces = 0;
+        for (int i = 1; i <= 12; ++i) {
+            b.beat(0.5, i * 1000);
+            const QVector<int> arts = b.pieceArts();
+            QCOMPARE(arts.size(), b.pieceCells().size());          // one cover for every block
+            for (int a : arts) { QVERIFY(a >= 0 && a < 40); seen.insert(a); }
+            if (QSet<int>(arts.begin(), arts.end()).size() > 1) ++perPieceDistinct;
+            ++pieces;
+            b.hardDrop();
+            if (b.state() != FallBoard::Playing) break;
+        }
+        QVERIFY2(seen.size() >= 12, qPrintable(QString::number(seen.size())));   // plenty of different albums show up
+        QVERIFY2(perPieceDistinct >= pieces / 2, "blocks inside one piece should usually differ");
+        // what lands keeps each block's own cover
+        FallBoard c(5);
+        c.setArtCount(30);
+        c.beat(0.5, 1000);
+        const QVector<int> arts = c.pieceArts();
+        const QVector<QPoint> ghost = c.ghostCells();
+        c.hardDrop();
+        for (int i = 0; i < ghost.size(); ++i) QCOMPARE(c.cell(ghost[i].x(), ghost[i].y()), arts[i] + 1);
+    }
+
     void aPieceWaitsForABeatButNotForever()
     {
         FallBoard b(3);
@@ -165,7 +193,7 @@ private slots:
     {
         FallBoard a(42), b(42);
         a.setArtCount(5); b.setArtCount(5);
-        for (int i = 1; i <= 5; ++i) { a.beat(0.5, i * 1000); b.beat(0.5, i * 1000); QCOMPARE(a.pieceCells(), b.pieceCells()); QCOMPARE(a.pieceArt(), b.pieceArt()); a.hardDrop(); b.hardDrop(); }
+        for (int i = 1; i <= 5; ++i) { a.beat(0.5, i * 1000); b.beat(0.5, i * 1000); QCOMPARE(a.pieceCells(), b.pieceCells()); QCOMPARE(a.pieceArts(), b.pieceArts()); a.hardDrop(); b.hardDrop(); }
     }
 };
 
