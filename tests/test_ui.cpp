@@ -1910,6 +1910,31 @@ private slots:
         QVERIFY(g->score() > 0);
         QTest::qWait(200);
         shot("np-albumfall");
+        // pause by its button, and the song playing the game for you: nothing is scored then
+        QVERIFY(item("afPause") && item("afAutoplay"));
+        {
+            AlbumFall *af = m_app->albumFall();
+            QVERIFY(click("afPause"));
+            QTRY_VERIFY(af->paused());
+            QVERIFY(click("afPause"));
+            QTRY_VERIFY(!af->paused());
+            const int before = m_app->gameScores(QStringLiteral("albumfall")).size();
+            af->start(8);
+            QVERIFY(af->scored());
+            QVERIFY(click("afAutoplay"));
+            QVERIFY(af->autoplay());
+            QVERIFY(!af->scored());                         // from here on nothing is counted
+            af->act(QStringLiteral("drop"));                // a person's input is refused while the song plays
+            const int before0 = af->landed();
+            for (int i = 0; i < 40; ++i) { af->onBeat(0.6); QTest::qWait(60); }
+            QVERIFY2(af->landed() > before0, "the song should have dropped pieces");
+            QVERIFY(af->score() > 0);
+            QCOMPARE(m_app->gameScores(QStringLiteral("albumfall")).size(), before);   // and the list is untouched
+            QVERIFY(click("afAutoplay"));
+            QVERIFY(!af->autoplay());
+            af->start(8);
+            QVERIFY(af->scored());                          // a game after that counts again
+        }
         // the controller and the keyboard reach the same actions
         g->onBeat(0.2);
         const int pieces = g->piece().size();

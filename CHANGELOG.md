@@ -21,6 +21,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   pictures in a folder that cannot be reached (an external drive, a USB stick, a network share that is away) no longer show
   as songs that cannot play: they are simply not listed until the drive is back, and Settings marks the folder "not
   connected". Every few seconds Hop-tunes notices a drive coming or going and scans what came back. Nothing is deleted.
+- **Album Fall (desktop): a pause button and "let the song play".** The game now has an on-screen pause button (P still works),
+  and "let the song play" hands the controls to an autopilot that plays on the rhythm of the song, turning, sliding and
+  dropping each piece. Nothing is scored while the song plays: a game it played never goes on your best list.
 - **Live chat: whoever types is a member.** Your own messages in the pretend live chat (films and Now playing) carry the
   MEMBER badge, because nobody pays for a pretend stream.
 

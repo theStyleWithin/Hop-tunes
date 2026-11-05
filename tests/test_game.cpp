@@ -445,6 +445,26 @@ private slots:
         QVERIFY(!g.tripped());
     }
 
+    // The autopilot ("let the song play"): it must play sensibly, not just legally.
+    void theAutopilotPlaysAWholeGameWithoutToppingOut()
+    {
+        FallBoard b(12345);
+        b.setArtCount(6);
+        int pieces = 0;
+        for (int i = 1; i <= 220 && b.state() == FallBoard::Playing; ++i) {
+            b.beat(0.5, qint64(i) * 1000);
+            const FallBoard::Plan p = b.suggest();
+            QVERIFY(p.valid);
+            for (int r = 0; r < p.rotations; ++r) b.rotate();
+            for (int guard = 0; guard < 16 && b.pieceX() != p.x; ++guard) { if (b.pieceX() < p.x) b.moveRight(); else b.moveLeft(); }
+            b.hardDrop();
+            ++pieces;
+        }
+        QCOMPARE(b.state(), FallBoard::Playing);              // 220 pieces and still going
+        QVERIFY2(b.lines() >= 40, qPrintable(QString::number(b.lines())));
+        QVERIFY(pieces >= 200);
+    }
+
     void sameSeedSamePieces()
     {
         FallBoard a(42), b(42);

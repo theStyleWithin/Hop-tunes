@@ -36,7 +36,7 @@ FocusScope {
     }
     Connections {
         target: game
-        function onFinished(score, lines) { root.lastRank = hop.submitScore("albumfall", score, lines) }
+        function onFinished(score, lines, scored) { if (scored) root.lastRank = hop.submitScore("albumfall", score, lines) }
     }
     Connections {
         target: hop.gamepad
@@ -120,6 +120,18 @@ FocusScope {
                 text: hop.audio.available && !root.game.pulse ? Math.round(hop.audio.bpm) + " bpm" : "keeping its own pulse"
                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
+            Flow {   // pause, and let the song play the game for you (nothing is scored while it does)
+                Layout.fillWidth: true; spacing: 8
+                PlainButton { objectName: "afPause"; text: root.game.paused ? "go on" : "pause"; enabled: !root.game.gameOver
+                              onClicked: root.act("pause") }
+                PlainButton { objectName: "afAutoplay"; text: root.game.autoplay ? "stop autoplay" : "let the song play"; primary: root.game.autoplay
+                              onClicked: root.game.autoplay = !root.game.autoplay }
+            }
+            Label {
+                visible: root.game.autoplay
+                text: "the song is playing: this game is not scored"
+                color: Theme.accent; wrapMode: Text.WordWrap; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) }
+            }
         }
 
         // ---- the board ----
@@ -178,7 +190,7 @@ FocusScope {
                             font { family: Theme.font; pixelSize: Theme.fs(34); weight: Font.Light }
                             text: root.game.gameOver ? "game over" : (root.needMusic ? "play a song to start" : "paused") }
                     Label { visible: root.game.gameOver; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(20) }
-                            text: root.game.score + " points" + (root.lastRank === 1 ? " — a new best!" : (root.lastRank > 0 ? " — #" + root.lastRank + " on your list" : "")) }
+                            text: root.game.score + " points" + (!root.game.scored ? " (not counted: the song was playing)" : root.lastRank === 1 ? " — a new best!" : (root.lastRank > 0 ? " — #" + root.lastRank + " on your list" : "")) }
                     PlainButton { visible: root.needMusic; Layout.alignment: Qt.AlignHCenter; text: "play"; primary: true
                                   onClicked: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
                     PlainButton { visible: root.game.gameOver; Layout.alignment: Qt.AlignHCenter; text: "play again"; primary: true; onClicked: root.newGame() }

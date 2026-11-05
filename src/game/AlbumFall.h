@@ -32,6 +32,8 @@ class AlbumFall : public QObject {
     Q_PROPERTY(bool landedOnBeat READ landedOnBeat NOTIFY changed)
     Q_PROPERTY(int cleared READ cleared NOTIFY changed)                // counts up on every line clear
     Q_PROPERTY(int lastCleared READ lastCleared NOTIFY changed)
+    Q_PROPERTY(bool autoplay READ autoplay WRITE setAutoplay NOTIFY autoplayChanged)   // the song plays for you: no score is kept
+    Q_PROPERTY(bool scored READ scored NOTIFY changed)                // this game counts for the best list (never after autoplay)
     Q_PROPERTY(bool pulse READ pulse NOTIFY pulseChanged)              // true while the own metronome stands in for a quiet song
     Q_PROPERTY(double speed READ speed NOTIFY changed)                 // rows a second right now
 public:
@@ -56,6 +58,9 @@ public:
     bool landedOnBeat() const { return m_board.lastLockOnBeat(); }
     int cleared() const { return m_board.clearCount(); }
     int lastCleared() const { return m_board.lastLinesCleared(); }
+    bool autoplay() const { return m_autoplay; }
+    void setAutoplay(bool on);
+    bool scored() const { return !m_autoUsed; }
     bool pulse() const { return m_pulse; }
     double speed() const { return m_speed; }
 
@@ -79,13 +84,20 @@ signals:
     void changed();
     void beatFlashChanged();
     void pulseChanged();
-    void finished(int score, int lines);     // the stack topped out
+    void autoplayChanged();
+    void finished(int score, int lines, bool scored);     // the stack topped out; `scored` is false after autoplay
 
 private:
     void step();
     static QVariantList flat(const QVector<QPoint> &cells);
 
+    void perform(const QString &action);   // the actual move (act() refuses a person's input while the song plays)
+    void autoStep(qint64 now);
     FallBoard m_board;
+    bool m_autoplay = false, m_autoUsed = false, m_planned = false;
+    FallBoard::Plan m_plan;
+    int m_planLock = -1, m_turned = 0;
+    qint64 m_lastAuto = 0;
     QTimer m_timer;
     QElapsedTimer m_clock;
     qint64 m_last = 0, m_lastBeat = 0;
