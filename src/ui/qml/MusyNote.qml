@@ -32,7 +32,8 @@ FocusScope {
         rank = 0
         game.start(Math.max(covers.length, 1))
     }
-    function act(a) {
+    function act(a, src) {
+        console.warn("musy act " + a + " from " + (src || "?") + " at +" + (Date.now() - openedAt) + "ms state " + game.state)
         if (a === "flap") { if (game.state === 2) newGame(); else game.flap(); return }
         if (a === "pause") { if (game.state === 2) newGame(); else game.paused = !game.paused; return }
         if (a === "exit") { leave(); return }
@@ -52,14 +53,14 @@ FocusScope {
         target: hop.gamepad
         enabled: root.active
         function onPressed(a) {
-            if (["a", "b", "x", "y", "lb", "rb", "lt", "rt", "up"].indexOf(a) >= 0) root.act("flap")
+            if (["a", "b", "x", "y", "lb", "rb", "lt", "rt", "up"].indexOf(a) >= 0) root.act("flap", "pad " + a)
             else if (a === "start") root.act("pause")
             else if (a === "back") root.act("exit")
         }
     }
     Keys.onPressed: function (e) {
         const k = e.key
-        if (k === Qt.Key_Space || k === Qt.Key_Up || k === Qt.Key_W || k === Qt.Key_Return) { e.accepted = true; act("flap") }
+        if (k === Qt.Key_Space || k === Qt.Key_Up || k === Qt.Key_W || k === Qt.Key_Return) { e.accepted = true; act("flap", "key " + k) }
         else if (k === Qt.Key_P) { e.accepted = true; act("pause") }
         else if (k === Qt.Key_Escape || k === Qt.Key_Back) { e.accepted = true; act("exit") }
     }
@@ -242,7 +243,7 @@ FocusScope {
     // ---- a tap anywhere flaps ----
     MouseArea {
         anchors.fill: parent
-        onPressed: if (Date.now() - root.openedAt > 450) root.act("flap")
+        onPressed: if (Date.now() - root.openedAt > 450) root.act("flap", "mouse")
     }
 
     // ---- HUD ----

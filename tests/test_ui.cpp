@@ -1249,8 +1249,11 @@ private slots:
         w->setProperty("view", QStringLiteral("now playing"));
         QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
         shot("phone-nowplaying-games-button");
+        qWarning("musy test: clicking games");
         QVERIFY(click("phoneGames"));
+        qWarning("musy test: clicked");
         QTRY_VERIFY(item("musyNote") && item("musyNote")->isVisible());
+        qWarning("musy test: overlay visible");
         MusyNoteGame *g = m_app->musyNote();
         QTRY_COMPARE(g->state(), 0);                       // ready: waiting for the first flap
         // a tap that arrives right after opening (the end of the tap that opened it) does not start the game
