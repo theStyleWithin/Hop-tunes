@@ -33,6 +33,12 @@ The big link above always opens the newest regular release. Pick the file for yo
 
 **Tested on 16 distros, with CachyOS first.** See [which distros Hop-tunes runs on](docs/COMPATIBILITY.md). Distros older than 2022 may not work with the AppImage; use the Flatpak there.
 
+> **Heads up: keep your music where Hop-tunes can reach it.** If your music lives on an external drive, a USB stick
+> or a network share, plug it in and let it mount *before* you press play, and check carefully in *settings → media
+> folders* that the folder you added is the one that really holds your music (it is easy to have two copies, one in a
+> folder that is connected and one that is not). With the drive unplugged every song is missing, so pressing play
+> seems to do nothing and the list jumps to the bottom.
+
 The [user guide](docs/user-guide.md) covers everything from the first run to troubleshooting.
 
 ## Docs
