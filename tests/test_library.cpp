@@ -276,6 +276,54 @@ private slots:
         QCOMPARE(c.albums()[z.albumIndices[1]].trackRows, QList<int>({0, 1}));
     }
 
+    void collectionArtistMerges()
+    {
+        auto t = [](const char *artist, const char *album, int year, const char *art = "") {
+            Track x; x.artist = artist; x.album = album; x.year = year; x.art = art; return x;
+        };
+        // the scan read the same band two ways: "16volt" (wrong) and "16 Volt" (right)
+        const QList<Track> tracks = {t("16volt", "Skin", 1998, "/wrong.png"), t("16volt", "Skin", 1998),
+                                     t("16 Volt", "Skin", 1998, "/right.png"), t("16 Volt", "Wisdom", 2000),
+                                     t("Other", "Skin", 1998)};
+        auto names = [](const Collection &c) { QStringList n; for (const Artist &a : c.artists()) n << a.name; return n; };
+
+        Collection plain;
+        plain.build(tracks);
+        QCOMPARE(names(plain), QStringList({"16 Volt", "16volt", "Other"}));
+
+        ArtistMap map;
+        map.merges.insert(QStringLiteral("16volt"), QStringLiteral("16 Volt"));
+        Collection c;
+        c.build(tracks, map);
+        QCOMPARE(names(c), QStringList({"16 Volt", "Other"}));
+        const Artist &v = c.artists()[0];
+        QCOMPARE(v.albumIndices.size(), 2);                 // the two "Skin" albums became one
+        QCOMPARE(v.songCount, 4);
+        const Album &skin = c.albums()[v.albumIndices[1]];  // 1998, after the newer "Wisdom"
+        QCOMPARE(skin.title, QStringLiteral("Skin"));
+        QCOMPARE(skin.trackRows.size(), 3);
+        QCOMPARE(skin.artist, QStringLiteral("16 Volt"));   // the receiving artist's name is shown
+        QCOMPARE(skin.art, QStringLiteral("/right.png"));   // and its cover wins
+
+        // case does not matter, chains are followed, loops are cut
+        map.merges.clear();
+        map.merges.insert(QStringLiteral("16volt"), QStringLiteral("16 volt"));
+        map.merges.insert(QStringLiteral("16 volt"), QStringLiteral("Other"));
+        c.build(tracks, map);
+        QCOMPARE(names(c), QStringList({"Other"}));
+        map.merges.clear();
+        map.merges.insert(QStringLiteral("a"), QStringLiteral("B"));
+        map.merges.insert(QStringLiteral("b"), QStringLiteral("A"));
+        QVERIFY(!map.resolve(QStringLiteral("A"), QStringLiteral("x")).isEmpty());   // terminates
+
+        // one album moved on its own
+        ArtistMap mv;
+        mv.albumMoves.insert(QStringLiteral("16 volt") + QChar(0x1f) + QStringLiteral("wisdom"), QStringLiteral("Other"));
+        c.build(tracks, mv);
+        QCOMPARE(names(c), QStringList({"16 Volt", "16volt", "Other"}));
+        QCOMPARE(c.artists()[2].albumIndices.size(), 2);    // Other now has Skin and Wisdom
+    }
+
     void asyncScannerSignals()
     {
         QTemporaryDir dir;

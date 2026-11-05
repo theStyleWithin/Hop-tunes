@@ -4,6 +4,7 @@
 #include "library/Track.h"
 
 #include <QAbstractListModel>
+#include <QHash>
 #include <QList>
 
 namespace hop {
@@ -26,10 +27,21 @@ struct Artist {
     QString art;
 };
 
+// This profile's fixes to artist names the scan got wrong. "merges" send every album of one
+// artist to another ("16volt" -> "16Volt"), "albumMoves" send a single album. The artist on the
+// receiving end takes over: its name is the one shown, and its cover wins when albums combine.
+// Names are compared ignoring case; chains (A->B, B->C) are followed and loops are cut.
+struct ArtistMap {
+    QHash<QString, QString> merges;      // from (case-folded) -> to (as it should be shown)
+    QHash<QString, QString> albumMoves;  // "artist\x1falbum" (both case-folded) -> to
+    bool isEmpty() const { return merges.isEmpty() && albumMoves.isEmpty(); }
+    QString resolve(const QString &artist, const QString &album) const;
+};
+
 // Groups an album-ordered track list into albums and artists (pure logic, unit-tested).
 class Collection {
 public:
-    void build(const QList<Track> &tracks);
+    void build(const QList<Track> &tracks, const ArtistMap &map = {});
     const QList<Album> &albums() const { return m_albums; }
     const QList<Artist> &artists() const { return m_artists; }
 
