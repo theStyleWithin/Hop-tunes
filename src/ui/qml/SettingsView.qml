@@ -534,6 +534,8 @@ Item {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
                     Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    Label { objectName: "folderNotConnected"; visible: hop.missingFolders.indexOf(modelData) >= 0; text: "not connected"; color: Theme.danger
+                            font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     Button {
                         text: "remove"
                         onClicked: hop.removeFolder(modelData)

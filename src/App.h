@@ -406,6 +406,12 @@ public:
     Q_INVOKABLE void saveBookProgress(double fractionInChapter);
     Q_INVOKABLE void closeBook(double fractionInChapter);   // mark an audiobook / episode played or unplayed
     Q_INVOKABLE void rescan();
+    // Media on a drive that is not plugged in is simply left out until the drive is back: every list shows only the folders that
+    // can be reached right now, and a check every few seconds notices a drive coming or going (it then scans what came back).
+    Q_PROPERTY(QStringList missingFolders READ missingFolders NOTIFY drivesChanged)
+    QStringList missingFolders() const;
+    Q_INVOKABLE bool folderMissing(const QString &path) const;
+    Q_INVOKABLE void checkDrives();   // runs every few seconds on its own; callable for tests
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
     Q_INVOKABLE QString formatTime(qint64 ms) const { return TrackListModel::formatDuration(ms); }
@@ -434,6 +440,7 @@ public:
 signals:
     void foldersChanged();
     void pictureAlbumsChanged();
+    void drivesChanged();
     void gameSettingsChanged();
     void sectionSlotsChanged();
     void videoSlotsChanged();
@@ -610,6 +617,11 @@ private:
     QString m_videoSlot;
     QVariantMap m_sectionSlots, m_sectionOpenSlot;
     void resetSlots();
+    QStringList reachable(const QStringList &folders) const;
+    QStringList everyFolder() const;
+    QTimer m_driveTimer;
+    QSet<QString> m_reachableNow;
+    bool m_driveStateKnown = false;
     void rebuildSectionSlots(SectionState &sec, const QList<SectionItem> &items, const QHash<QString, double> &progress);
     GstVideoPlayer m_gstVideo;
     LibraryWatcher m_watcher;

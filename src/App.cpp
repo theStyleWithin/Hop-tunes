@@ -58,6 +58,9 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     if (m_analysisSafeMode) DiagLog::note(QStringLiteral("visualizer and games switched off: the last run ended while the sound analysis was on"));
 #endif
     updateAnalysisAvailable();
+    m_driveTimer.setInterval(4000);
+    connect(&m_driveTimer, &QTimer::timeout, this, &App::checkDrives);
+    m_driveTimer.start();
     connect(&m_player, &Player::spectrum, &m_audio, &AudioAnalyzer::onSpectrum);
     connect(&m_audio, &AudioAnalyzer::activeChanged, this, [this] {
 #ifdef Q_OS_ANDROID
@@ -392,6 +395,7 @@ void App::activate(const QString &id, bool guest)
 {
     leaveProfile();
     m_exportVerifiedFor.clear();
+    m_driveStateKnown = false;
     m_profileId = id;
     m_guest = guest;
     const QJsonObject s = guest ? QJsonObject{} : m_store.settings(id);
@@ -1196,7 +1200,7 @@ void App::reloadSections() { for (int i = 0; i < 4; ++i) reloadSection(i); }
 void App::reloadSection(int i)
 {
     SectionState &sec = *m_sec[i];
-    const QList<SectionItem> items = m_sectionIndex.itemsUnder(sec.kind, sec.folders);
+    const QList<SectionItem> items = m_sectionIndex.itemsUnder(sec.kind, reachable(sec.folders));
     QHash<QString, double> progress;
     if (sec.kind != SectionKind::Pictures && m_db.isOpen()) {
         for (const SectionItem &it : items) {
@@ -1480,6 +1484,53 @@ QStringList App::watchedFolders() const
     return all;
 }
 
+// ---- drives that come and go ----------------------------------------------------------------------
+
+QStringList App::reachable(const QStringList &folders) const
+{
+    QStringList out;
+    for (const QString &f : folders)
+        if (QFileInfo(f).isDir()) out << f;
+    return out;
+}
+
+QStringList App::everyFolder() const
+{
+    QStringList all = m_folders;
+    for (const QString &f : allVideoFolders()) if (!all.contains(f)) all << f;
+    for (const auto &sec : m_sec) for (const QString &f : sec->folders) if (!all.contains(f)) all << f;
+    return all;
+}
+
+QStringList App::missingFolders() const
+{
+    QStringList out;
+    for (const QString &f : everyFolder())
+        if (!QFileInfo(f).isDir()) out << f;
+    return out;
+}
+
+bool App::folderMissing(const QString &path) const { return !QFileInfo(path).isDir(); }
+
+// Called every few seconds while a profile is open: a drive that was pulled hides its media at once; one that was plugged
+// in is scanned and its media appears. Nothing is deleted either way (the index keeps its rows for the drive).
+void App::checkDrives()
+{
+    if (!profileReady() || (QGuiApplication::instance() && QGuiApplication::applicationState() == Qt::ApplicationSuspended)) return;
+    QSet<QString> now;
+    for (const QString &f : reachable(everyFolder())) now.insert(f);
+    if (!m_driveStateKnown) { m_reachableNow = now; m_driveStateKnown = true; return; }
+    if (now == m_reachableNow) return;
+    const bool appeared = !(now - m_reachableNow).isEmpty();
+    m_reachableNow = now;
+    DiagLog::note(QStringLiteral("drives changed: %1 folders reachable%2").arg(now.size()).arg(appeared ? QStringLiteral(", scanning what came back") : QString()));
+    reload();
+    reloadVideos();
+    reloadSections();
+    if (appeared) rescan();
+    emit drivesChanged();
+}
+
 void App::rescan()
 {
     for (auto &sec : m_sec) {
@@ -1525,7 +1576,7 @@ void App::shuffleAll()
 
 void App::reload()
 {
-    m_library = m_index.tracksUnder(m_folders);
+    m_library = m_index.tracksUnder(reachable(m_folders));
     if (!m_songOrder.isEmpty()) {
         QHash<QString, Track> byPath;
         for (const Track &t : m_library) byPath.insert(t.path, t);
@@ -1556,7 +1607,7 @@ void App::reload()
 
 void App::reloadVideos()
 {
-    QList<Video> all = m_videoIndex.videosUnder(allVideoFolders());
+    QList<Video> all = m_videoIndex.videosUnder(reachable(allVideoFolders()));
     QList<Video> list;
     for (Video &v : all) {
         if (categoryOfVideo(v.path) != m_videoCategory) continue;

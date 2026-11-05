@@ -33,7 +33,8 @@ FocusScope {
         game.start(Math.max(covers.length, 1))
     }
     function act(a, src) {
-        console.warn("musy act " + a + " from " + (src || "?") + " at +" + (Date.now() - openedAt) + "ms state " + game.state)
+        // a press that is still part of opening the game (a lingering tap or button) never starts it
+        if (a === "flap" && Date.now() - openedAt < 450) return
         if (a === "flap") { if (game.state === 2) newGame(); else game.flap(); return }
         if (a === "pause") { if (game.state === 2) newGame(); else game.paused = !game.paused; return }
         if (a === "exit") { leave(); return }

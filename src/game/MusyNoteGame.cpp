@@ -14,7 +14,6 @@ MusyNoteGame::MusyNoteGame(QObject *parent) : QObject(parent)
 
 void MusyNoteGame::start(int artCount)
 {
-    qWarning("musy: start(%d) t=%lld", artCount, m_clock.elapsed());
     m_art = qMax(1, artCount);
     m_g.reset(QRandomGenerator::global()->generate());
     m_g.setArtCount(m_art);
@@ -52,7 +51,6 @@ void MusyNoteGame::setAutoplay(bool on)
 
 void MusyNoteGame::flap()
 {
-    qWarning("musy: flap() state=%d autoplay=%d paused=%d started=%d t=%lld", int(m_g.state()), m_autoplay, m_paused, m_started, m_clock.elapsed());
     if (!m_started || m_paused || m_autoplay) return;       // the song has the controls while it plays for you
     if (m_g.state() == MusyNote::Dead) return;
     const bool begin = m_g.state() == MusyNote::Ready;

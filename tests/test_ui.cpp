@@ -1249,13 +1249,15 @@ private slots:
         w->setProperty("view", QStringLiteral("now playing"));
         QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
         shot("phone-nowplaying-games-button");
-        qWarning("musy test: clicking games");
         QVERIFY(click("phoneGames"));
-        qWarning("musy test: clicked");
         QTRY_VERIFY(item("musyNote") && item("musyNote")->isVisible());
-        qWarning("musy test: overlay visible");
         MusyNoteGame *g = m_app->musyNote();
         QTRY_COMPARE(g->state(), 0);                       // ready: waiting for the first flap
+        // a controller press that arrives with the opening (a stick that rests off-centre) does not start it either
+        m_app->gamepad()->feedAction(QStringLiteral("up"), true);
+        m_app->gamepad()->feedAction(QStringLiteral("up"), false);
+        QTest::qWait(100);
+        QCOMPARE(g->state(), 0);
         // a tap that arrives right after opening (the end of the tap that opened it) does not start the game
         QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, QPoint(w->width() / 2, w->height() / 2));
         QTest::qWait(200);
@@ -1470,6 +1472,55 @@ private slots:
             }
         }
         m_app->player()->stop();
+    }
+
+    // Media on a drive that is not plugged in is simply left out; plug the drive in and it comes back by itself.
+    void mediaOnAnUnpluggedDriveIsLeftOutUntilItIsBack()
+    {
+        const QString drive = m_home.filePath(QStringLiteral("USBDRIVE"));
+        const QString away = m_home.filePath(QStringLiteral("USBDRIVE.unplugged"));
+        QVERIFY(QDir().mkpath(drive + QStringLiteral("/Songs")));
+        QVERIFY(QDir().mkpath(drive + QStringLiteral("/Books")));
+        for (const char *n : {"a.wav", "b.wav"}) QVERIFY(writeWav(drive + QStringLiteral("/Songs/") + QLatin1String(n), 800));
+        QVERIFY(writeWav(drive + QStringLiteral("/Books/ch1.mp3"), 800));
+        const int songsBefore = m_app->librarySize();
+        const int booksBefore = m_app->audiobooks()->count();
+
+        m_app->addFolder(QUrl::fromLocalFile(drive + QStringLiteral("/Songs")));
+        m_app->addSectionFolder(QStringLiteral("audiobooks"), QUrl::fromLocalFile(drive + QStringLiteral("/Books")));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore + 2, 15000);
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->audiobooks()->count(), booksBefore + 1, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->scanning(), 15000);
+        m_app->checkDrives();                                  // it learns what is connected now
+        QVERIFY(m_app->missingFolders().isEmpty());
+
+        // the drive is pulled out: its songs and books vanish from the lists at the next check, and are marked in settings
+        QVERIFY(QDir().rename(drive, away));
+        m_app->checkDrives();
+        QCOMPARE(m_app->librarySize(), songsBefore);
+        QCOMPARE(m_app->audiobooks()->count(), booksBefore);
+        QVERIFY(!m_app->missingFolders().isEmpty());
+        QVERIFY(m_app->folderMissing(QFileInfo(drive + QStringLiteral("/Songs")).absoluteFilePath()) || !m_app->missingFolders().isEmpty());
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTest::qWait(300);
+        QVERIFY(item("folderNotConnected") != nullptr);
+        window()->setProperty("view", QStringLiteral("collection"));
+        // a scan with the drive away must not throw its rows out
+        m_app->rescan();
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->scanning(), 15000);
+        QCOMPARE(m_app->librarySize(), songsBefore);
+
+        // plugged in again: found and scanned by itself, nothing was lost
+        QVERIFY(QDir().rename(away, drive));
+        m_app->checkDrives();
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore + 2, 15000);
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->audiobooks()->count(), booksBefore + 1, 15000);
+        QVERIFY(m_app->missingFolders().isEmpty());
+
+        // tidy up
+        m_app->removeFolder(QFileInfo(drive + QStringLiteral("/Songs")).canonicalFilePath());
+        m_app->removeSectionFolder(QStringLiteral("audiobooks"), QFileInfo(drive + QStringLiteral("/Books")).canonicalFilePath());
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore, 15000);
     }
 
     // Design renders against the saved phone mockups, with a richer library than the other tests have:
