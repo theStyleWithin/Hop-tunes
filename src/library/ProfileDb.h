@@ -113,6 +113,12 @@ public:
     QStringList songOrder() const;
     bool setSongOrder(const QStringList &paths);
 
+    // When albums move to another artist (a merge or a drag), the edits made to them follow: the
+    // title/cover override, the manual track order and quickplay pins are COPIED to the new ref and
+    // the old ones stay, so splitting a merge back loses nothing. Existing rows at the new ref win.
+    bool copyArtistRefs(const QString &fromArtist, const QString &toArtist);
+    bool copyAlbumRefs(const QString &fromRef, const QString &toRef);
+
     // Eject / export / import (the profile file a person can keep). exportData() writes every
     // table listed in the file format; picture paths (album covers, picked thumbnails) are left
     // out because they point at this device. importData() validates the whole document first and

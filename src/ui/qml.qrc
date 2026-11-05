@@ -31,6 +31,7 @@
     <file>qml/HeartButton.qml</file>
     <file>qml/NamePrompt.qml</file>
     <file>qml/FolderSlots.qml</file>
+    <file>qml/MergeArtistDialog.qml</file>
     <file>qml/TrackMenu.qml</file>
     <file>qml/PlaylistsPane.qml</file>
     <file>qml/SmartRulesEditor.qml</file>

@@ -361,6 +361,8 @@ void App::activate(const QString &id, bool guest)
     m_videoFoldersOwn = false;
     m_albumNames.clear();
     resetSlots();
+    m_artistMerges.clear();
+    m_albumMoves.clear();
     m_videoCatFolders.clear();
     m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) sec->folders.clear();
@@ -371,6 +373,12 @@ void App::activate(const QString &id, bool guest)
         for (auto &sec : m_sec)
             for (const QJsonValue &v : s.value(sectionKey(sec->kind) + QStringLiteral("Folders")).toArray())
                 sec->folders << v.toString();
+        const QJsonObject am = s.value(QStringLiteral("artistMerges")).toObject();
+        for (auto it = am.constBegin(); it != am.constEnd(); ++it)
+            if (it.value().isString() && !it.value().toString().isEmpty()) m_artistMerges.insert(it.key(), it.value().toString());
+        const QJsonObject mv = s.value(QStringLiteral("albumMoves")).toObject();
+        for (auto it = mv.constBegin(); it != mv.constEnd(); ++it)
+            if (it.value().isString() && !it.value().toString().isEmpty()) m_albumMoves.insert(it.key(), it.value().toString());
         const QJsonObject an = s.value(QStringLiteral("pictureAlbumNames")).toObject();
         for (auto it = an.constBegin(); it != an.constEnd(); ++it) m_albumNames.insert(it.key(), it.value().toString());
         if (s.contains(QStringLiteral("videoFolders"))) {
@@ -497,6 +505,8 @@ void App::leaveProfile()
     m_videoFoldersOwn = false;
     m_albumNames.clear();
     resetSlots();
+    m_artistMerges.clear();
+    m_albumMoves.clear();
     m_videoCatFolders.clear();
     m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) { sec->scanner.cancel(); sec->folders.clear(); }
@@ -512,6 +522,11 @@ void App::saveProfileSettings()
     QJsonObject s = m_store.settings(m_profileId);
     s.insert(QStringLiteral("folders"), QJsonArray::fromStringList(m_folders));
     if (m_videoFoldersOwn) s.insert(QStringLiteral("videoFolders"), QJsonArray::fromStringList(m_videoFolders));
+    QJsonObject merges, moves;
+    for (auto it = m_artistMerges.constBegin(); it != m_artistMerges.constEnd(); ++it) merges.insert(it.key(), it.value());
+    for (auto it = m_albumMoves.constBegin(); it != m_albumMoves.constEnd(); ++it) moves.insert(it.key(), it.value());
+    s.insert(QStringLiteral("artistMerges"), merges);
+    s.insert(QStringLiteral("albumMoves"), moves);
     QJsonObject an;
     for (auto it = m_albumNames.constBegin(); it != m_albumNames.constEnd(); ++it) an.insert(it.key(), it.value());
     s.insert(QStringLiteral("pictureAlbumNames"), an);
@@ -610,6 +625,8 @@ QString App::removeProfile()
     m_videoFoldersOwn = false;
     m_albumNames.clear();
     resetSlots();
+    m_artistMerges.clear();
+    m_albumMoves.clear();
     m_videoCatFolders.clear();
     m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) sec->folders.clear();
@@ -750,6 +767,105 @@ QString App::importProfile(const QUrl &file, const QString &name, const QString 
     if (!m_store.saveSettings(id, a.settings)) return undo(m_store.lastError());
     emit profilesChanged();
     activate(id, false);
+    return {};
+}
+
+// ---- fixing artist names ------------------------------------------------------------------------
+
+ArtistMap App::artistMap() const
+{
+    ArtistMap map;
+    for (auto it = m_artistMerges.constBegin(); it != m_artistMerges.constEnd(); ++it)
+        map.merges.insert(it.key().toCaseFolded(), it.value());
+    for (auto it = m_albumMoves.constBegin(); it != m_albumMoves.constEnd(); ++it)
+        map.albumMoves.insert(it.key().toCaseFolded(), it.value());
+    return map;
+}
+
+void App::artistsChanged()
+{
+    saveProfileSettings();
+    m_fullCollection.build(m_library, artistMap());
+    m_mosaicArt.clear();
+    for (const Album &a : m_fullCollection.albums())
+        if (!a.art.isEmpty()) m_mosaicArt << QUrl::fromLocalFile(a.art).toString();
+    applySearch();
+    refreshQuickplay();
+}
+
+QStringList App::artistNames() const
+{
+    QStringList out;
+    for (const Artist &a : m_fullCollection.artists()) out << a.name;
+    return out;
+}
+
+bool App::artistExists(const QString &name) const
+{
+    for (const Artist &a : m_fullCollection.artists())
+        if (a.name.compare(name.trimmed(), Qt::CaseInsensitive) == 0) return true;
+    return false;
+}
+
+QString App::mergeArtist(const QString &from, const QString &into)
+{
+    const QString a = from.trimmed(), b = into.trimmed();
+    if (a.isEmpty() || b.isEmpty()) return QStringLiteral("pick two artists");
+    if (a.compare(b, Qt::CaseInsensitive) == 0) return QStringLiteral("that is the same artist");
+    if (artistMap().resolve(b, QString()).compare(a, Qt::CaseInsensitive) == 0)   // b already ends up at a: a loop
+        return QStringLiteral("%1 was already merged into %2. split that back first").arg(b, a);
+    // key on the name as it is shown now, so it still matches after earlier merges
+    m_artistMerges.insert(a, b);
+    if (m_db.isOpen()) m_db.copyArtistRefs(a, b);
+    artistsChanged();
+    return {};
+}
+
+QString App::renameArtist(const QString &from, const QString &name)
+{
+    const QString a = from.trimmed(), n = name.simplified().left(80);
+    if (n.isEmpty()) return QStringLiteral("type a name");
+    if (n == a) return QStringLiteral("that is the name already");
+    if (n.compare(a, Qt::CaseInsensitive) == 0) {   // only the capitals change: just show the new spelling
+        m_artistMerges.insert(a, n);
+        artistsChanged();
+        return {};
+    }
+    return mergeArtist(a, n);   // a new name is a rename; an existing one takes this artist in
+}
+
+QString App::moveAlbumToArtist(const QString &albumRef, const QString &artist)
+{
+    const int cut = albumRef.indexOf(kRefSep);
+    const QString to = artist.trimmed();
+    if (cut <= 0 || to.isEmpty()) return QStringLiteral("pick an album and an artist");
+    const QString fromArtist = albumRef.left(cut), title = albumRef.mid(cut + 1);
+    if (fromArtist.compare(to, Qt::CaseInsensitive) == 0) return QStringLiteral("that album is already there");
+    m_albumMoves.insert(albumRef, to);
+    if (m_db.isOpen()) m_db.copyAlbumRefs(albumRef, to + kRefSep + title);
+    artistsChanged();
+    return {};
+}
+
+QVariantList App::mergedInto(const QString &artist) const
+{
+    QVariantList out;
+    for (auto it = m_artistMerges.constBegin(); it != m_artistMerges.constEnd(); ++it)
+        if (it.value().compare(artist, Qt::CaseInsensitive) == 0)
+            out.append(QVariantMap{{QStringLiteral("from"), it.key()}, {QStringLiteral("album"), QString()}, {QStringLiteral("ref"), QString()}});
+    for (auto it = m_albumMoves.constBegin(); it != m_albumMoves.constEnd(); ++it)
+        if (it.value().compare(artist, Qt::CaseInsensitive) == 0) {
+            const int cut = it.key().indexOf(kRefSep);
+            out.append(QVariantMap{{QStringLiteral("from"), it.key().left(cut)}, {QStringLiteral("album"), it.key().mid(cut + 1)}, {QStringLiteral("ref"), it.key()}});
+        }
+    return out;
+}
+
+QString App::unmerge(const QString &from, const QString &albumRef)
+{
+    const bool had = albumRef.isEmpty() ? m_artistMerges.remove(from) > 0 : m_albumMoves.remove(albumRef) > 0;
+    if (!had) return QStringLiteral("nothing to split back");
+    artistsChanged();
     return {};
 }
 
@@ -1286,7 +1402,7 @@ void App::reload()
     }
     m_libraryIndex.clear();
     for (int i = 0; i < m_library.size(); ++i) m_libraryIndex.insert(m_library[i].path, i);
-    m_fullCollection.build(m_library);
+    m_fullCollection.build(m_library, artistMap());
     m_mosaicArt.clear();
     for (const Album &a : m_fullCollection.albums())
         if (!a.art.isEmpty()) m_mosaicArt << QUrl::fromLocalFile(a.art).toString();
@@ -1761,7 +1877,7 @@ void App::applySearch()
             if (matchesSearch(t, tokens)) hits.append(t);
         m_songs.setTracks(hits);
     }
-    m_collection.build(m_songs.tracks());
+    m_collection.build(m_songs.tracks(), artistMap());
     m_artists.setArtists(m_collection.artists());
     QList<Album> all;
     for (const Artist &ar : m_collection.artists())

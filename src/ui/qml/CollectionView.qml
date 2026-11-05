@@ -26,6 +26,63 @@ Item {
         property var pendingPaths: []
         onAccepted: function (name) { var k = hop.createPlaylist(name, pendingPaths); pendingPaths = []; if (k) hop.selectPlaylist(k) }
     }
+    // Fixing artist names the scan got wrong: merge into another artist, rename, drag an album onto an artist.
+    MergeArtistDialog {
+        id: mergeDialog
+        onDone: function (text, undo) { root.say(text, undo) }
+    }
+    NamePrompt {
+        id: renameArtistPrompt
+        property string artist: ""
+        onAccepted: function (name) {
+            const exists = hop.artistExists(name) && name.toLowerCase() !== artist.toLowerCase()
+            if (exists) { mergeDialog.confirm(artist, name); return }   // an existing name is a merge: show who takes over
+            const r = hop.renameArtist(artist, name)
+            root.say(r === "" ? "renamed \u201c" + artist + "\u201d to \u201c" + name + "\u201d" : r, r === "" ? { from: artist, ref: "" } : null)
+        }
+    }
+    property var undoMerge: null
+    function say(text, undo) { mergeNote.text = text; undoMerge = undo; mergeNoteTimer.restart() }
+    function dropAlbumOn(artist) {
+        const r = hop.moveAlbumToArtist(dragGhost.ref, artist)
+        say(r === "" ? "moved \u201c" + dragGhost.title + "\u201d to \u201c" + artist + "\u201d" : r, r === "" ? { from: "", ref: dragGhost.ref } : null)
+    }
+    // what follows the pointer while an album is dragged onto an artist in the list
+    Rectangle {
+        id: dragGhost
+        objectName: "dragGhost"
+        property string ref: ""
+        property string title: ""
+        visible: Drag.active
+        z: 100; width: Math.min(220, ghostLabel.implicitWidth + 24); height: 34
+        color: Theme.panel; border { width: 2; color: Theme.accent }
+        Drag.active: false; Drag.keys: ["album"]; Drag.hotSpot.x: width / 2; Drag.hotSpot.y: height / 2
+        Label { id: ghostLabel; anchors.centerIn: parent; text: dragGhost.title; color: Theme.text; elide: Text.ElideRight
+                width: Math.min(implicitWidth, 196); font { family: Theme.font; pixelSize: Theme.fs(15) } }
+    }
+    // a short note after a merge or move, with the way back
+    Rectangle {
+        id: mergeNote0
+        objectName: "mergeNote"
+        visible: mergeNoteTimer.running
+        z: 90
+        anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 24 }
+        width: Math.min(parent.width - 32, mergeNote.implicitWidth + undoBtn.implicitWidth + 56); height: 48
+        color: Theme.panel; border { width: 1; color: Theme.line }
+        RowLayout {
+            anchors { fill: parent; leftMargin: 16; rightMargin: 10 }
+            spacing: 14
+            Label { id: mergeNote; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+            PlainButton {
+                id: undoBtn
+                objectName: "mergeUndo"
+                visible: root.undoMerge !== null
+                text: "undo"
+                onClicked: { if (root.undoMerge) hop.unmerge(root.undoMerge.from, root.undoMerge.ref); root.undoMerge = null; mergeNoteTimer.stop() }
+            }
+        }
+    }
+    Timer { id: mergeNoteTimer; interval: 9000 }
     // Per-profile album cover override (feature: "image" button under an album's art).
     // hop.selectAlbum() is called right before open() so selectedAlbumRef() names the right album.
     FileDialog {
@@ -342,7 +399,15 @@ Item {
                             anchors.fill: parent; acceptedButtons: Qt.RightButton
                             onClicked: function (mouse) { hop.selectArtist(ad.index); artistMenu.artist = ad.name; artistMenu.popup(ad, mouse.x, mouse.y) }
                         }
-                        background: Rectangle { color: ad.sel || ad.hovered ? Theme.hover : "transparent" }
+                        DropArea {
+                            id: adDrop
+                            objectName: "artistDrop_" + ad.index
+                            anchors.fill: parent
+                            keys: ["album"]
+                            onDropped: root.dropAlbumOn(ad.name)
+                        }
+                        background: Rectangle { color: adDrop.containsDrag || ad.sel || ad.hovered ? Theme.hover : "transparent"
+                                                border { width: adDrop.containsDrag ? 2 : 0; color: Theme.accent } }
                         contentItem: Label { text: ad.name; elide: Text.ElideRight; verticalAlignment: Text.AlignVCenter
                                              color: ad.sel ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) } }
                     }
@@ -385,6 +450,28 @@ Item {
                             onClicked: { hop.selectAlbum(index); root.phoneStep = 2 }
                             onDoubleClicked: { hop.selectAlbum(index); hop.playAlbum(0) }
                             Accessible.name: title
+                            DragHandler {   // drag an album onto an artist in the list to merge it in (desktop)
+                                id: albDrag
+                                objectName: "albumDrag_" + alb.index
+                                target: null
+                                enabled: !root.phone && !hop.guest
+                                onActiveChanged: {
+                                    if (active) {
+                                        hop.selectAlbum(alb.index)
+                                        dragGhost.ref = hop.selectedAlbumRef(); dragGhost.title = alb.title
+                                        albDrag.follow()
+                                        dragGhost.Drag.active = true
+                                    } else {
+                                        dragGhost.Drag.drop()
+                                        dragGhost.Drag.active = false
+                                    }
+                                }
+                                onCentroidChanged: if (active) albDrag.follow()
+                                function follow() {
+                                    const p = alb.mapToItem(root, centroid.position.x, centroid.position.y)
+                                    dragGhost.x = p.x - dragGhost.width / 2; dragGhost.y = p.y - dragGhost.height / 2
+                                }
+                            }
                             MouseArea {
                                 anchors.fill: parent; acceptedButtons: Qt.RightButton
                                 onClicked: function (mouse) { hop.selectAlbum(alb.index); root.albumMenu(hop.selectedAlbumPaths(), hop.selectedAlbumRef(), alb.title, function () { hop.playAlbum(0) }, alb, mouse.x, mouse.y) }
@@ -579,7 +666,8 @@ Item {
         id: artistMenu
         property string artist: ""
         property bool pinned: false
-        onAboutToShow: pinned = hop.isPinned("artist", artist)
+        property bool hasMerged: false
+        onAboutToShow: { pinned = hop.isPinned("artist", artist); hasMerged = hop.mergedInto(artist).length > 0 }
         background: Rectangle { implicitWidth: 240; color: Theme.panel; border { width: 1; color: Theme.line } }
         MenuItem {
             text: "play all by " + artistMenu.artist
@@ -596,6 +684,33 @@ Item {
         MenuItem {
             text: artistMenu.pinned ? "unpin from quickplay" : "pin to quickplay"
             onTriggered: artistMenu.pinned ? hop.unpinTile("artist", artistMenu.artist) : hop.pinTile("artist", artistMenu.artist, artistMenu.artist)
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
+            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+        }
+        MenuItem {
+            objectName: "artistMenuMerge"
+            text: "merge into another artist\u2026"
+            visible: !hop.guest
+            height: visible ? implicitHeight : 0
+            onTriggered: mergeDialog.pick(artistMenu.artist)
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
+            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+        }
+        MenuItem {
+            objectName: "artistMenuRename"
+            text: "rename artist\u2026"
+            visible: !hop.guest
+            height: visible ? implicitHeight : 0
+            onTriggered: { renameArtistPrompt.artist = artistMenu.artist; renameArtistPrompt.ask("rename artist", artistMenu.artist, "rename") }
+            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
+            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+        }
+        MenuItem {
+            objectName: "artistMenuSplit"
+            text: "split back\u2026"
+            visible: !hop.guest && artistMenu.hasMerged
+            height: visible ? implicitHeight : 0
+            onTriggered: mergeDialog.undo(artistMenu.artist)
             contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
             background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
         }

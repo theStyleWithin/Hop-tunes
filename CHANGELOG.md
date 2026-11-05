@@ -11,6 +11,13 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
   items, use "‹ folders" (or the phone's back button) to return, and "rename" gives a slot a name of your own: the
   folder on disk is never renamed, and the name is remembered (and travels with an exported profile). Ebooks and the
   other sections are unchanged.
+- **Fix wrong artist names in your collection.** Right-click an artist: **merge into another artist…** (pick the
+  one that takes over, with a swap button and a confirm step), **rename artist…** (a name that is already in the
+  list merges the two), and **split back…** to undo. You can also drag an album from an artist's albums onto another
+  artist in the list to move just that album, and repeat for the next. The artist you merge into takes over: its name
+  and cover are shown and albums with the same title combine into one. Your edits to the albums (title, cover, track
+  order, quickplay pins) follow them, nothing is deleted, your music files are never changed, and it all travels
+  with your exported profile. Desktop; phones don't have the artist list menu yet.
 
 ## [1.7.3] - 2026-11-04
 
