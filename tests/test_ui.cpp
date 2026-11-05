@@ -1243,7 +1243,6 @@ private slots:
         } restore{w, before};
         m_app->playSongs(0);
         QTRY_VERIFY(m_app->player()->isPlaying());
-        qputenv("HOPTUNES_DEBUG_MUSY", "1");
         w->setProperty("forceMobile", true);
         w->resize(800, 360);
         QTRY_COMPARE(w->width(), 800);
@@ -1254,6 +1253,11 @@ private slots:
         QTRY_VERIFY(item("musyNote") && item("musyNote")->isVisible());
         MusyNoteGame *g = m_app->musyNote();
         QTRY_COMPARE(g->state(), 0);                       // ready: waiting for the first flap
+        // a tap that arrives right after opening (the end of the tap that opened it) does not start the game
+        QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, QPoint(w->width() / 2, w->height() / 2));
+        QTest::qWait(200);
+        QCOMPARE(g->state(), 0);
+        QTest::qWait(300);                                 // after the short grace period a tap does fly
         QTRY_VERIFY(m_app->audio()->active());             // the analysis listens only while it is open
 
         // twelve coloured "covers" for the walls
@@ -1426,6 +1430,42 @@ private slots:
         QTRY_VERIFY(m_app->audio()->active());
         w->setProperty("view", QStringLiteral("collection"));
         QTRY_VERIFY(!m_app->audio()->active());
+        m_app->player()->stop();
+    }
+
+    // The phone held upright, including a narrow and a short one (the Red Magic is about 346 dp wide): everything on Now
+    // playing is inside the screen, the cover shrinks to make room and nothing is cut off at the right or the bottom.
+    void phoneNowPlayingPortraitFitsNarrowAndShortPhones()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setGameSetting(QStringLiteral("phoneViz"), false); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->hasTrack());
+        w->setProperty("forceMobile", true);
+        for (bool viz : {false, true}) {
+            m_app->setGameSetting(QStringLiteral("phoneViz"), viz);
+            for (const QSize &sz : {QSize(346, 700), QSize(346, 620), QSize(320, 560), QSize(412, 892), QSize(360, 640)}) {
+                w->resize(sz);
+                QTRY_COMPARE(w->width(), sz.width());
+                w->setProperty("view", QStringLiteral("now playing"));
+                QTest::qWait(350);
+                const QString tag = QStringLiteral("%1x%2%3").arg(sz.width()).arg(sz.height()).arg(viz ? QStringLiteral(" viz") : QString());
+                if (sz == QSize(346, 700) || sz == QSize(320, 560)) shot(qPrintable(QStringLiteral("phone-nowplaying-portrait-") + tag.simplified().replace(' ', '-')));
+                QVERIFY2(overflowing().isEmpty(), qPrintable(tag + QStringLiteral(" overflows right: ") + overflowing().join(QStringLiteral(", "))));
+                for (const char *name : {"phoneNpBack", "phoneVizToggle", "phoneGames", "phoneSeek", "phonePlay", "phoneQueueButton", "phoneVolumeButton", viz ? "phoneViz" : "phoneCover"}) {
+                    QQuickItem *it = item(name);
+                    QVERIFY2(it && it->isVisible(), qPrintable(QLatin1String(name) + QStringLiteral(" missing at ") + tag));
+                    const QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+                    QVERIFY2(r.left() >= -1 && r.right() <= w->width() + 1 && r.top() >= -1 && r.bottom() <= w->height() + 1,
+                             qPrintable(QStringLiteral("%1 is cut off at %2: x %3..%4 of %5, y %6..%7 of %8").arg(QLatin1String(name), tag)
+                                            .arg(r.left()).arg(r.right()).arg(w->width()).arg(r.top()).arg(r.bottom()).arg(w->height())));
+                }
+            }
+        }
         m_app->player()->stop();
     }
 

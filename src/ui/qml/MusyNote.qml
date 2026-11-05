@@ -23,7 +23,9 @@ FocusScope {
     readonly property bool needMusic: !hop.player.playing && game.state !== 2
     readonly property var best: { hop.gameSettings; const l = hop.gameScores("musynote"); return l.length > 0 ? l[0].score : 0 }
 
+    property real openedAt: 0                   // a tap that is still part of opening the game must not start it
     function newGame() {
+        openedAt = Date.now()
         const all = hop.mosaicArt.slice()
         for (let i = all.length - 1; i > 0; --i) { const j = Math.floor(Math.random() * (i + 1)); const t = all[i]; all[i] = all[j]; all[j] = t }
         covers = all.slice(0, 150)
@@ -31,7 +33,6 @@ FocusScope {
         game.start(Math.max(covers.length, 1))
     }
     function act(a) {
-        console.warn("musy act " + a + " state " + game.state)
         if (a === "flap") { if (game.state === 2) newGame(); else game.flap(); return }
         if (a === "pause") { if (game.state === 2) newGame(); else game.paused = !game.paused; return }
         if (a === "exit") { leave(); return }
@@ -241,7 +242,7 @@ FocusScope {
     // ---- a tap anywhere flaps ----
     MouseArea {
         anchors.fill: parent
-        onPressed: root.act("flap")
+        onPressed: if (Date.now() - root.openedAt > 450) root.act("flap")
     }
 
     // ---- HUD ----

@@ -3,6 +3,8 @@ package io.github.thestylewithin.hoptunes;
 
 import android.hardware.input.InputManager;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
@@ -18,6 +20,19 @@ public class HopActivity extends QtActivity {
     private static volatile boolean sListening = false;
     private static volatile HopActivity sInstance = null;
     private InputManager mInputManager;
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private String mLastReported = null;
+    private boolean mResumed = false;
+    // Android takes a moment to finish recognising a controller (it can announce it before its buttons are listed), and a
+    // clip-on one such as the Red Magic Gravity X more than most. So the activity also looks every 300 ms while it is in
+    // front, and tells the app the moment the list changes, instead of waiting only for Android's announcement.
+    private final Runnable mPoll = new Runnable() {
+        @Override public void run() {
+            if (!mResumed) return;
+            report();
+            mHandler.postDelayed(this, 300);
+        }
+    };
     private InputManager.InputDeviceListener mListener;
 
     // the analog axes seen as pressed (edge detection), so a trigger or the d-pad hat makes one press, not a stream
@@ -95,7 +110,26 @@ public class HopActivity extends QtActivity {
     }
 
     private void report() {
-        try { nativeDevice(controllerName()); } catch (UnsatisfiedLinkError e) { /* native side not ready yet */ }
+        final String name = controllerName();
+        if (name.equals(mLastReported)) return;          // nothing new
+        mLastReported = name;
+        try { nativeDevice(name); } catch (UnsatisfiedLinkError e) { mLastReported = null; /* native side not ready yet: try again */ }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        mResumed = true;
+        report();
+        mHandler.removeCallbacks(mPoll);
+        mHandler.postDelayed(mPoll, 300);
+    }
+
+    @Override
+    protected void onPause() {
+        mResumed = false;
+        mHandler.removeCallbacks(mPoll);
+        super.onPause();
     }
 
     private static void send(String action, boolean down, String raw) {
