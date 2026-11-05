@@ -788,6 +788,14 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
 
         QVERIFY(click("subTab_videos"));
+        // each folder is a slot, like pictures: the shelf first, the folder's videos once it is opened
+        QTRY_VERIFY(item("videoSlot_0") != nullptr && item("videoSlot_0")->isVisible());
+        QCOMPARE(m_app->videoSlots().size(), 1);
+        QCOMPARE(m_app->videoSlots().first().toMap().value("name").toString(), QStringLiteral("Alpha"));
+        QVERIFY(!item("videoTile_0") || !item("videoTile_0")->isVisible());
+        shot("m7-video-slots");
+        QVERIFY(click("videoSlot_0"));
+        QTRY_VERIFY(!m_app->videoSlot().isEmpty());
         QTRY_VERIFY(item("videoTile_0") != nullptr);
         QVERIFY(item("videoTile_0")->isVisible());
         shot("m7-videos");
@@ -825,7 +833,9 @@ private slots:
         m_app->addVideoCategoryFolder(QStringLiteral("anime"), QUrl::fromLocalFile(dir));
         QTRY_COMPARE_WITH_TIMEOUT(m_app->videos()->count(), 1, 15000);
         QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
-        QVERIFY(item("videoTile_0") != nullptr);
+        QTRY_VERIFY(item("videoSlot_0") != nullptr && item("videoSlot_0")->isVisible());   // its folder is a slot too
+        QVERIFY(click("videoSlot_0"));
+        QTRY_VERIFY(item("videoTile_0") != nullptr && item("videoTile_0")->isVisible());
         shot("v-anime");
         QCOMPARE(m_app->categoryOfVideo(dir + QStringLiteral("/ep1.mkv")), QStringLiteral("anime"));
         QCOMPARE(m_app->categoryOfVideo(m_home.filePath(QStringLiteral("Library/Alpha/clip.mkv"))), QStringLiteral("movies"));
@@ -848,7 +858,8 @@ private slots:
     {
         window()->setProperty("view", QStringLiteral("collection"));
         QVERIFY(click("subTab_videos"));
-        QTRY_VERIFY(item("videoTile_0") != nullptr);
+        if (m_app->videoSlot().isEmpty()) { QTRY_VERIFY(item("videoSlot_0") != nullptr); QVERIFY(click("videoSlot_0")); }
+        QTRY_VERIFY(item("videoTile_0") != nullptr && item("videoTile_0")->isVisible());
         QCOMPARE(m_app->videoDetailRow(), -1);
         QVERIFY(click("videoTile_0"));
         QTRY_COMPARE(m_app->videoDetailRow(), 0);
@@ -1282,6 +1293,15 @@ private slots:
         QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
 
         cv->setProperty("collectionTab", QStringLiteral("videos"));
+        m_app->closeVideoSlot();
+        back(); QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
+        // an open folder slot closes first, and only then does back leave the tab
+        cv->setProperty("collectionTab", QStringLiteral("videos"));
+        QTRY_VERIFY(!m_app->videoSlots().isEmpty());
+        m_app->openVideoSlot(m_app->videoSlots().first().toMap().value("dir").toString());
+        QVERIFY(!m_app->videoSlot().isEmpty());
+        back(); QVERIFY(m_app->videoSlot().isEmpty());
+        QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("videos"));
         back(); QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
 
         w->setProperty("view", QStringLiteral("settings"));
@@ -1420,6 +1440,58 @@ private slots:
 
         m_app->removeSectionFolder(QStringLiteral("pictures"), QFileInfo(dir).canonicalFilePath());
         QTRY_COMPARE(m_app->pictures()->count(), 0);
+        QVERIFY(click("subTab_music"));
+    }
+
+    // Audiobooks and podcasts get folder slots like pictures: one named slot per folder, open it for its own items.
+    void audiobooksAndPodcastsHaveFolderSlots()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        for (const QString kind : {QStringLiteral("audiobooks"), QStringLiteral("podcasts")}) {
+            const QString root = m_home.filePath(QStringLiteral("Shelf_") + kind);
+            for (const char *f : {"Dune/ch1.mp3", "Dune/ch2.mp3", "Emma/ch1.mp3"}) {
+                QVERIFY(QDir().mkpath(QFileInfo(root + QLatin1Char('/') + QLatin1String(f)).absolutePath()));
+                QVERIFY(writeWav(root + QLatin1Char('/') + QLatin1String(f), 1500));
+            }
+            m_app->addSectionFolder(kind, QUrl::fromLocalFile(root));
+            auto count = [&] { return kind == QLatin1String("audiobooks") ? m_app->audiobooks()->count() : m_app->podcasts()->count(); };
+            QTRY_COMPARE_WITH_TIMEOUT(count(), 3, 15000);
+            const QVariantList shelf = m_app->sectionSlots().value(kind).toList();
+            QCOMPARE(shelf.size(), 2);
+            QCOMPARE(shelf.at(0).toMap().value("name").toString(), QStringLiteral("Dune"));
+            QCOMPARE(shelf.at(0).toMap().value("count").toInt(), 2);
+
+            QVERIFY(click(qPrintable(QStringLiteral("subTab_") + kind)));
+            QTRY_VERIFY(item(qPrintable(QStringLiteral("sectionSlot_%1_0").arg(kind))) != nullptr);
+            QVERIFY(m_app->sectionOpenSlot().value(kind).toString().isEmpty());
+            shot(qPrintable(QStringLiteral("slots-") + kind));
+            const QString dune = shelf.at(0).toMap().value("dir").toString();
+            m_app->openSlot(kind, dune);
+            QCOMPARE(m_app->sectionSlotItems(kind)->count(), 2);
+            QTRY_VERIFY(item(qPrintable(QStringLiteral("sectionRow_%1_1").arg(kind))) != nullptr);
+            // a row in the open slot maps back to its row in the whole section (what playing needs)
+            const QString second = m_app->sectionSlotItems(kind)->pathAt(1);
+            QVERIFY(m_app->sectionRow(kind, second) >= 0);
+            QCOMPARE((kind == QLatin1String("audiobooks") ? m_app->audiobooks() : m_app->podcasts())->pathAt(m_app->sectionRow(kind, second)), second);
+
+            auto nameOf = [&](const QString &dir) {
+                for (const QVariant &s : m_app->sectionSlots().value(kind).toList())
+                    if (s.toMap().value("dir").toString() == dir) return s.toMap().value("name").toString();
+                return QString();
+            };
+            m_app->renameSlot(dune, QStringLiteral("  The   Dune books "));
+            QCOMPARE(nameOf(dune), QStringLiteral("The Dune books"));
+            const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+            QCOMPARE(st.value("pictureAlbumNames").toObject().value(dune).toString(), QStringLiteral("The Dune books"));
+            m_app->closeSlot(kind);
+            QVERIFY(m_app->sectionOpenSlot().value(kind).toString().isEmpty());
+            m_app->renameSlot(dune, QString());
+            QCOMPARE(nameOf(dune), QStringLiteral("Dune"));
+
+            m_app->removeSectionFolder(kind, QFileInfo(root).canonicalFilePath());
+            QTRY_COMPARE(count(), 0);
+            QVERIFY(m_app->sectionSlots().value(kind).toList().isEmpty());
+        }
         QVERIFY(click("subTab_music"));
     }
 

@@ -20,6 +20,12 @@ Item {
         other: "everything else, like videos you saved from YouTube to keep."
     })
     readonly property string cat: hop.videoCategory
+    readonly property bool slotOpen: hop.videoSlot !== ""
+    readonly property var openSlotInfo: {
+        const list = hop.videoSlots
+        for (let i = 0; i < list.length; ++i) if (list[i].dir === hop.videoSlot) return list[i]
+        return ({ name: "", count: 0 })
+    }
 
     // Per-profile thumbnail override, like the album "image" button in collection › music.
     // The row is set right before open().
@@ -79,6 +85,48 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
+            AbstractButton {
+                id: slotBack
+                objectName: "videoSlotBack"
+                visible: root.slotOpen
+                hoverEnabled: true
+                onClicked: hop.closeVideoSlot()
+                Accessible.name: "back to folders"
+                contentItem: Label { text: "\u2039 folders"; color: slotBack.hovered ? Theme.accent : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                background: Item {}
+            }
+            Label {
+                visible: root.slotOpen && !slotHeadEdit.visible
+                text: root.openSlotInfo.name
+                color: Theme.text; elide: Text.ElideRight; Layout.maximumWidth: 420
+                font { family: Theme.font; pixelSize: Theme.fs(20) }
+            }
+            TextField {
+                id: slotHeadEdit
+                objectName: "videoSlotNameEdit"
+                visible: false
+                implicitWidth: 320
+                maximumLength: 60
+                selectByMouse: true
+                color: Theme.text
+                font { family: Theme.font; pixelSize: Theme.fs(18) }
+                placeholderText: "folder name"; placeholderTextColor: Theme.dim
+                onAccepted: { hop.renameSlot(hop.videoSlot, text); visible = false }
+                Keys.onEscapePressed: visible = false
+                onActiveFocusChanged: if (!activeFocus) visible = false
+                background: Rectangle { color: Theme.panel; border { width: 2; color: Theme.accent } }
+            }
+            AbstractButton {
+                id: slotHeadRename
+                objectName: "videoSlotRename"
+                visible: root.slotOpen && !slotHeadEdit.visible && !hop.guest
+                hoverEnabled: true
+                onClicked: { slotHeadEdit.text = root.openSlotInfo.name; slotHeadEdit.visible = true; slotHeadEdit.forceActiveFocus(); slotHeadEdit.selectAll() }
+                Accessible.name: "rename folder"
+                contentItem: Label { text: "rename"; color: slotHeadRename.hovered ? Theme.accent : Theme.muted
+                                     font { family: Theme.font; pixelSize: Theme.fs(13); underline: slotHeadRename.hovered } }
+                background: Item {}
+            }
             Label {
                 visible: hop.videoScanning
                 text: hop.videoScanTotal > 0 ? "scanning videos " + hop.videoScanDone + " / " + hop.videoScanTotal : "scanning videos…"
@@ -87,7 +135,8 @@ Item {
             Item { Layout.fillWidth: true }
             Label {
                 visible: !hop.videoScanning && hop.videos.count > 0 && !Theme.compact
-                text: hop.videos.count + (hop.videos.count === 1 ? " video" : " videos")
+                text: root.slotOpen ? hop.videos.count + (hop.videos.count === 1 ? " video" : " videos")
+                                    : hop.videoSlots.length + (hop.videoSlots.length === 1 ? " folder, " : " folders, ") + hop.videos.count + (hop.videos.count === 1 ? " video" : " videos")
                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
         }
@@ -116,9 +165,21 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
+        // each folder is a slot (like pictures): the shelf first, the folder's videos once one is open
+        FolderSlots {
+            objectName: "videoSlots"
+            visible: hop.videos.count > 0 && !root.slotOpen
+            Layout.fillWidth: true; Layout.fillHeight: true
+            slots: root.slotOpen ? [] : hop.videoSlots
+            prefix: "videoSlot"
+            aspect: 9 / 16
+            onOpened: function (dir) { hop.openVideoSlot(dir) }
+            onRenamed: function (dir, name) { hop.renameSlot(dir, name) }
+        }
+
         GridView {
             id: grid
-            visible: hop.videos.count > 0
+            visible: hop.videos.count > 0 && root.slotOpen
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
             model: hop.videos

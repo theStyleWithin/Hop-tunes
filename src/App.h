@@ -52,6 +52,13 @@ class App : public QObject {
     Q_PROPERTY(QVariantList pictureAlbums READ pictureAlbums NOTIFY pictureAlbumsChanged)   // one per folder: dir, name, count, cover
     Q_PROPERTY(QString pictureAlbum READ pictureAlbum NOTIFY pictureAlbumChanged)   // the open album's folder, "" = the album list
     Q_PROPERTY(hop::SectionListModel *pictureAlbumItems READ pictureAlbumItems CONSTANT)   // the pictures of the open album
+    // Folder slots (like picture albums) for audiobooks and podcasts: kind -> [{dir, name, renamed, count, cover}],
+    // kind -> the open slot's folder ("" = the slot list), and the items of that open slot.
+    Q_PROPERTY(QVariantMap sectionSlots READ sectionSlots NOTIFY sectionSlotsChanged)
+    Q_PROPERTY(QVariantMap sectionOpenSlot READ sectionOpenSlot NOTIFY sectionSlotsChanged)
+    // Videos: the current category's folders as slots, and the open one ("" = the slot list).
+    Q_PROPERTY(QVariantList videoSlots READ videoSlots NOTIFY videoSlotsChanged)
+    Q_PROPERTY(QString videoSlot READ videoSlot NOTIFY videoSlotsChanged)
     Q_PROPERTY(hop::SectionListModel *audiobooks READ audiobooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *ebooks READ ebooks CONSTANT)
     Q_PROPERTY(hop::SectionListModel *podcasts READ podcasts CONSTANT)
@@ -159,6 +166,10 @@ public:
     QVariantList pictureAlbums() const { return m_pictureAlbums; }
     QString pictureAlbum() const { return m_pictureAlbum; }
     SectionListModel *pictureAlbumItems() { return &m_albumItems; }
+    QVariantMap sectionSlots() const { return m_sectionSlots; }
+    QVariantMap sectionOpenSlot() const { return m_sectionOpenSlot; }
+    QVariantList videoSlots() const { return m_videoSlots; }
+    QString videoSlot() const { return m_videoSlot; }
     SectionListModel *audiobooks() { return &m_sec[1]->model; }
     SectionListModel *ebooks() { return &m_sec[2]->model; }
     SectionListModel *podcasts() { return &m_sec[3]->model; }
@@ -349,6 +360,13 @@ public:
     Q_INVOKABLE void removeVideoFolder(const QString &path);
     Q_INVOKABLE void openPictureAlbum(const QString &dir);
     Q_INVOKABLE void closePictureAlbum();
+    Q_INVOKABLE void openSlot(const QString &kind, const QString &dir);      // audiobooks, podcasts
+    Q_INVOKABLE void closeSlot(const QString &kind);
+    Q_INVOKABLE hop::SectionListModel *sectionSlotItems(const QString &kind);   // the open slot's items
+    Q_INVOKABLE int sectionRow(const QString &kind, const QString &path) const;  // row in the whole section
+    Q_INVOKABLE void renameSlot(const QString &dir, const QString &name);       // any folder slot; "" = the folder's name
+    Q_INVOKABLE void openVideoSlot(const QString &dir);
+    Q_INVOKABLE void closeVideoSlot();
     Q_INVOKABLE void renamePictureAlbum(const QString &dir, const QString &name);   // "" goes back to the folder's name
     Q_INVOKABLE void addSectionFolder(const QString &kind, const QUrl &folder);   // kind: pictures | audiobooks | ebooks | podcasts
     Q_INVOKABLE void removeSectionFolder(const QString &kind, const QString &path);
@@ -389,6 +407,8 @@ public:
 signals:
     void foldersChanged();
     void pictureAlbumsChanged();
+    void sectionSlotsChanged();
+    void videoSlotsChanged();
     void pictureAlbumChanged();
     void videoCategoryChanged();
     void sectionFoldersChanged();
@@ -527,6 +547,8 @@ private:
         SectionListModel model;
         SectionScanner scanner;
         QStringList folders;
+        SectionListModel slotItems{kind};   // the items of the open folder slot (audiobooks, podcasts)
+        QString openSlot;
         int done = 0;
         int total = 0;
         bool rescanPending = false;
@@ -547,6 +569,12 @@ private:
     VideoIndex m_videoIndex;
     VideoScanner m_videoScanner{&m_videoIndex};
     VideoListModel m_videos;
+    QList<Video> m_catVideos;        // every video of the current category, before a slot narrows it
+    QVariantList m_videoSlots;
+    QString m_videoSlot;
+    QVariantMap m_sectionSlots, m_sectionOpenSlot;
+    void resetSlots();
+    void rebuildSectionSlots(SectionState &sec, const QList<SectionItem> &items, const QHash<QString, double> &progress);
     GstVideoPlayer m_gstVideo;
     LibraryWatcher m_watcher;
     int m_videoScanDone = 0;

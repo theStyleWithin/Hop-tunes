@@ -5,6 +5,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- **Folder slots in videos, audiobooks and podcasts**, like pictures already had. Every video category (movies,
+  shows, cartoons, anime, other videos), audiobooks and podcasts now show one slot per folder (a cover or the folder's
+  first letter, its name and how many items it holds) instead of one big pile. Open a slot to see just that folder's
+  items, use "‹ folders" (or the phone's back button) to return, and "rename" gives a slot a name of your own: the
+  folder on disk is never renamed, and the name is remembered (and travels with an exported profile). Ebooks and the
+  other sections are unchanged.
 - **Fix wrong artist names in your collection.** Right-click an artist: **merge into another artist…** (pick the
   one that takes over, with a swap button and a confirm step), **rename artist…** (a name that is already in the
   list merges the two), and **split back…** to undo. You can also drag an album from an artist's albums onto another

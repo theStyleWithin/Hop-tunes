@@ -24,13 +24,19 @@ Item {
     readonly property var folders: hop.sectionFolders[kind] || []
 
     // Pictures are shown as albums, one per folder; an open album shows its own pictures.
-    readonly property bool albumList: kind === "pictures" && hop.pictureAlbum === ""
-    readonly property bool albumOpen: kind === "pictures" && hop.pictureAlbum !== ""
+    // Audiobooks and podcasts get the same folder slots (each folder a named slot); ebooks stay one list.
+    readonly property bool slotted: kind === "pictures" || kind === "audiobooks" || kind === "podcasts"
+    readonly property var slotList: kind === "pictures" ? hop.pictureAlbums : (hop.sectionSlots[kind] || [])
+    readonly property string openDir: kind === "pictures" ? hop.pictureAlbum : (hop.sectionOpenSlot[kind] || "")
+    readonly property bool albumList: slotted && openDir === ""
+    readonly property bool albumOpen: slotted && openDir !== ""
     readonly property var openAlbum: {
-        const list = hop.pictureAlbums
-        for (let i = 0; i < list.length; ++i) if (list[i].dir === hop.pictureAlbum) return list[i]
+        const list = slotList
+        for (let i = 0; i < list.length; ++i) if (list[i].dir === openDir) return list[i]
         return ({ name: "", count: 0 })
     }
+    function openSlotDir(dir) { if (kind === "pictures") hop.openPictureAlbum(dir); else hop.openSlot(kind, dir) }
+    function closeSlotDir() { if (kind === "pictures") hop.closePictureAlbum(); else hop.closeSlot(kind) }
 
     ColumnLayout {
         anchors.fill: parent
@@ -48,9 +54,9 @@ Item {
                 objectName: "pictureAlbumBack"
                 visible: root.albumOpen
                 hoverEnabled: true
-                onClicked: hop.closePictureAlbum()
+                onClicked: root.closeSlotDir()
                 Accessible.name: "back to albums"
-                contentItem: Label { text: "‹ albums"; color: albumBack.hovered ? Theme.accent : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                contentItem: Label { text: root.kind === "pictures" ? "‹ albums" : "‹ folders"; color: albumBack.hovered ? Theme.accent : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(16) } }
                 background: Item {}
             }
             Label {
@@ -68,7 +74,7 @@ Item {
                 color: Theme.text
                 font { family: Theme.font; pixelSize: Theme.fs(18) }
                 placeholderText: "album name"; placeholderTextColor: Theme.dim
-                onAccepted: { hop.renamePictureAlbum(hop.pictureAlbum, text); visible = false }
+                onAccepted: { hop.renameSlot(root.openDir, text); visible = false }
                 Keys.onEscapePressed: visible = false
                 onActiveFocusChanged: if (!activeFocus) visible = false
                 background: Rectangle { color: Theme.panel; border { width: 2; color: Theme.accent } }
@@ -87,7 +93,7 @@ Item {
             Item { Layout.fillWidth: true }
             Label {
                 visible: !root.status.scanning && root.albumList && root.model.count > 0
-                text: hop.pictureAlbums.length + (hop.pictureAlbums.length === 1 ? " album, " : " albums, ") + root.model.count + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
+                text: root.slotList.length + (root.kind === "pictures" ? (root.slotList.length === 1 ? " album, " : " albums, ") : (root.slotList.length === 1 ? " folder, " : " folders, ")) + root.model.count + " " + (root.model.count === 1 ? root.meta.noun : root.meta.plural)
                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
             }
             Label {
@@ -139,10 +145,10 @@ Item {
         GridView {
             id: albums
             objectName: "pictureAlbums"
-            visible: root.albumList && root.model.count > 0
+            visible: root.albumList && root.kind === "pictures" && root.model.count > 0
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
-            model: root.albumList ? hop.pictureAlbums : []
+            model: root.albumList && root.kind === "pictures" ? hop.pictureAlbums : []
             readonly property int columns: Math.max(2, Math.floor(width / 260))
             cellWidth: width / columns; cellHeight: cellWidth * 3 / 4 + 52
             boundsBehavior: Flickable.StopAtBounds
@@ -215,6 +221,18 @@ Item {
             }
         }
 
+        // audiobooks, podcasts: the same shelf, one slot per folder
+        FolderSlots {
+            objectName: "sectionSlots_" + root.kind
+            visible: root.albumList && root.kind !== "pictures" && root.model.count > 0
+            Layout.fillWidth: true; Layout.fillHeight: true
+            slots: root.kind !== "pictures" && root.albumList ? root.slotList : []
+            prefix: "sectionSlot_" + root.kind
+            aspect: 3 / 4
+            onOpened: function (dir) { root.openSlotDir(dir) }
+            onRenamed: function (dir, name) { hop.renameSlot(dir, name) }
+        }
+
         // an open album: a grid of thumbnails
         GridView {
             id: grid
@@ -262,10 +280,10 @@ Item {
         // audiobooks, ebooks, podcasts: a list with progress
         ListView {
             id: list
-            visible: root.kind !== "pictures" && root.model.count > 0
+            visible: root.kind !== "pictures" && root.model.count > 0 && (root.kind === "ebooks" || root.albumOpen)
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
-            model: root.kind !== "pictures" ? root.model : null
+            model: root.kind === "ebooks" ? root.model : (root.albumOpen ? hop.sectionSlotItems(root.kind) : null)
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar {}
             delegate: AbstractButton {
@@ -281,7 +299,7 @@ Item {
                 objectName: "sectionRow_" + root.kind + "_" + index
                 width: list.width; height: 64
                 hoverEnabled: true
-                onClicked: root.itemActivated(row.index)
+                onClicked: root.itemActivated(root.kind === "ebooks" ? row.index : hop.sectionRow(root.kind, row.path))
                 Accessible.name: title
                 background: Rectangle { color: row.hovered ? Theme.hover : "transparent" }
                 contentItem: ColumnLayout {
