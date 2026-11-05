@@ -50,6 +50,14 @@ static const QChar kRefSep(0x1f);
 App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 {
     m_scanner.setArtCacheDir(Paths::artCacheDir());
+    // the music, as the visualizer and the games hear it
+    m_audio.setAvailable(m_player.analysisAvailable());
+    connect(&m_player, &Player::spectrum, &m_audio, &AudioAnalyzer::onSpectrum);
+    connect(&m_audio, &AudioAnalyzer::activeChanged, this, [this] { m_player.setAnalysisEnabled(m_audio.active()); });
+    connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
+    connect(&m_audio, &AudioAnalyzer::frame, &m_albumFall, [this] { m_albumFall.setMusic(m_audio.bpm(), m_audio.bass()); });
+    connect(&m_player, &Player::playingChanged, &m_albumFall, [this] { m_albumFall.setPlaying(m_player.isPlaying()); });
+    m_albumFall.setAnalysis(m_audio.available());
     connect(&m_scanner, &Scanner::started, this, &App::scanningChanged);
     connect(&m_scanner, &Scanner::started, this, [] { DiagLog::note(QStringLiteral("music scan started")); });
     connect(&m_scanner, &Scanner::progress, this, [this](int done, int total) {
@@ -388,6 +396,8 @@ void App::activate(const QString &id, bool guest)
     m_player.setShuffle(s.value(QStringLiteral("shuffle")).toBool(false));
     m_theme = s.value(QStringLiteral("theme")).toString(QStringLiteral("dark"));
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
+    m_nowPlaying = guest ? QJsonObject{} : s.value(QStringLiteral("nowPlaying")).toObject();
+    emit gameSettingsChanged();
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
@@ -471,6 +481,9 @@ void App::leaveProfile()
     m_guest = false;
     m_theme = QStringLiteral("dark");
     m_reduceMotion = false;
+    m_nowPlaying = {};
+    m_albumFall.setPaused(true);
+    emit gameSettingsChanged();
     m_videoViewStyle = QStringLiteral("window");
     m_videoOrientation = QStringLiteral("auto");
     m_navStyle = QStringLiteral("bar");
@@ -526,6 +539,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("shuffle"), m_player.shuffle());
     s.insert(QStringLiteral("theme"), m_theme);
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
+    s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
     s.insert(QStringLiteral("navStyle"), m_navStyle);
@@ -747,6 +761,70 @@ QString App::importProfile(const QUrl &file, const QString &name, const QString 
     emit profilesChanged();
     activate(id, false);
     return {};
+}
+
+// ---- Now playing: visualizer, games, high scores ------------------------------------------------
+
+QVariantMap App::gameSettings() const
+{
+    QVariantMap out{{QStringLiteral("vizStyle"), QStringLiteral("bars")}, {QStringLiteral("vizColor"), QStringLiteral("accent")},
+                    {QStringLiteral("vizIntensity"), 1.0}, {QStringLiteral("vizBackdrop"), false}, {QStringLiteral("chat"), false},
+                    {QStringLiteral("stage"), QStringLiteral("art")}};
+    const QJsonObject o = m_nowPlaying.value(QStringLiteral("settings")).toObject();
+    for (auto it = o.constBegin(); it != o.constEnd(); ++it) if (out.contains(it.key())) out.insert(it.key(), it.value().toVariant());
+    return out;
+}
+
+void App::setGameSetting(const QString &key, const QVariant &value)
+{
+    static const QSet<QString> known = {QStringLiteral("vizStyle"), QStringLiteral("vizColor"), QStringLiteral("vizIntensity"),
+                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage")};
+    if (!known.contains(key)) return;
+    QVariant v = value;
+    if (key == QLatin1String("vizIntensity")) v = qBound(0.3, value.toDouble(), 2.0);
+    else if (key == QLatin1String("vizBackdrop") || key == QLatin1String("chat")) v = value.toBool();
+    else {
+        static const QHash<QString, QStringList> allowed = {{QStringLiteral("vizStyle"), {QStringLiteral("bars"), QStringLiteral("mirror"), QStringLiteral("rings")}},
+            {QStringLiteral("vizColor"), {QStringLiteral("accent"), QStringLiteral("rainbow"), QStringLiteral("white")}},
+            {QStringLiteral("stage"), {QStringLiteral("art"), QStringLiteral("visualizer"), QStringLiteral("albumfall")}}};
+        if (!allowed.value(key).contains(value.toString())) return;
+        v = value.toString();
+    }
+    QJsonObject o = m_nowPlaying.value(QStringLiteral("settings")).toObject();
+    if (o.value(key).toVariant() == v) return;
+    o.insert(key, QJsonValue::fromVariant(v));
+    m_nowPlaying.insert(QStringLiteral("settings"), o);
+    saveProfileSettings();
+    emit gameSettingsChanged();
+}
+
+QVariantList App::gameScores(const QString &game) const
+{
+    QVariantList out;
+    for (const QJsonValue &v : m_nowPlaying.value(QStringLiteral("scores")).toObject().value(game).toArray()) out.append(v.toObject().toVariantMap());
+    return out;
+}
+
+int App::submitScore(const QString &game, int score, int lines)
+{
+    if (m_guest || score <= 0 || game.isEmpty() || game.size() > 30) return 0;
+    QJsonObject all = m_nowPlaying.value(QStringLiteral("scores")).toObject();
+    QJsonArray list = all.value(game).toArray();
+    QVector<QJsonObject> rows;
+    for (const QJsonValue &v : list) rows.append(v.toObject());
+    QJsonObject mine{{QStringLiteral("score"), score}, {QStringLiteral("lines"), lines}, {QStringLiteral("at"), double(QDateTime::currentMSecsSinceEpoch())}};
+    rows.append(mine);
+    std::stable_sort(rows.begin(), rows.end(), [](const QJsonObject &a, const QJsonObject &b) { return a.value(QStringLiteral("score")).toInt() > b.value(QStringLiteral("score")).toInt(); });
+    int rank = 0;
+    for (int i = 0; i < rows.size(); ++i) if (rows[i] == mine) { rank = i + 1; break; }
+    if (rank == 0 || rank > 5) return 0;      // keeps the top five
+    QJsonArray top;
+    for (int i = 0; i < qMin(5, int(rows.size())); ++i) top.append(rows[i]);
+    all.insert(game, top);
+    m_nowPlaying.insert(QStringLiteral("scores"), all);
+    saveProfileSettings();
+    emit gameSettingsChanged();
+    return rank;
 }
 
 QString App::version() const { return QCoreApplication::applicationVersion(); }

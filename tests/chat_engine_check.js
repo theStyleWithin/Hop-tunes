@@ -35,6 +35,19 @@
   }
   out.invented = invented;
 
+  // Beside a song the chat talks about music, from the song's details, and never about films.
+  var song = context({ music: true, meta: { title: 'Morning Tide', year: '2017', album: 'Harbour', genre: 'Indie' }, cast: [{ name: 'Lanterns', role: '' }] }, 200000);
+  var songT = '', filmWords = 0, songMine = 0;
+  for (var s3 = 0; s3 < 400; s3++) {
+    var l3 = messagesAt('song1', s3, song);
+    for (var k = 0; k < l3.length; k++) {
+      var tt = txt(l3[k]); songT += tt + ' ';
+      if (/movie|film|popcorn|credits|scene|watch party|director/i.test(tt)) filmWords++;
+      if (/Morning Tide|Lanterns|Harbour|2017|indie/i.test(tt)) songMine++;
+    }
+  }
+  out.songMine = songMine; out.songFilmWords = filmWords; out.songTalks = songT.length > 200;
+
   // Answers come from what the page says, and only to the thing that was asked.
   function ask(q, ctx) { return replies('a', 'me', q, 1, ctx).map(txt).join(' | '); }
   out.director = /Frank Coraci/.test(ask('who is the director?', c));

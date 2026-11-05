@@ -111,19 +111,58 @@ bool Player::replayGainAvailable() const
     return f != nullptr;
 }
 
+bool Player::analysisAvailable() const
+{
+#ifdef HOPTUNES_HAVE_GST
+    GstElementFactory *f = gst_element_factory_find("spectrum");
+    if (f) gst_object_unref(f);
+    return f != nullptr;
+#else
+    return false;
+#endif
+}
+
 GstElement *Player::makeGainFilter() const
 {
-    if (m_rgMode == GainOff || !replayGainAvailable()) return nullptr;
+    const bool gain = m_rgMode != GainOff && replayGainAvailable();
+    const bool spectrum = analysisAvailable();
+    if (!gain && !spectrum) return nullptr;
     GError *err = nullptr;
     // rglimiter only exists alongside rgvolume (same plugin); it keeps boosted peaks from clipping.
-    GstElement *f = gst_parse_bin_from_description("rgvolume name=rg ! rglimiter", TRUE, &err);
+    // The spectrum element only measures: it passes the audio through untouched.
+    QByteArray desc;
+    if (gain) desc += "rgvolume name=rg ! rglimiter";
+    if (gain && spectrum) desc += " ! ";
+    if (spectrum)
+        desc += QByteArray("spectrum name=spec bands=32 threshold=-80 interval=33000000 post-messages=")
+              + (m_analysis ? "true" : "false") + " message-magnitude=true message-phase=false";
+    GstElement *f = gst_parse_bin_from_description(desc.constData(), TRUE, &err);
     if (err) { g_error_free(err); return nullptr; }
-    if (GstElement *rg = gst_bin_get_by_name(GST_BIN(f), "rg")) {
-        // Songs without gain tags get a small cut, so they sit near tagged ones (~89 dB target).
-        g_object_set(rg, "album-mode", m_rgMode == GainAlbum, "pre-amp", m_rgPreamp, "fallback-gain", -6.0, nullptr);
-        gst_object_unref(rg);
-    }
+    if (gain)
+        if (GstElement *rg = gst_bin_get_by_name(GST_BIN(f), "rg")) {
+            // Songs without gain tags get a small cut, so they sit near tagged ones (~89 dB target).
+            g_object_set(rg, "album-mode", m_rgMode == GainAlbum, "pre-amp", m_rgPreamp, "fallback-gain", -6.0, nullptr);
+            gst_object_unref(rg);
+        }
     return f;
+}
+
+void Player::setAnalysisEnabled(bool on)
+{
+    if (on == m_analysis) return;
+    m_analysis = on;
+#ifdef HOPTUNES_HAVE_GST
+    if (!m_playbin) return;
+    GstElement *filter = nullptr;
+    g_object_get(m_playbin, "audio-filter", &filter, nullptr);
+    if (!filter) return;
+    if (GST_IS_BIN(filter))
+        if (GstElement *spec = gst_bin_get_by_name(GST_BIN(filter), "spec")) {
+            g_object_set(spec, "post-messages", on ? TRUE : FALSE, nullptr);
+            gst_object_unref(spec);
+        }
+    gst_object_unref(filter);
+#endif
 }
 
 void Player::applyGainFilter(GstElement *bin)
@@ -593,6 +632,21 @@ void Player::pollBus()
         case GST_MESSAGE_DURATION_CHANGED:
             updatePosition();
             break;
+#ifdef HOPTUNES_HAVE_GST
+        case GST_MESSAGE_ELEMENT: {
+            const GstStructure *s = gst_message_get_structure(msg);
+            if (m_analysis && s && gst_structure_has_name(s, "spectrum")) {
+                const GValue *mag = gst_structure_get_value(s, "magnitude");
+                if (mag && GST_VALUE_HOLDS_LIST(mag)) {
+                    const guint n = gst_value_list_get_size(mag);
+                    QVector<float> mags(static_cast<qsizetype>(n));
+                    for (guint i = 0; i < n; ++i) mags[int(i)] = g_value_get_float(gst_value_list_get_value(mag, i));
+                    emit spectrum(mags);
+                }
+            }
+            break;
+        }
+#endif
         default:
             break;
         }

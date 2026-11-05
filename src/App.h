@@ -16,6 +16,9 @@
 #include "library/VideoListModel.h"
 #include "library/VideoScanner.h"
 #include "playback/GstVideoPlayer.h"
+#include "game/AlbumFall.h"
+#include "game/AudioAnalyzer.h"
+#include "game/Gamepad.h"
 #include "playback/Player.h"
 
 #include <QJsonObject>
@@ -39,6 +42,12 @@ class App : public QObject {
     Q_OBJECT
     Q_PROPERTY(hop::TrackListModel *songs READ songs CONSTANT)
     Q_PROPERTY(hop::Player *player READ player CONSTANT)
+    // Now playing: the visualizer and the games listen to the music through `audio`; `albumFall` is the game and
+    // `gamepad` a connected controller. `gameSettings` holds this profile's choices (visualizer, backdrop, chat).
+    Q_PROPERTY(hop::AudioAnalyzer *audio READ audio CONSTANT)
+    Q_PROPERTY(hop::AlbumFall *albumFall READ albumFall CONSTANT)
+    Q_PROPERTY(hop::Gamepad *gamepad READ gamepad CONSTANT)
+    Q_PROPERTY(QVariantMap gameSettings READ gameSettings NOTIFY gameSettingsChanged)
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
     // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
     Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
@@ -147,6 +156,13 @@ public:
 
     TrackListModel *songs() { return &m_songs; }
     Player *player() { return &m_player; }
+    AudioAnalyzer *audio() { return &m_audio; }
+    AlbumFall *albumFall() { return &m_albumFall; }
+    Gamepad *gamepad() { return &m_gamepad; }
+    QVariantMap gameSettings() const;
+    Q_INVOKABLE void setGameSetting(const QString &key, const QVariant &value);   // visualizer, backdrop, chat...
+    Q_INVOKABLE QVariantList gameScores(const QString &game) const;               // best first: [{score, lines, at}]
+    Q_INVOKABLE int submitScore(const QString &game, int score, int lines);       // the rank it earned (1 = best), 0 = none
     QStringList folders() const { return m_folders; }
     QStringList videoFolders() const { return m_videoFoldersOwn ? m_videoFolders : m_folders; }   // the "movies" folders
     QStringList allVideoFolders() const;   // movies + every other category's folders: what gets scanned
@@ -379,6 +395,7 @@ public:
 signals:
     void foldersChanged();
     void pictureAlbumsChanged();
+    void gameSettingsChanged();
     void pictureAlbumChanged();
     void videoCategoryChanged();
     void sectionFoldersChanged();
@@ -483,6 +500,10 @@ private:
     Scanner m_scanner{&m_index};
     TrackListModel m_songs;
     Player m_player;
+    AudioAnalyzer m_audio;
+    AlbumFall m_albumFall;
+    Gamepad m_gamepad;
+    QJsonObject m_nowPlaying;   // this profile's Now playing choices and high scores (settings.json "nowPlaying")
     QStringList m_folders;
     QStringList m_videoFolders;       // used only when m_videoFoldersOwn
     bool m_videoFoldersOwn = false;   // this profile has set its own video folders

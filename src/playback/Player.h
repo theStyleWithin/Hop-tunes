@@ -9,6 +9,7 @@
 #include <QMutex>
 #include <QObject>
 #include <QTimer>
+#include <QVector>
 
 #include <atomic>
 
@@ -51,6 +52,7 @@ class Player : public QObject {
     Q_PROPERTY(int replayGainMode READ replayGainMode WRITE setReplayGainMode NOTIFY replayGainChanged)
     Q_PROPERTY(double replayGainPreamp READ replayGainPreamp WRITE setReplayGainPreamp NOTIFY replayGainChanged)
     Q_PROPERTY(bool replayGainAvailable READ replayGainAvailable CONSTANT)
+    Q_PROPERTY(bool analysisAvailable READ analysisAvailable CONSTANT)
 
 public:
     enum Repeat { RepeatOff = 0, RepeatAll = 1, RepeatOne = 2 };
@@ -92,6 +94,13 @@ public:
     double replayGainPreamp() const { return m_rgPreamp; }
     void setReplayGainPreamp(double db);
     bool replayGainAvailable() const;
+
+    // Live audio analysis for the visualizer and the games: a GStreamer "spectrum" element sits in the
+    // audio filter chain and posts the loudness of 32 bands about 30 times a second. Off (nothing is
+    // posted) until something asks for it. Not available on Android.
+    bool analysisAvailable() const;
+    bool analysisEnabled() const { return m_analysis; }
+    void setAnalysisEnabled(bool on);
 
     // Replaces the queue and starts playing at `start` (with shuffle on, `start` plays
     // first and the rest is shuffled).
@@ -138,6 +147,7 @@ signals:
     void repeatModeChanged();
     void shuffleChanged();
     void crossfadeChanged();
+    void spectrum(const QVector<float> &bandsDb);   // 32 bands, -80 (silence) .. 0 dB, ~30 times a second while analysing
     void fadingChanged();
     void replayGainChanged();
 
@@ -186,6 +196,7 @@ private:
     std::atomic<int> m_crossfadeMs{0};
     bool m_shuffle = false;
     int m_rgMode = GainOff;
+    bool m_analysis = false;
     double m_rgPreamp = 0.0;
 
     bool m_playing = false;
