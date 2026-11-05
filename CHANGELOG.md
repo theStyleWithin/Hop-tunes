@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-11-05
+
 ### Added
 - **Games and a visualizer in Now playing (desktop).** Next to "the song" there are now two more views, switched with
   the buttons at the top (or the G key): a **music visualizer** (bars, a mirrored skyline or rings; colour from your
