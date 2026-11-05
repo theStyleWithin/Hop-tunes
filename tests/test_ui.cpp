@@ -23,6 +23,10 @@
 #include <QTemporaryDir>
 #include <QtEndian>
 #include <QtTest>
+#include <QScopeGuard>
+
+#include <taglib/id3v2tag.h>
+#include <taglib/wavfile.h>
 
 #include <gst/gst.h>
 
@@ -784,6 +788,14 @@ private slots:
         QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
 
         QVERIFY(click("subTab_videos"));
+        // each folder is a slot, like pictures: the shelf first, the folder's videos once it is opened
+        QTRY_VERIFY(item("videoSlot_0") != nullptr && item("videoSlot_0")->isVisible());
+        QCOMPARE(m_app->videoSlots().size(), 1);
+        QCOMPARE(m_app->videoSlots().first().toMap().value("name").toString(), QStringLiteral("Alpha"));
+        QVERIFY(!item("videoTile_0") || !item("videoTile_0")->isVisible());
+        shot("m7-video-slots");
+        QVERIFY(click("videoSlot_0"));
+        QTRY_VERIFY(!m_app->videoSlot().isEmpty());
         QTRY_VERIFY(item("videoTile_0") != nullptr);
         QVERIFY(item("videoTile_0")->isVisible());
         shot("m7-videos");
@@ -821,7 +833,9 @@ private slots:
         m_app->addVideoCategoryFolder(QStringLiteral("anime"), QUrl::fromLocalFile(dir));
         QTRY_COMPARE_WITH_TIMEOUT(m_app->videos()->count(), 1, 15000);
         QTRY_VERIFY_WITH_TIMEOUT(!m_app->videoScanning(), 15000);
-        QVERIFY(item("videoTile_0") != nullptr);
+        QTRY_VERIFY(item("videoSlot_0") != nullptr && item("videoSlot_0")->isVisible());   // its folder is a slot too
+        QVERIFY(click("videoSlot_0"));
+        QTRY_VERIFY(item("videoTile_0") != nullptr && item("videoTile_0")->isVisible());
         shot("v-anime");
         QCOMPARE(m_app->categoryOfVideo(dir + QStringLiteral("/ep1.mkv")), QStringLiteral("anime"));
         QCOMPARE(m_app->categoryOfVideo(m_home.filePath(QStringLiteral("Library/Alpha/clip.mkv"))), QStringLiteral("movies"));
@@ -844,7 +858,8 @@ private slots:
     {
         window()->setProperty("view", QStringLiteral("collection"));
         QVERIFY(click("subTab_videos"));
-        QTRY_VERIFY(item("videoTile_0") != nullptr);
+        if (m_app->videoSlot().isEmpty()) { QTRY_VERIFY(item("videoSlot_0") != nullptr); QVERIFY(click("videoSlot_0")); }
+        QTRY_VERIFY(item("videoTile_0") != nullptr && item("videoTile_0")->isVisible());
         QCOMPARE(m_app->videoDetailRow(), -1);
         QVERIFY(click("videoTile_0"));
         QTRY_COMPARE(m_app->videoDetailRow(), 0);
@@ -1281,6 +1296,15 @@ private slots:
         QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
 
         cv->setProperty("collectionTab", QStringLiteral("videos"));
+        m_app->closeVideoSlot();
+        back(); QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
+        // an open folder slot closes first, and only then does back leave the tab
+        cv->setProperty("collectionTab", QStringLiteral("videos"));
+        QTRY_VERIFY(!m_app->videoSlots().isEmpty());
+        m_app->openVideoSlot(m_app->videoSlots().first().toMap().value("dir").toString());
+        QVERIFY(!m_app->videoSlot().isEmpty());
+        back(); QVERIFY(m_app->videoSlot().isEmpty());
+        QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("videos"));
         back(); QCOMPARE(cv->property("collectionTab").toString(), QStringLiteral("music"));
 
         w->setProperty("view", QStringLiteral("settings"));
@@ -1419,6 +1443,58 @@ private slots:
 
         m_app->removeSectionFolder(QStringLiteral("pictures"), QFileInfo(dir).canonicalFilePath());
         QTRY_COMPARE(m_app->pictures()->count(), 0);
+        QVERIFY(click("subTab_music"));
+    }
+
+    // Audiobooks and podcasts get folder slots like pictures: one named slot per folder, open it for its own items.
+    void audiobooksAndPodcastsHaveFolderSlots()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        for (const QString kind : {QStringLiteral("audiobooks"), QStringLiteral("podcasts")}) {
+            const QString root = m_home.filePath(QStringLiteral("Shelf_") + kind);
+            for (const char *f : {"Dune/ch1.mp3", "Dune/ch2.mp3", "Emma/ch1.mp3"}) {
+                QVERIFY(QDir().mkpath(QFileInfo(root + QLatin1Char('/') + QLatin1String(f)).absolutePath()));
+                QVERIFY(writeWav(root + QLatin1Char('/') + QLatin1String(f), 1500));
+            }
+            m_app->addSectionFolder(kind, QUrl::fromLocalFile(root));
+            auto count = [&] { return kind == QLatin1String("audiobooks") ? m_app->audiobooks()->count() : m_app->podcasts()->count(); };
+            QTRY_COMPARE_WITH_TIMEOUT(count(), 3, 15000);
+            const QVariantList shelf = m_app->sectionSlots().value(kind).toList();
+            QCOMPARE(shelf.size(), 2);
+            QCOMPARE(shelf.at(0).toMap().value("name").toString(), QStringLiteral("Dune"));
+            QCOMPARE(shelf.at(0).toMap().value("count").toInt(), 2);
+
+            QVERIFY(click(qPrintable(QStringLiteral("subTab_") + kind)));
+            QTRY_VERIFY(item(qPrintable(QStringLiteral("sectionSlot_%1_0").arg(kind))) != nullptr);
+            QVERIFY(m_app->sectionOpenSlot().value(kind).toString().isEmpty());
+            shot(qPrintable(QStringLiteral("slots-") + kind));
+            const QString dune = shelf.at(0).toMap().value("dir").toString();
+            m_app->openSlot(kind, dune);
+            QCOMPARE(m_app->sectionSlotItems(kind)->count(), 2);
+            QTRY_VERIFY(item(qPrintable(QStringLiteral("sectionRow_%1_1").arg(kind))) != nullptr);
+            // a row in the open slot maps back to its row in the whole section (what playing needs)
+            const QString second = m_app->sectionSlotItems(kind)->pathAt(1);
+            QVERIFY(m_app->sectionRow(kind, second) >= 0);
+            QCOMPARE((kind == QLatin1String("audiobooks") ? m_app->audiobooks() : m_app->podcasts())->pathAt(m_app->sectionRow(kind, second)), second);
+
+            auto nameOf = [&](const QString &dir) {
+                for (const QVariant &s : m_app->sectionSlots().value(kind).toList())
+                    if (s.toMap().value("dir").toString() == dir) return s.toMap().value("name").toString();
+                return QString();
+            };
+            m_app->renameSlot(dune, QStringLiteral("  The   Dune books "));
+            QCOMPARE(nameOf(dune), QStringLiteral("The Dune books"));
+            const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+            QCOMPARE(st.value("pictureAlbumNames").toObject().value(dune).toString(), QStringLiteral("The Dune books"));
+            m_app->closeSlot(kind);
+            QVERIFY(m_app->sectionOpenSlot().value(kind).toString().isEmpty());
+            m_app->renameSlot(dune, QString());
+            QCOMPARE(nameOf(dune), QStringLiteral("Dune"));
+
+            m_app->removeSectionFolder(kind, QFileInfo(root).canonicalFilePath());
+            QTRY_COMPARE(count(), 0);
+            QVERIFY(m_app->sectionSlots().value(kind).toList().isEmpty());
+        }
         QVERIFY(click("subTab_music"));
     }
 
@@ -1623,6 +1699,115 @@ private slots:
         QCOMPARE(m_app->selectedAlbumTitle(), QStringLiteral("My Custom Title"));
         QCOMPARE(m_app->selectedAlbumArt(), art);
         QCOMPARE(m_app->albumSongs()->tracks().at(1).path, firstPath);
+    }
+
+    // ---- fixing artist names: merge, rename, drag an album onto an artist, split back ----
+
+    void fixingArtistNamesMergesAndSplitsBack()
+    {
+        // its own little tagged library, so this does not disturb the profile the other tests use
+        const QString libId = m_app->profile().value("id").toString();
+        const QString dir = m_home.filePath(QStringLiteral("Tagged"));
+        struct Song { const char *file, *artist, *album; };
+        const Song songs[] = {{"a/1.wav", "Zeta Band", "Skin"}, {"a/2.wav", "Zeta Band", "Wisdom"},
+                              {"b/1.wav", "zeta band", "Skin"}, {"c/1.wav", "Omega", "Last"}};
+        for (const Song &s : songs) {
+            const QString f = dir + QLatin1Char('/') + QLatin1String(s.file);
+            QDir().mkpath(QFileInfo(f).absolutePath());
+            QVERIFY(writeWav(f, 3000));
+            TagLib::RIFF::WAV::File w(QFile::encodeName(f).constData());
+            QVERIFY(w.isValid());
+            w.ID3v2Tag()->setArtist(s.artist);
+            w.ID3v2Tag()->setAlbum(s.album);
+            QVERIFY(w.save());
+        }
+        // whatever happens below, leave the library profile open for the tests that follow
+        const auto restore = qScopeGuard([&] {
+            if (m_app->profile().value("id").toString() != libId) {
+                m_app->removeProfile();
+                m_app->openProfile(libId, {});
+                QTest::qWait(1500);
+            }
+        });
+        QCOMPARE(m_app->createProfile(QStringLiteral("Names"), QStringLiteral("#ff8800"), {}, QUrl::fromLocalFile(dir)), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->librarySize() >= 4, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->scanning(), 15000);
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(click("subTab_music"));
+        QVERIFY(click("tab_artists"));
+
+        const QString a = QStringLiteral("zeta band"), b = QStringLiteral("Omega");
+        QStringList names = m_app->artistNames();
+        QCOMPARE(names.size(), 2);                       // case-insensitive: the two Zeta spellings are one artist already
+        // use two real artists for the rest
+        const QString x = names.at(0).compare(QStringLiteral("zeta band"), Qt::CaseInsensitive) == 0 ? names.at(0) : names.at(1);   // the one with two albums
+        const QString y = x == names.at(0) ? names.at(1) : names.at(0);
+        const int before = m_app->artists()->count();
+        const QString id = m_app->profile().value("id").toString();
+        Q_UNUSED(a); Q_UNUSED(b);
+
+        // the pieces of the interface are there: the dialog, the drag ghost and a drop target per artist
+        QVERIFY(item("collectionView")->findChild<QObject *>(QStringLiteral("mergeArtistDialog")));
+        QVERIFY(item("dragGhost") && item("artistDrop_0"));
+
+        {   // the merge dialog, for the design renders
+            QObject *dlg = item("collectionView")->findChild<QObject *>(QStringLiteral("mergeArtistDialog"));
+            QVERIFY(QMetaObject::invokeMethod(dlg, "pick", Q_ARG(QVariant, x)));
+            QTest::qWait(400);
+            shot("artist-merge-pick");
+            QVERIFY(QMetaObject::invokeMethod(dlg, "confirm", Q_ARG(QVariant, x), Q_ARG(QVariant, y)));
+            QTest::qWait(300);
+            shot("artist-merge-confirm");
+            QMetaObject::invokeMethod(dlg, "close");
+            QTest::qWait(300);
+        }
+        QVERIFY(!m_app->mergeArtist(x, x).isEmpty());                 // the same artist
+        QCOMPARE(m_app->mergeArtist(x, y), QString());
+        QCOMPARE(m_app->artists()->count(), before - 1);
+        QCOMPARE(m_app->artistNames(), QStringList{y});               // y took over and kept its name
+        QCOMPARE(m_app->mergedInto(y).size(), 1);
+        QVERIFY(!m_app->mergeArtist(y, x).isEmpty());                 // would loop: refused
+        QVERIFY(m_app->profileStore()->settings(id).value("artistMerges").toObject().contains(x));   // remembered (and exported)
+        QCOMPARE(m_app->unmerge(x), QString());
+        QCOMPARE(m_app->artists()->count(), before);
+        QVERIFY(m_app->mergedInto(y).isEmpty());
+
+        // renaming to a new name just renames; to an existing name it is a merge
+        QCOMPARE(m_app->renameArtist(x, QStringLiteral("Zed Fresh Name")), QString());
+        QVERIFY(m_app->artistNames().contains(QStringLiteral("Zed Fresh Name")));
+        QCOMPARE(m_app->artists()->count(), before);
+        QCOMPARE(m_app->renameArtist(QStringLiteral("Zed Fresh Name"), y), QString());
+        QCOMPARE(m_app->artists()->count(), before - 1);
+        QCOMPARE(m_app->unmerge(QStringLiteral("Zed Fresh Name")), QString());
+        QCOMPARE(m_app->unmerge(x), QString());
+        QCOMPARE(m_app->artists()->count(), before);
+
+        // dropping one album on an artist moves just that album (what the drag does), and it can be undone
+        auto select = [&](const QString &name) {
+            for (int i = 0; i < m_app->artists()->count(); ++i)
+                if (m_app->artists()->index(i, 0).data(Qt::UserRole + 1).toString() == name) { m_app->selectArtist(i); return true; }
+            return false;
+        };
+        QVERIFY(select(x));
+        const int albumsOfX = m_app->artistAlbums()->count();
+        m_app->selectAlbum(0);
+        const QString ref = m_app->selectedAlbumRef();
+        QVERIFY(select(y));
+        const int albumsOfY = m_app->artistAlbums()->count();
+        QObject *ghost = item("dragGhost");
+        ghost->setProperty("ref", ref);
+        ghost->setProperty("title", QStringLiteral("dragged"));
+        QVERIFY(QMetaObject::invokeMethod(item("collectionView"), "dropAlbumOn", Q_ARG(QVariant, y)));
+        QTRY_COMPARE(m_app->mergedInto(y).size(), 1);
+        QVERIFY(select(y));
+        QCOMPARE(m_app->artistAlbums()->count(), albumsOfY + 1);
+        QVERIFY(select(x));
+        QCOMPARE(m_app->artistAlbums()->count(), albumsOfX - 1);
+        QCOMPARE(m_app->unmerge({}, ref), QString());
+        QVERIFY(select(x));
+        QCOMPARE(m_app->artistAlbums()->count(), albumsOfX);
+        QVERIFY(m_app->mergedInto(y).isEmpty());
+
     }
 
     void albumOverridesArePerProfile()
