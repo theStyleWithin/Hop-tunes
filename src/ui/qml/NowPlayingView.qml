@@ -11,11 +11,23 @@ Rectangle {
     readonly property var player: hop.player
     signal back()
 
+    // The stage: the song and up-next as always ("art"), the music made visible, or Album Fall. Desktop only.
+    readonly property string stage: Theme.compact || !hop.audio.available ? "art" : hop.gameSettings.stage
+    readonly property bool staged: stage !== "art"
+    readonly property var gs: hop.gameSettings
+    function setStage(s) { hop.setGameSetting("stage", s) }
+    // the analysis and the controller are only listened to while they are on screen
+    Binding { target: hop.audio; property: "active"; value: root.visible && root.staged }
+    function syncPad() { hop.gamepad.setListening(root.visible && root.stage === "albumfall") }
+    onStageChanged: syncPad()
+    Component.onCompleted: syncPad()
+    Shortcut { sequence: "G"; enabled: root.visible && !Theme.compact && hop.audio.available && root.stage !== "albumfall"; onActivated: root.setStage(root.stage === "art" ? "visualizer" : (root.stage === "visualizer" ? "albumfall" : "art")) }
+
     // Controls fade out after a few idle seconds while music plays (spec §4.3); any mouse
     // movement or key brings them back.
     property bool idle: false
     function wake() { idle = false; idleTimer.restart() }
-    onVisibleChanged: wake()
+    onVisibleChanged: { wake(); syncPad() }
     Timer { id: idleTimer; interval: 3500; running: root.visible && root.player.playing; onTriggered: root.idle = true }
     Connections { target: root.player; function onPlayingChanged() { root.wake() } }
     MouseArea { anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton; onPositionChanged: root.wake(); z: 100 }
@@ -28,7 +40,7 @@ Rectangle {
     // Background mosaic of placeholder tiles from the queue's albums.
     Grid {
         id: mosaic
-        visible: !Theme.compact
+        visible: !Theme.compact && root.stage === "art"
         columns: 8
         spacing: 6
         opacity: 0.38
@@ -54,7 +66,7 @@ Rectangle {
         }
     }
     Rectangle {
-        visible: !Theme.compact
+        visible: !Theme.compact && root.stage === "art"
         anchors.fill: parent
         gradient: Gradient {
             orientation: Gradient.Horizontal
@@ -79,11 +91,103 @@ Rectangle {
             contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
         }
         Item { Layout.fillWidth: true }
+        Row {   // art | visualizer | album fall (where the player can analyse the sound: not on Android yet)
+            visible: hop.audio.available
+            spacing: 6
+            Layout.rightMargin: 24
+            Repeater {
+                model: [["art", "the song"], ["visualizer", "visualizer"], ["albumfall", "album fall"]]
+                delegate: AbstractButton {
+                    id: chip
+                    required property var modelData
+                    objectName: "stage_" + modelData[0]
+                    hoverEnabled: true
+                    onClicked: root.setStage(modelData[0])
+                    Accessible.name: modelData[1]
+                    contentItem: Label { text: chip.modelData[1]; color: root.stage === chip.modelData[0] ? Theme.ink : (chip.hovered ? Theme.text : Theme.muted)
+                                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                         font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                    background: Rectangle { implicitWidth: Math.max(90, chip.contentItem.implicitWidth + 28); implicitHeight: 34
+                                            color: root.stage === chip.modelData[0] ? Theme.accent : "transparent"
+                                            border { width: root.stage === chip.modelData[0] ? 0 : 1; color: Theme.border } }
+                }
+            }
+        }
+        AbstractButton {   // the pretend live chat beside the song: optional, off until you want it
+            id: chatChip
+            objectName: "chatToggle"
+            Layout.rightMargin: 24
+            hoverEnabled: true
+            onClicked: hop.setGameSetting("chat", !root.gs.chat)
+            Accessible.name: "live chat"
+            contentItem: Label { text: (root.gs.chat ? "\u2611 " : "\u2610 ") + "live chat"; color: root.gs.chat ? Theme.accent : (chatChip.hovered ? Theme.text : Theme.muted)
+                                 font { family: Theme.font; pixelSize: Theme.fs(15) } }
+            background: Item {}
+        }
         Label { text: "NOW PLAYING"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16); letterSpacing: 3 } }
     }
 
+    // ---- the stage: the visualizer, and Album Fall (optionally over the visualizer) ----
+    Item {
+        id: stageArea
+        objectName: "nowPlayingStage"
+        visible: !Theme.compact && root.staged
+        anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: Theme.pad; rightMargin: Theme.pad + (root.chatShown ? 372 : 0); topMargin: 10; bottomMargin: 18 }
+        Visualizer {
+            objectName: "visualizer"
+            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: stageOptions.top; bottomMargin: 10 }
+            visible: root.stage === "visualizer" || (root.stage === "albumfall" && root.gs.vizBackdrop)
+            style: root.gs.vizStyle; colorMode: root.gs.vizColor; intensity: root.gs.vizIntensity
+            opacityScale: root.stage === "albumfall" ? 0.28 : 1.0
+        }
+        AlbumFall {
+            id: fall
+            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: stageOptions.top; bottomMargin: 10 }
+            visible: root.stage === "albumfall"
+            shown: root.visible && root.stage === "albumfall"
+            onLeave: root.setStage("art")
+        }
+        Label {   // the song, small, over the visualizer
+            visible: root.stage === "visualizer" && root.player.hasTrack
+            anchors { left: parent.left; top: parent.top; margins: 6 }
+            text: root.player.title + "  \u00b7  " + root.player.artist
+            color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(20); weight: Font.Light }
+        }
+        RowLayout {   // the optional bits: look of the visualizer, behind the game, and chat
+            id: stageOptions
+            objectName: "stageOptions"
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            opacity: root.chrome
+            Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 450 } }
+            spacing: 14
+            component OptChip: AbstractButton {
+                id: oc
+                property bool on: false
+                hoverEnabled: true
+                contentItem: Label { text: oc.text; color: oc.on ? Theme.accent : (oc.hovered ? Theme.text : Theme.muted); font { family: Theme.font; pixelSize: Theme.fs(14); underline: oc.on } }
+                background: Item {}
+            }
+            Label { text: "visualizer"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+            Repeater { model: ["bars", "mirror", "rings"]
+                       delegate: OptChip { required property string modelData; objectName: "vizStyle_" + modelData; text: modelData; on: root.gs.vizStyle === modelData
+                                           onClicked: hop.setGameSetting("vizStyle", modelData) } }
+            Label { text: "colour"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+            Repeater { model: ["accent", "rainbow", "white"]
+                       delegate: OptChip { required property string modelData; objectName: "vizColor_" + modelData; text: modelData; on: root.gs.vizColor === modelData
+                                           onClicked: hop.setGameSetting("vizColor", modelData) } }
+            Label { text: "strength"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+            Slider { objectName: "vizIntensity"; from: 0.3; to: 2.0; value: root.gs.vizIntensity; implicitWidth: 120
+                     onMoved: hop.setGameSetting("vizIntensity", value) }
+            OptChip { objectName: "vizBackdrop"; visible: root.stage === "albumfall"; text: root.gs.vizBackdrop ? "\u2611 visualizer behind the game" : "\u2610 visualizer behind the game"
+                      on: root.gs.vizBackdrop; onClicked: hop.setGameSetting("vizBackdrop", !root.gs.vizBackdrop) }
+            Item { Layout.fillWidth: true }
+            Label { visible: root.stage === "albumfall" && hop.gamepad.connected; text: "\u25cf " + hop.gamepad.name; color: Theme.dim; elide: Text.ElideRight; Layout.maximumWidth: 260
+                    font { family: Theme.font; pixelSize: Theme.fs(13) } }
+        }
+    }
+
     GridLayout {   // desktop and tablets: the song beside its up-next list
-        visible: !Theme.compact
+        visible: !Theme.compact && root.stage === "art"
         anchors { left: parent.left; right: parent.right; top: header.bottom; bottom: parent.bottom; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 16; bottomMargin: 36 }
         columns: Theme.compact ? 1 : 2
         columnSpacing: 48; rowSpacing: 18
@@ -219,6 +323,28 @@ Rectangle {
                 }
             }
         }
+    }
+
+    // ---- the pretend live chat (optional): about the song that is playing. Nobody in it is real. ----
+    readonly property bool chatShown: !Theme.compact && gs.chat
+    LiveChat {
+        id: npChat
+        objectName: "nowPlayingChat"
+        visible: root.chatShown
+        look: hop.videoChatLook
+        seed: root.player.hasTrack ? root.player.title + "|" + root.player.artist + "|" + root.player.album : "idle"
+        info: ({ music: true, meta: { title: root.player.title, year: root.player.year > 0 ? String(root.player.year) : "", album: root.player.album },
+                 cast: root.player.artist ? [{ name: root.player.artist, role: "" }] : [] })
+        position: root.player.position
+        duration: root.player.duration
+        onLeaveRequested: root.forceActiveFocus()
+        width: 350
+        x: root.width - width - Theme.pad
+        y: header.y + header.height + 12
+        height: Math.max(0, root.stage === "art" && upNextPanel.visible
+                            ? upNextPanel.mapToItem(root, 0, 0).y - y - 14 + 0 * root.queueRev * upNextPanel.height
+                            : root.height - y - 24)
+        z: 60
     }
 
     PhoneNowPlaying {   // phones

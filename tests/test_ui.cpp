@@ -983,6 +983,9 @@ private slots:
         QVERIFY2(r.property("total").toInt() > 150, "the chat should be lively enough");
         QVERIFY2(r.property("movie").toInt() > 15, "some lines should use the movie page");
         QCOMPARE(r.property("invented").toInt(), 0);
+        QVERIFY(r.property("songTalks").toBool());                       // beside a song it chats too,
+        QVERIFY2(r.property("songMine").toInt() > 10, "some lines should use the song's details");
+        QCOMPARE(r.property("songFilmWords").toInt(), 0);                // and about music, not films
         QVERIFY(r.property("director").toBool());
         QVERIFY(r.property("year").toBool());
         QVERIFY(r.property("noDirector").toBool());
@@ -1516,6 +1519,117 @@ private slots:
         QVERIFY(QMetaObject::invokeMethod(&item, "stop"));
         QVERIFY(QMetaObject::invokeMethod(&item, "setSubtitleTrack", Q_ARG(int, -1)));
         QVERIFY(QMetaObject::invokeMethod(&item, "addSubtitleFile", Q_ARG(QString, QString())));
+    }
+
+    // ---- Now playing: the visualizer and Album Fall ----
+
+    void nowPlayingStagesVisualizerAndAlbumFall()
+    {
+        window()->setProperty("view", QStringLiteral("now playing"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(m_app->gameSettings().value("stage").toString() == QLatin1String("art"));
+        QVERIFY(item("stage_visualizer") && item("stage_albumfall"));
+        QVERIFY(!m_app->audio()->active());                          // nothing listens while it is the song page
+
+        // the visualizer: analysis starts only now, and the choices are remembered with the profile
+        QVERIFY(click("stage_visualizer"));
+        QTRY_VERIFY(m_app->audio()->active());
+        QTRY_VERIFY(item("visualizer") && item("visualizer")->isVisible());
+        QVector<float> frame(32);
+        for (int i = 0; i < 32; ++i) frame[i] = -60.f + 50.f * float(31 - i) / 31.f;
+        for (int i = 0; i < 4; ++i) m_app->audio()->onSpectrum(frame);
+        QTRY_VERIFY(m_app->audio()->bands().size() == 32);
+        QVERIFY(m_app->audio()->level() > 0.1);
+        QVERIFY(click("vizStyle_rings"));
+        QVERIFY(click("vizColor_rainbow"));
+        QCOMPARE(m_app->gameSettings().value("vizStyle").toString(), QStringLiteral("rings"));
+        QCOMPARE(m_app->gameSettings().value("vizColor").toString(), QStringLiteral("rainbow"));
+        m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("nonsense"));   // refused
+        m_app->setGameSetting(QStringLiteral("vizIntensity"), 99);                       // clamped
+        QCOMPARE(m_app->gameSettings().value("vizStyle").toString(), QStringLiteral("rings"));
+        QCOMPARE(m_app->gameSettings().value("vizIntensity").toDouble(), 2.0);
+        auto feed = [&] { for (int i = 0; i < 3; ++i) m_app->audio()->onSpectrum(frame); QTest::qWait(60); };
+        feed();   // (the silent test song keeps sending its own quiet frames, so feed loud ones right before each picture)
+        shot("np-visualizer-rings");
+        m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("bars"));
+        feed();
+        shot("np-visualizer-bars");
+        m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("mirror"));
+        feed();
+        shot("np-visualizer-mirror");
+        m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("bars"));
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QCOMPARE(st.value("nowPlaying").toObject().value("settings").toObject().value("vizColor").toString(), QStringLiteral("rainbow"));
+
+        // Album Fall: a beat picks the piece, keys move it, the score and the best list are kept
+        QVERIFY(click("stage_albumfall"));
+        QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
+        QTRY_VERIFY(m_app->albumFall()->running());
+        QVERIFY(!m_app->albumFall()->paused());
+        AlbumFall *g = m_app->albumFall();
+        g->onBeat(0.9);                                              // a heavy beat: a five-block piece
+        QCOMPARE(g->piece().size(), 10);                             // [x, y] x 5
+        const QVariant x0 = g->piece().first();
+        g->act(QStringLiteral("left"));
+        QVERIFY(g->piece().first().toInt() < x0.toInt());
+        g->act(QStringLiteral("rotate"));
+        g->act(QStringLiteral("drop"));
+        QVERIFY(g->landed() >= 1);
+        QVERIFY(g->score() > 0);
+        QTest::qWait(200);
+        shot("np-albumfall");
+        // the controller and the keyboard reach the same actions
+        g->onBeat(0.2);
+        const int pieces = g->piece().size();
+        QVERIFY(pieces >= 4 && pieces <= 6 || pieces >= 4);          // (a small beat gives a small piece)
+        QTest::keyClick(window(), Qt::Key_Left);
+        QTest::keyClick(window(), Qt::Key_P);                        // pause
+        QTRY_VERIFY(g->paused());
+        QTest::keyClick(window(), Qt::Key_P);
+        QTRY_VERIFY(!g->paused());
+        QVERIFY(!m_app->player()->hasTrack() || m_app->player()->isPlaying());
+        // space is the game's drop here, not play/pause
+        const bool playingBefore = m_app->player()->isPlaying();
+        QTest::keyClick(window(), Qt::Key_Space);
+        QCOMPARE(m_app->player()->isPlaying(), playingBefore);
+        // the best list
+        QCOMPARE(m_app->submitScore(QStringLiteral("albumfall"), 500, 5), 1);
+        QCOMPARE(m_app->submitScore(QStringLiteral("albumfall"), 900, 9), 1);
+        QCOMPARE(m_app->submitScore(QStringLiteral("albumfall"), 700, 7), 2);
+        QCOMPARE(m_app->gameScores(QStringLiteral("albumfall")).size(), 3);
+        QCOMPARE(m_app->gameScores(QStringLiteral("albumfall")).first().toMap().value("score").toInt(), 900);
+        for (int s : {100, 200, 300, 400}) m_app->submitScore(QStringLiteral("albumfall"), s, 1);
+        QCOMPARE(m_app->gameScores(QStringLiteral("albumfall")).size(), 5);   // only the best five are kept
+        QCOMPARE(m_app->submitScore(QStringLiteral("albumfall"), 10, 0), 0);
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("nowPlaying").toObject().value("scores").toObject().contains(QStringLiteral("albumfall")));
+        g->setPaused(false);
+
+        // the optional live chat: off by default, on with the toggle, remembered, and it does not crowd the game
+        QVERIFY(!m_app->gameSettings().value("chat").toBool());
+        QVERIFY(item("chatToggle") && item("nowPlayingChat"));
+        QVERIFY(!item("nowPlayingChat")->isVisible());
+        QVERIFY(click("chatToggle"));
+        QTRY_VERIFY(item("nowPlayingChat")->isVisible());
+        QVERIFY(m_app->gameSettings().value("chat").toBool());
+        QTRY_VERIFY(item("nowPlayingStage")->width() < window()->width() - 300);   // the stage makes room for it
+        QTest::qWait(1600);
+        shot("np-albumfall-chat");
+        QVERIFY(click("stage_art"));
+        QTest::qWait(1200);
+        QVERIFY(item("nowPlayingChat")->isVisible());
+        QVERIFY(item("nowPlayingChat")->height() > 100);
+        shot("np-chat");
+        QVERIFY(click("chatToggle"));
+        QTRY_VERIFY(!item("nowPlayingChat")->isVisible());
+        QVERIFY(click("stage_albumfall"));
+
+        // back to the song: the analysis stops listening again
+        QVERIFY(click("stage_art"));
+        QTRY_VERIFY(!m_app->audio()->active());
+        QVERIFY(m_app->gameSettings().value("stage").toString() == QLatin1String("art"));
+        m_app->player()->toggle();
+        window()->setProperty("view", QStringLiteral("collection"));
     }
 
     // ---- per-profile album overrides: custom cover, editable title, live reorder ----

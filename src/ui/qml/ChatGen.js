@@ -98,7 +98,9 @@ function context(info, durationMs) {
         actors: actors,
         roles: roles,
         tagline: tag.length > 0 && tag.length <= 70 ? tag : '',
-        durationMs: durationMs > 0 ? durationMs : 0
+        durationMs: durationMs > 0 ? durationMs : 0,
+        music: !!(info && info.music),                       // chat beside a song in Now playing, not a film
+        album: String(meta.album || '').trim().slice(0, 60)
     };
 }
 
@@ -137,21 +139,36 @@ function movieLine(r, c) {
 
 function spam(r) { var e = ':' + pick(r, EMOTES) + ':'; var n = 2 + Math.floor(r() * 2), s = []; for (var i = 0; i < n; i++) s.push(e); return s.join(' '); }
 
+// ---- music: the same chat beside a song (Now playing) ----
+var M_REACT = ['this part!!', 'that bass', 'those drums', 'the chorus though', 'goosebumps', 'oh this hits', 'so good', 'sing it', 'vibes', 'banger', 'the guitar!!', 'that beat', 'turn it up', 'love this song', 'yesss', 'mood', 'classic', 'ha', 'ohh', 'amazing', 'headphones on', 'volume up', 'that groove', 'the vocals!!'];
+var M_GREET = ['hi chat', 'hello everyone', 'late night listening gang', 'who else is listening right now?', 'good evening all', 'hi from the couch', 'headphones on, world off', 'hey hey'];
+var M_START = ['here we go', 'just got here', 'volume up', 'headphones on', 'starting strong'];
+var M_ENDING = ['already almost over', 'that outro though', 'one more after this?', 'what a song', 'gg', 'play it again'];
+var MUSIC_LINES = [
+    function (r, c) { return c.title ? pick(r, [c.title + ' never gets old', c.title + ' is such a vibe', 'turn up ' + c.title, 'i have had ' + c.title + ' on repeat', c.title + '!! :heart:']) : ''; },
+    function (r, c) { return c.actors.length ? pick(r, [pick(r, c.actors) + ' never misses', 'we love ' + pick(r, c.actors) + ' :heart:', pick(r, c.actors) + ' :fire:', 'thank you ' + pick(r, c.actors)]) : ''; },
+    function (r, c) { return c.album ? pick(r, ['this whole album though', c.album + ' is a masterpiece', 'put on ' + c.album + ' start to finish', 'best track on ' + c.album]) : ''; },
+    function (r, c) { return c.year ? pick(r, [c.year + ' was a good year for music', 'they do not make them like this anymore (' + c.year + ')', c.year + ' and it still holds up']) : ''; },
+    function (r, c) { return c.genres.length ? pick(r, [pick(r, c.genres).toLowerCase() + ' night', 'good ' + pick(r, c.genres).toLowerCase() + ' hits different']) : ''; }
+];
+
 // One chat line. `at` is the position in the video in ms, `kind` is chosen by the caller.
 function lineText(r, c, at) {
     var x = r();
+    var greet = c.music ? M_GREET : GREET, start = c.music ? M_START : START, ending = c.music ? M_ENDING : ENDING;
+    var lines = c.music ? MUSIC_LINES : MOVIE_LINES, react = c.music ? M_REACT : REACT;
     var inFirst = at < 25000;
     var inLast = c.durationMs > 60000 && at > c.durationMs - 30000;
-    if (inFirst && x < 0.35) return pick(r, x < 0.18 ? GREET : START);
-    if (inLast && x < 0.4) return pick(r, ENDING);
+    if (inFirst && x < 0.35) return pick(r, x < 0.18 ? greet : start);
+    if (inLast && x < 0.4) return pick(r, ending);
     if (x < 0.34) {
-        // something about this movie, if the page says anything
-        for (var tries = 0; tries < 4; tries++) { var m = MOVIE_LINES[Math.floor(r() * MOVIE_LINES.length)](r, c); if (m) return m + pick(r, CLOSERS); }
+        // something about this movie or song, if the page says anything
+        for (var tries = 0; tries < 4; tries++) { var m = lines[Math.floor(r() * lines.length)](r, c); if (m) return m + pick(r, CLOSERS); }
     }
-    var y = r();   // not about the movie (or the page is empty): everyday chat
+    var y = r();   // not about it (or the page is empty): everyday chat
     if (y < 0.14) return spam(r);
-    if (y < 0.24) return pick(r, GREET);
-    return pick(r, REACT) + pick(r, CLOSERS);
+    if (y < 0.24) return pick(r, greet);
+    return pick(r, react) + pick(r, CLOSERS);
 }
 
 // Splits "hello :laugh: @bob" into [{t:'text'|'emote'|'mention', v}].

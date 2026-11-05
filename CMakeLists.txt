@@ -50,6 +50,11 @@ add_library(hoptunes_core STATIC
     src/library/Track.h
     src/core/Sql.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
+    src/game/BeatTracker.h    src/game/BeatTracker.cpp
+    src/game/FallBoard.h      src/game/FallBoard.cpp
+    src/game/AudioAnalyzer.h  src/game/AudioAnalyzer.cpp
+    src/game/AlbumFall.h      src/game/AlbumFall.cpp
+    src/game/Gamepad.h        src/game/Gamepad.cpp
     src/library/ProfileDb.h   src/library/ProfileDb.cpp
     src/library/ProfileArchive.h src/library/ProfileArchive.cpp
     src/library/Smart.h       src/library/Smart.cpp
@@ -203,6 +208,10 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_library tests/test_library.cpp)
     target_link_libraries(test_library PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME library COMMAND test_library)
+
+    add_executable(test_game tests/test_game.cpp)
+    target_link_libraries(test_game PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME game COMMAND test_game)
 
     add_executable(test_profiles tests/test_profiles.cpp)
     target_link_libraries(test_profiles PRIVATE hoptunes_core Qt6::Test)

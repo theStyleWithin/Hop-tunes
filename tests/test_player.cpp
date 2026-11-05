@@ -7,7 +7,10 @@
 #include <QtEndian>
 #include <QElapsedTimer>
 #include <QSignalSpy>
+#include <QScopeGuard>
 #include <QtTest>
+
+#include <cmath>
 
 #include <gst/gst.h>
 
@@ -104,6 +107,44 @@ private slots:
 
     // Two tracks queued: the second must start through the gapless path
     // (about-to-finish -> STREAM_START), then the queue ends with EOS.
+    // The audio analysis behind the visualizer and the games: a tone goes in, 32 band levels come out, and nothing
+    // is posted until it is switched on.
+    void spectrumFramesArriveOnlyWhenAsked()
+    {
+        QTemporaryDir dir;
+        const QString f = dir.filePath(QStringLiteral("tone.wav"));
+        {   // 2.5 s of a loud 100 Hz tone, 8 kHz mono
+            const quint32 rate = 8000, n = rate * 5 / 2;
+            QByteArray pcm(int(n * 2), '\0');
+            for (quint32 i = 0; i < n; ++i) { const qint16 v = qint16(20000 * std::sin(2 * M_PI * 100.0 * i / rate)); qToLittleEndian(v, pcm.data() + i * 2); }
+            QByteArray h;
+            auto u32 = [&h](quint32 v) { char b[4]; qToLittleEndian(v, b); h.append(b, 4); };
+            auto u16 = [&h](quint16 v) { char b[2]; qToLittleEndian(v, b); h.append(b, 2); };
+            h.append("RIFF"); u32(36 + quint32(pcm.size())); h.append("WAVEfmt "); u32(16); u16(1); u16(1); u32(rate); u32(rate * 2); u16(2); u16(16);
+            h.append("data"); u32(quint32(pcm.size()));
+            QFile out(f); QVERIFY(out.open(QIODevice::WriteOnly)); out.write(h); out.write(pcm);
+        }
+        const QByteArray oldSink = qgetenv("HOPTUNES_AUDIO_SINK");
+        qputenv("HOPTUNES_AUDIO_SINK", "fakesink sync=true");   // in real time, so the song is still playing when asked
+        const auto restore = qScopeGuard([&] { qputenv("HOPTUNES_AUDIO_SINK", oldSink); });
+        Player p;
+        if (!p.analysisAvailable()) QSKIP("the GStreamer spectrum plugin (gst-plugins-good) is not installed");
+        QSignalSpy frames(&p, &Player::spectrum);
+        QVERIFY(!p.analysisEnabled());
+        p.setQueue({wavTrack(f, 1, 2500)}, 0);
+        QTest::qWait(600);
+        QCOMPARE(frames.size(), 0);                      // not asked: nothing posted
+        p.setAnalysisEnabled(true);
+        QTest::qWait(1000);
+        QVERIFY2(frames.size() >= 5, qPrintable(QString::number(frames.size())));
+        const QVector<float> first = frames.first().first().value<QVector<float>>();
+        QCOMPARE(first.size(), 32);
+        float loudest = -100;
+        for (const QList<QVariant> &fr : frames) loudest = qMax(loudest, fr.first().value<QVector<float>>().first());
+        QVERIFY2(loudest > -50.f, qPrintable(QString::number(double(loudest))));   // the 100 Hz tone lands in the lowest band
+        p.setAnalysisEnabled(false);
+    }
+
     void gaplessAdvanceAndEnd()
     {
         QTemporaryDir dir;

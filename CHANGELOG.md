@@ -5,6 +5,20 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- **Games and a visualizer in Now playing (desktop).** Next to "the song" there are now two more views, switched with
+  the buttons at the top (or the G key): a **music visualizer** (bars, a mirrored skyline or rings; colour from your
+  accent, a rainbow or white; a strength slider; your choices are remembered with your profile) and **Album Fall**,
+  a falling-blocks game where every block is one of your album covers and the music runs the game. A beat in the song
+  chooses the next piece (a soft beat gives a small piece, a hard one a big five-block piece), the tempo and the bass set
+  how fast things fall, and landing a piece right on the beat scores a bonus and a streak that multiplies line clears. If
+  a song has no clear beat the game keeps its own pulse. Play with the keyboard (arrows or WASD, up or X to turn, Z to
+  turn back, space to drop, P to pause, Esc to leave) or a game controller (d-pad or stick, A/RB turn, B/LB turn back,
+  X drop, start pause, back leave; Linux and Windows). Your best five scores are kept per profile. The visualizer can
+  also play faintly behind the game. The sound is only analysed while one of these views is open. (On Android the
+  views are not available yet.)
+- **Optional live chat in Now playing.** A "live chat" switch at the top shows the pretend live-stream chat beside the
+  song or the game, talking about the song that is playing (its title, artist, album, year). Nobody in it is real, it
+  is off until you switch it on, and what you type gets an answer from a chatter or two, like the chat for films.
 - **Folder slots in videos, audiobooks and podcasts**, like pictures already had. Every video category (movies,
   shows, cartoons, anime, other videos), audiobooks and podcasts now show one slot per folder (a cover or the folder's
   first letter, its name and how many items it holds) instead of one big pile. Open a slot to see just that folder's
