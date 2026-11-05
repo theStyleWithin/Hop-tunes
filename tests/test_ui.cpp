@@ -1632,6 +1632,50 @@ private slots:
         window()->setProperty("view", QStringLiteral("collection"));
     }
 
+    // A controller is connected: starting a song from the collection opens Now playing (and only then).
+    void aConnectedControllerOpensNowPlayingWhenASongStarts()
+    {
+        QObject *win = window();
+        auto &pad = *m_app->gamepad();
+        win->setProperty("view", QStringLiteral("collection"));
+        m_app->player()->stop();
+        QTRY_VERIFY(!m_app->player()->isPlaying());
+
+        // no controller: nothing moves
+        pad.setDevice({});
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+
+        // a controller: the same action opens Now playing
+        m_app->player()->stop();
+        QTRY_VERIFY(!m_app->player()->isPlaying());
+        pad.setDevice(QStringLiteral("Red Magic attachable controller"));
+        m_app->playSongs(0);
+        QTRY_COMPARE(win->property("view").toString(), QStringLiteral("now playing"));
+
+        // switched off in settings: it stays in the collection
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("collection"));
+        m_app->setGameSetting(QStringLiteral("autoNowPlaying"), false);
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+        // and from another screen it never jumps
+        m_app->setGameSetting(QStringLiteral("autoNowPlaying"), true);
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("settings"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("settings"));
+        pad.setDevice({});
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("collection"));
+    }
+
     // ---- per-profile album overrides: custom cover, editable title, live reorder ----
 
     void albumArtTitleAndReorder()

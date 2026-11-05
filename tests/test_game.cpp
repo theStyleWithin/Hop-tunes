@@ -2,6 +2,7 @@
 // The beat tracker and the rules of Album Fall, driven with made-up input.
 #include "game/BeatTracker.h"
 #include "game/FallBoard.h"
+#include "game/Gamepad.h"
 
 #include <QtTest>
 
@@ -159,6 +160,37 @@ private slots:
         QCOMPARE(b.state(), FallBoard::Playing);
         QCOMPARE(b.score(), 0);
         for (int y = 0; y < FallBoard::H; ++y) for (int x = 0; x < FallBoard::W; ++x) QCOMPARE(b.cell(x, y), 0);
+    }
+
+    void aControllerBecomesActionsAndIsListedForDiagnostics()
+    {
+        Gamepad pad;
+        QSignalSpy pressed(&pad, &Gamepad::pressed);
+        QSignalSpy connected(&pad, &Gamepad::connectedChanged);
+        QVERIFY(!pad.connected());
+        pad.setDevice(QStringLiteral("GameSir X2 Pro"));          // what the Android activity reports
+        QVERIFY(pad.connected());
+        QCOMPARE(pad.name(), QStringLiteral("GameSir X2 Pro"));
+        pad.feedAction(QStringLiteral("a"), true);                // Cross / A
+        pad.feedAction(QStringLiteral("a"), false);
+        pad.feedAction(QStringLiteral("up"), true);
+        QCOMPARE(pressed.size(), 2);
+        QCOMPARE(pressed.at(0).at(0).toString(), QStringLiteral("a"));
+        QCOMPARE(pressed.at(1).at(0).toString(), QStringLiteral("up"));
+        // holding left repeats like a key; letting go stops it
+        pad.feedAction(QStringLiteral("left"), true);
+        QTRY_VERIFY_WITH_TIMEOUT(pressed.size() >= 5, 1500);
+        pad.feedAction(QStringLiteral("left"), false);
+        const int n = pressed.size();
+        QTest::qWait(300);
+        QCOMPARE(pressed.size(), n);
+        // the diagnostics list keeps only the last 20 raw events
+        for (int i = 0; i < 30; ++i) pad.logEvent(QStringLiteral("down KEYCODE_BUTTON_A -> a #%1").arg(i));
+        QCOMPARE(pad.recentEvents().size(), 20);
+        QCOMPARE(pad.recentEvents().last(), QStringLiteral("down KEYCODE_BUTTON_A -> a #29"));
+        pad.setDevice({});
+        QVERIFY(!pad.connected());
+        QVERIFY(pad.name().isEmpty());
     }
 
     void sameSeedSamePieces()

@@ -171,6 +171,9 @@ int main(int argc, char *argv[])
     if (jostFamily != QLatin1String("Jost")) QFont::insertSubstitutions(QStringLiteral("Jost"), fallbacks);
 
     hop::App hopApp;
+#ifdef Q_OS_ANDROID
+    hopApp.gamepad()->registerAndroid();   // game controllers: the activity reports them to this object
+#endif
     if (!hopApp.init()) return 1;
 
     hop::registerVideoQmlTypes();

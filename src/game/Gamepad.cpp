@@ -3,6 +3,10 @@
 
 #include <QDir>
 #include <QFile>
+#if defined(Q_OS_ANDROID)
+#  include <QJniEnvironment>
+#  include <QJniObject>
+#endif
 #include <QLibrary>
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
@@ -27,20 +31,26 @@ const char *buttonName(int b)
 }
 }
 
+Gamepad *Gamepad::s_instance = nullptr;
+
 Gamepad::Gamepad(QObject *parent) : QObject(parent)
 {
+    s_instance = this;
     m_scan.setInterval(2000);
     connect(&m_scan, &QTimer::timeout, this, &Gamepad::scan);
     m_repeat.setInterval(70);
     connect(&m_repeat, &QTimer::timeout, this, &Gamepad::repeatTick);
 }
 
-Gamepad::~Gamepad() { setListening(false); }
+Gamepad::~Gamepad() { setListening(false); if (s_instance == this) s_instance = nullptr; }
 
 void Gamepad::setListening(bool on)
 {
     if (on == m_listening) return;
     m_listening = on;
+#if defined(Q_OS_ANDROID)
+    androidSetListening(on);   // tell the activity whether a game wants the controller to itself
+#endif
     if (on) { scan(); m_scan.start(); }
     else {
         m_scan.stop();
@@ -80,6 +90,19 @@ void Gamepad::repeatTick()
 }
 
 void Gamepad::feedAction(const QString &action, bool down) { hold(action, down); }
+
+void Gamepad::setDevice(const QString &name)
+{
+    if (name.isEmpty()) { m_held.clear(); m_repeat.stop(); setConnected(false); }
+    else setConnected(true, name);
+}
+
+void Gamepad::logEvent(const QString &text)
+{
+    m_events.append(text);
+    while (m_events.size() > 20) m_events.removeFirst();
+    emit eventsChanged();
+}
 
 #if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
 
@@ -186,6 +209,12 @@ void Gamepad::pollWindows()
     m_winButtons = b;
 }
 
+#elif defined(Q_OS_ANDROID)
+
+// Android: nothing to scan, the activity (android/src/.../HopActivity.java) reports the controller and its buttons.
+void Gamepad::scan() {}
+void Gamepad::pollWindows() {}
+
 #else
 
 void Gamepad::scan() {}
@@ -195,6 +224,53 @@ void Gamepad::pollWindows() {}
 
 #if !(defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID))
 void Gamepad::readLinux() {}
+#endif
+
+#if defined(Q_OS_ANDROID)
+
+void Gamepad::androidSetListening(bool on)
+{
+    QJniObject::callStaticMethod<void>("io/github/thestylewithin/hoptunes/HopActivity", "setListening", "(Z)V", jboolean(on));
+}
+
+namespace {
+// These run on the Android UI thread; everything is handed over to the Qt thread.
+void jniAction(JNIEnv *env, jclass, jstring action, jboolean down)
+{
+    const QString a = QJniObject(action).toString();
+    Q_UNUSED(env);
+    if (Gamepad *g = Gamepad::instance())
+        QMetaObject::invokeMethod(g, [g, a, down] { g->feedAction(a, down); }, Qt::QueuedConnection);
+}
+void jniRaw(JNIEnv *, jclass, jstring text)
+{
+    const QString t = QJniObject(text).toString();
+    if (Gamepad *g = Gamepad::instance())
+        QMetaObject::invokeMethod(g, [g, t] { g->logEvent(t); }, Qt::QueuedConnection);
+}
+void jniDevice(JNIEnv *, jclass, jstring name)
+{
+    const QString n = QJniObject(name).toString();
+    if (Gamepad *g = Gamepad::instance())
+        QMetaObject::invokeMethod(g, [g, n] { g->logEvent(n.isEmpty() ? QStringLiteral("controller: none") : QStringLiteral("controller: ") + n); g->setDevice(n); },
+                                  Qt::QueuedConnection);
+}
+}
+
+// Called once from main(): connects HopActivity's native methods to the functions above and asks for the current controller.
+void Gamepad::registerAndroid()
+{
+    QJniEnvironment env;
+    const JNINativeMethod methods[] = {
+        {"nativeAction", "(Ljava/lang/String;Z)V", reinterpret_cast<void *>(jniAction)},
+        {"nativeRaw", "(Ljava/lang/String;)V", reinterpret_cast<void *>(jniRaw)},
+        {"nativeDevice", "(Ljava/lang/String;)V", reinterpret_cast<void *>(jniDevice)},
+    };
+    env.registerNativeMethods("io/github/thestylewithin/hoptunes/HopActivity", methods, 3);
+    const QJniObject name = QJniObject::callStaticObjectMethod("io/github/thestylewithin/hoptunes/HopActivity", "controllerName", "()Ljava/lang/String;");
+    if (name.isValid()) { const QString n = name.toString(); if (!n.isEmpty()) setDevice(n); }
+}
+
 #endif
 
 } // namespace hop

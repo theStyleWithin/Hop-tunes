@@ -790,7 +790,8 @@ QVariantMap App::gameSettings() const
 {
     QVariantMap out{{QStringLiteral("vizStyle"), QStringLiteral("bars")}, {QStringLiteral("vizColor"), QStringLiteral("accent")},
                     {QStringLiteral("vizIntensity"), 1.0}, {QStringLiteral("vizBackdrop"), false}, {QStringLiteral("chat"), false},
-                    {QStringLiteral("stage"), QStringLiteral("art")}};
+                    {QStringLiteral("stage"), QStringLiteral("art")},
+                    {QStringLiteral("autoNowPlaying"), true}};   // a controller is connected: starting a song opens Now playing
     const QJsonObject o = m_nowPlaying.value(QStringLiteral("settings")).toObject();
     for (auto it = o.constBegin(); it != o.constEnd(); ++it) if (out.contains(it.key())) out.insert(it.key(), it.value().toVariant());
     return out;
@@ -799,11 +800,11 @@ QVariantMap App::gameSettings() const
 void App::setGameSetting(const QString &key, const QVariant &value)
 {
     static const QSet<QString> known = {QStringLiteral("vizStyle"), QStringLiteral("vizColor"), QStringLiteral("vizIntensity"),
-                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage")};
+                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage"), QStringLiteral("autoNowPlaying")};
     if (!known.contains(key)) return;
     QVariant v = value;
     if (key == QLatin1String("vizIntensity")) v = qBound(0.3, value.toDouble(), 2.0);
-    else if (key == QLatin1String("vizBackdrop") || key == QLatin1String("chat")) v = value.toBool();
+    else if (key == QLatin1String("vizBackdrop") || key == QLatin1String("chat") || key == QLatin1String("autoNowPlaying")) v = value.toBool();
     else {
         static const QHash<QString, QStringList> allowed = {{QStringLiteral("vizStyle"), {QStringLiteral("bars"), QStringLiteral("mirror"), QStringLiteral("rings")}},
             {QStringLiteral("vizColor"), {QStringLiteral("accent"), QStringLiteral("rainbow"), QStringLiteral("white")}},
