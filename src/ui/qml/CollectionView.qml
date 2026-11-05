@@ -66,6 +66,8 @@ Item {
         if (ebookReader.visible) { ebookReader.close(); return }
         if (root.collectionTab !== "music") {
             if (root.collectionTab === "pictures" && hop.pictureAlbum !== "") { hop.closePictureAlbum(); return }
+            if (hop.sectionOpenSlot[root.collectionTab]) { hop.closeSlot(root.collectionTab); return }
+            if (root.collectionTab === "videos" && hop.videoSlot !== "") { hop.closeVideoSlot(); return }
             root.collectionTab = "music"
             return
         }
