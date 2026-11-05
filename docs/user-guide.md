@@ -50,6 +50,12 @@ APE, Musepack and WMA. It scans in the background and only re-reads files that c
 
 - **Add or remove folders** in *settings → media folders*. Removing a folder only stops
   Hop-tunes looking there; your files stay where they are.
+- **Keep your music where Hop-tunes can find it, and check carefully that it is the right folder.** If a music
+  folder lives on an external drive, a network share or a USB stick, plug it in (and let it mount) before you
+  press play. Songs whose files are not there cannot play: Hop-tunes skips each missing song, so with the drive
+  unplugged it can look as if pressing play does nothing and the list jumps to the bottom. Also look in
+  *settings → media folders* that the folder you actually use is the one that is added (it is easy to have a
+  second copy of the same music in another place, one that is connected and one that is not).
 - **Cover art** comes from the art embedded in your files, or an image called `cover`,
   `folder`, `front` or `album` (`.jpg` or `.png`) next to them.
 - **Browse** in *collection → music*: **artists** (three panes: artist → albums → songs),
@@ -257,6 +263,11 @@ volume slider in the mini player isn't at zero.
 - **AUR:** install `gst-libav` (and `gst-plugins-ugly` for some MP3/WMA files).
 - **Flatpak:** the codecs come from the runtime's `codecs-extra` extension, which Flatpak
   installs with the runtime. If AAC or WMA files still won't play, run `flatpak update`.
+
+**Pressing play does nothing and the list jumps to the last song.** Almost always the songs' files cannot be
+reached: the drive they are on is not plugged in or not mounted, or the folder was moved. Plug the drive in, or
+add the folder where the music really is in *settings → media folders*, then *rescan now*. Check that the folder you
+added is the one that holds the music you are trying to play.
 
 **Songs are missing.** Check *settings → media folders* and press *rescan now*. Hop-tunes
 skips files it can't recognise as audio. In the Flatpak, folders outside your Music folder
