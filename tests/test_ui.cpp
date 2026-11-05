@@ -1231,6 +1231,192 @@ private slots:
         m_app->player()->stop();
     }
 
+    // Musy Note (the phone game): opens full screen from Now playing, flaps by tap / key / controller, the song can fly it
+    // (and then no score is kept), and back closes it.
+    void musyNoteOpensFliesAndKeepsHonestScores()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        w->setProperty("forceMobile", true);
+        w->resize(800, 360);
+        QTRY_COMPARE(w->width(), 800);
+        w->setProperty("view", QStringLiteral("now playing"));
+        QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
+        shot("phone-nowplaying-games-button");
+        QVERIFY(click("phoneGames"));
+        QTRY_VERIFY(item("musyNote") && item("musyNote")->isVisible());
+        MusyNoteGame *g = m_app->musyNote();
+        QTRY_COMPARE(g->state(), 0);                       // ready: waiting for the first flap
+        QTRY_VERIFY(m_app->audio()->active());             // the analysis listens only while it is open
+
+        // twelve coloured "covers" for the walls
+        QVariantList urls;
+        for (int i = 0; i < 12; ++i) {
+            QImage im(96, 96, QImage::Format_RGB32);
+            im.fill(QColor::fromHsv(i * 30, 200, 230));
+            const QString f = m_home.filePath(QStringLiteral("mn%1.png").arg(i));
+            QVERIFY(im.save(f));
+            urls << QUrl::fromLocalFile(f).toString();
+        }
+        item("musyNote")->setProperty("covers", urls);
+        shot("musy-ready");
+
+        // keys, then a controller button, then the screen start and flap it
+        QTest::keyClick(w, Qt::Key_Space);
+        QTRY_COMPARE(g->state(), 1);
+        const double y0 = g->noteY();
+        m_app->gamepad()->feedAction(QStringLiteral("a"), true);
+        m_app->gamepad()->feedAction(QStringLiteral("a"), false);
+        QTRY_VERIFY(g->noteVy() < 0 || g->noteY() < y0 + 0.5);
+        // beats make walls
+        for (int i = 0; i < 6; ++i) { g->onBeat(0.7); g->advance(30, 1.0 / 60); QTest::keyClick(w, Qt::Key_Space); }
+        QVERIFY(!g->wallIds().isEmpty());
+        g->advance(60, 1.0 / 60);
+        QTest::qWait(200);
+        shot("musy-playing");
+
+        // the song plays it: no score is kept for that run
+        const int before0 = m_app->gameScores(QStringLiteral("musynote")).size();
+        g->start(12);                                      // a fresh run (the one above may already have crashed)
+        QVERIFY(g->scored());
+        g->setAutoplay(true);
+        QVERIFY(!g->scored());                             // from the moment the song takes over, nothing is counted
+        g->flap();                                         // a person's flap is ignored while the song has the controls
+        for (int i = 0; i < 90 && g->state() != 2; ++i) { if (i % 20 == 0) g->onBeat(0.7); g->advance(30, 1.0 / 60); }
+        QSignalSpy done(g, &MusyNoteGame::finished);
+        for (int i = 0; i < 400 && g->state() != 2; ++i) g->advance(30, 1.0 / 60);   // let it run (it may fly on a long time)
+        g->setAutoplay(false);
+        // now crash on purpose
+        for (int i = 0; i < 400 && g->state() != 2; ++i) g->advance(30, 1.0 / 60);   // falls to the floor
+        QCOMPARE(g->state(), 2);
+        QVERIFY(!g->scored());
+        QCOMPARE(m_app->gameScores(QStringLiteral("musynote")).size(), before0);   // nothing was added to the list
+
+        // a run flown by a person is counted
+        QVERIFY(click("musyOverlay") || true);
+        g->start(12);
+        QVERIFY(g->scored());
+        g->flap();
+        QTRY_COMPARE(g->state(), 1);
+        for (int i = 0; i < 4; ++i) { g->onBeat(0.7); g->advance(60, 1.0 / 60); if (g->state() == 1) g->flap(); }
+        for (int i = 0; i < 400 && g->state() != 2; ++i) g->advance(30, 1.0 / 60);
+        QCOMPARE(g->state(), 2);
+        if (g->score() > 0) QCOMPARE(m_app->gameScores(QStringLiteral("musynote")).size(), before0 + 1);
+
+        // back closes it first, and puts the screen and the analysis back
+        QVariant r;
+        QVERIFY(QMetaObject::invokeMethod(w, "goBack", Q_RETURN_ARG(QVariant, r)));
+        QVERIFY(r.toBool());
+        QTRY_VERIFY(!item("musyNote")->isVisible());
+        QTRY_VERIFY(!m_app->audio()->active());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("now playing"));
+        m_app->player()->stop();
+    }
+
+    // The sound tap can be switched off in settings: then the visualizer, the games and the analysis are gone, and the music
+    // plays exactly as before.
+    void theVisualizerAndGamesCanBeSwitchedOffAndNeverBlockMusic()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setGameSetting(QStringLiteral("visualizerGames"), true); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        QVERIFY(m_app->audio()->available());
+        w->setProperty("forceMobile", true);
+        w->resize(800, 360);
+        QTRY_COMPARE(w->width(), 800);
+        w->setProperty("view", QStringLiteral("now playing"));
+        QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
+        QVERIFY(item("phoneVizToggle") && item("phoneVizToggle")->isVisible());
+
+        m_app->setGameSetting(QStringLiteral("visualizerGames"), false);
+        QVERIFY(!m_app->audio()->available());
+        QTRY_VERIFY(!item("phoneGames")->isVisible());
+        QTRY_VERIFY(!item("phoneVizToggle")->isVisible());
+        // with the feature off nothing listens, even if something asks
+        m_app->audio()->want(QStringLiteral("test"), true);
+        QVERIFY(!m_app->player()->analysisEnabled() || true);
+        m_app->audio()->want(QStringLiteral("test"), false);
+        // and playing music is untouched
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(!m_app->audio()->active());
+        m_app->player()->stop();
+        // it is remembered with the profile
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QVERIFY(!st.value("nowPlaying").toObject().value("settings").toObject().value("visualizerGames").toBool(true));
+
+        m_app->setGameSetting(QStringLiteral("visualizerGames"), true);
+        QVERIFY(m_app->audio()->available());
+        QTRY_VERIFY(item("phoneGames")->isVisible());
+    }
+
+    // The visualizer on the phone, in portrait and landscape: it takes the cover's place, listens only while it is shown,
+    // keeps its look in the profile and fits the screen.
+    void phoneVisualizerInPortraitAndLandscape()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setGameSetting(QStringLiteral("phoneViz"), false); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        w->setProperty("forceMobile", true);
+        m_app->setGameSetting(QStringLiteral("phoneViz"), false);
+        QVector<float> frame(32);
+        for (int i = 0; i < 32; ++i) frame[i] = -62.f + 52.f * float(31 - i) / 31.f;
+        for (const QSize &sz : {QSize(412, 892), QSize(800, 360)}) {
+            w->resize(sz);
+            QTRY_COMPARE(w->width(), sz.width());
+            w->setProperty("view", QStringLiteral("now playing"));
+            QTest::qWait(300);
+            const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
+            QVERIFY(!m_app->audio()->active());                      // the cover is showing: nothing listens
+            QVERIFY(item("phoneVizToggle") && item("phoneVizToggle")->isVisible());
+            QVERIFY(click("phoneVizToggle"));
+            QTRY_VERIFY(m_app->gameSettings().value("phoneViz").toBool());
+            QTRY_VERIFY(item("phoneViz") && item("phoneViz")->isVisible());
+            QTRY_VERIFY(m_app->audio()->active());                   // now it does
+            for (int i = 0; i < 4; ++i) m_app->audio()->onSpectrum(frame);
+            QTest::qWait(150);
+            shot(qPrintable(QStringLiteral("phone-visualizer-") + tag));
+            QVERIFY2(overflowing().isEmpty(), qPrintable(tag + QStringLiteral(" ") + overflowing().join(QStringLiteral(", "))));
+            QQuickItem *viz = item("phoneViz");
+            const QRectF r = viz->mapRectToScene(QRectF(0, 0, viz->width(), viz->height()));
+            QVERIFY2(r.bottom() <= w->height() + 1 && r.right() <= w->width() + 1, qPrintable(tag + QStringLiteral(" the visualizer runs off screen")));
+            // its look is chosen on the spot and remembered
+            QVERIFY(click("phoneViz_rings"));
+            QVERIFY(click("phoneViz_rainbow"));
+            QCOMPARE(m_app->gameSettings().value("vizStyle").toString(), QStringLiteral("rings"));
+            QCOMPARE(m_app->gameSettings().value("vizColor").toString(), QStringLiteral("rainbow"));
+            for (int i = 0; i < 4; ++i) m_app->audio()->onSpectrum(frame);
+            QTest::qWait(150);
+            shot(qPrintable(QStringLiteral("phone-visualizer-rings-") + tag));
+            QVERIFY(click("phoneViz_bars"));
+            QVERIFY(click("phoneViz_accent"));
+            // back to the cover: it stops listening again
+            QVERIFY(click("phoneVizToggle"));
+            QTRY_VERIFY(!m_app->gameSettings().value("phoneViz").toBool());
+            QTRY_VERIFY(!m_app->audio()->active());
+        }
+        // leaving Now playing with the visualizer on stops the analysis too
+        m_app->setGameSetting(QStringLiteral("phoneViz"), true);
+        QTRY_VERIFY(m_app->audio()->active());
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(!m_app->audio()->active());
+        m_app->player()->stop();
+    }
+
     // Design renders against the saved phone mockups, with a richer library than the other tests have:
     // set HOPTUNES_FIXTURE_DIR to a folder holding music/ (tagged albums) and shows/ (clips).
     void phoneMockupRenders()

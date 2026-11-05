@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 
 // Phones: now playing as in the mockups: a big cover, the song, a seek bar, the transport with a solid play
 // button, and heart / queue / volume underneath. Turned sideways (landscape) the cover moves to the left and
@@ -12,6 +13,11 @@ Item {
     readonly property var player: hop.player
     property bool showQueue: false
     property bool showVolume: false
+    // the visualizer takes the cover's place (portrait and landscape): the same one as on the desktop, with its own choices
+    readonly property bool showViz: hop.audio.available && hop.gameSettings.phoneViz && !showQueue
+    readonly property bool wantsAudio: root.visible && showViz
+    onWantsAudioChanged: hop.audio.want("phoneviz", wantsAudio)
+    readonly property var gs: hop.gameSettings
     property int queueRev: 0
     readonly property bool land: width > height * 1.1   // the phone is turned sideways
     Connections { target: root.player; function onQueueChanged() { root.queueRev++ } }
@@ -33,6 +39,26 @@ Item {
             }
             Label { text: "now playing"; color: Theme.muted; font { family: Theme.font; pixelSize: root.land ? 17 : 20 } }
             Item { Layout.fillWidth: true }
+            AbstractButton {   // the visualizer in place of the cover
+                objectName: "phoneVizToggle"
+                visible: hop.audio.available
+                implicitHeight: root.land ? 32 : 36; implicitWidth: vizLabel.implicitWidth + 28
+                onClicked: hop.setGameSetting("phoneViz", !hop.gameSettings.phoneViz)
+                Accessible.name: "visualizer"
+                background: Rectangle { radius: height / 2; color: root.showViz ? Theme.accent : "transparent"; border { width: 1; color: Theme.accent } }
+                contentItem: Label { id: vizLabel; text: root.showViz ? "cover" : "visualizer"; color: root.showViz ? Theme.ink : Theme.accent
+                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 15 } }
+            }
+            AbstractButton {   // the game: a music note flying through your album covers
+                objectName: "phoneGames"
+                visible: hop.audio.available
+                implicitHeight: root.land ? 32 : 36; implicitWidth: gamesLabel.implicitWidth + 28
+                onClicked: if (Window.window && Window.window.openMusyNote) Window.window.openMusyNote()
+                Accessible.name: "games"
+                background: Rectangle { radius: height / 2; color: "transparent"; border { width: 1; color: Theme.accent } }
+                contentItem: Label { id: gamesLabel; text: "\u266a games"; color: Theme.accent; horizontalAlignment: Text.AlignHCenter
+                                     verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 15 } }
+            }
         }
 
         GridLayout {   // portrait: the cover above the rest. landscape: the cover left, the rest right
@@ -47,8 +73,40 @@ Item {
                 Layout.preferredWidth: root.land ? Math.min(height, root.width * 0.42) : -1
                 Layout.preferredHeight: root.land ? -1 : Math.min(width, 340) + 12
                 Layout.minimumHeight: root.land ? 80 : 120
+                Item {   // the visualizer, as big as the cover's slot, with its look one tap away
+                    id: vizBox
+                    objectName: "phoneViz"
+                    visible: root.showViz
+                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: root.land ? 0 : 6 }
+                    width: root.land ? parent.width : parent.width; height: parent.height - (root.land ? 0 : 6)
+                    Rectangle { anchors.fill: parent; radius: 10; color: Qt.rgba(1, 1, 1, 0.04) }
+                    Visualizer {
+                        objectName: "phoneVisualizer"
+                        anchors { fill: parent; margins: 8; bottomMargin: 40 }
+                        style: root.gs.vizStyle; colorMode: root.gs.vizColor; intensity: root.gs.vizIntensity
+                    }
+                    Flow {   // the look: shape and colour, one tap each
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 }
+                        spacing: 4
+                        Repeater {
+                            model: ["bars", "mirror", "rings", "accent", "rainbow", "white"]
+                            delegate: AbstractButton {
+                                id: vchip
+                                required property string modelData
+                                readonly property bool isShape: ["bars", "mirror", "rings"].indexOf(modelData) >= 0
+                                readonly property bool on: isShape ? root.gs.vizStyle === modelData : root.gs.vizColor === modelData
+                                objectName: "phoneViz_" + modelData
+                                implicitHeight: 28; implicitWidth: vlab.implicitWidth + 16
+                                onClicked: hop.setGameSetting(isShape ? "vizStyle" : "vizColor", modelData)
+                                background: Rectangle { radius: 14; color: vchip.on ? Theme.accent : "transparent"; border { width: 1; color: vchip.on ? Theme.accent : Theme.border } }
+                                contentItem: Label { id: vlab; text: vchip.modelData; color: vchip.on ? Theme.ink : Theme.muted
+                                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 12 } }
+                            }
+                        }
+                    }
+                }
                 AlbumArt {
-                    visible: !root.showQueue
+                    visible: !root.showQueue && !root.showViz
                     anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: root.land ? 0 : 6 }
                     width: Math.min(parent.width, parent.height - (root.land ? 0 : 6), 340); height: width
                     key: root.player.album; source: root.player.artUrl; radius: 10; cornerColor: Theme.bg

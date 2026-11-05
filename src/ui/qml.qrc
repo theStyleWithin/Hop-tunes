@@ -32,6 +32,7 @@
     <file>qml/NamePrompt.qml</file>
     <file>qml/Visualizer.qml</file>
     <file>qml/AlbumFall.qml</file>
+    <file>qml/MusyNote.qml</file>
     <file>qml/FolderSlots.qml</file>
     <file>qml/MergeArtistDialog.qml</file>
     <file>qml/TrackMenu.qml</file>

@@ -52,10 +52,41 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 {
     m_scanner.setArtCacheDir(Paths::artCacheDir());
     // the music, as the visualizer and the games hear it
-    m_audio.setAvailable(m_player.analysisAvailable());
+#ifdef Q_OS_ANDROID
+    // Android is a different animal: if the last run ended while the sound tap was listening, leave the feature off.
+    m_analysisSafeMode = m_analysisGuard.tripped();
+    if (m_analysisSafeMode) DiagLog::note(QStringLiteral("visualizer and games switched off: the last run ended while the sound analysis was on"));
+#endif
+    updateAnalysisAvailable();
     connect(&m_player, &Player::spectrum, &m_audio, &AudioAnalyzer::onSpectrum);
-    connect(&m_audio, &AudioAnalyzer::activeChanged, this, [this] { m_player.setAnalysisEnabled(m_audio.active()); });
+    connect(&m_audio, &AudioAnalyzer::activeChanged, this, [this] {
+#ifdef Q_OS_ANDROID
+        if (m_audio.active()) m_analysisGuard.arm(); else m_analysisGuard.disarm();
+        DiagLog::note(QStringLiteral("sound analysis %1").arg(m_audio.active() ? QStringLiteral("on") : QStringLiteral("off")));
+#endif
+        m_player.setAnalysisEnabled(m_audio.active());
+        updateAnalysisAvailable();   // the player may have switched it off for good if a song failed with it
+    });
+#ifdef Q_OS_ANDROID
+    // in the background (or when the app is closed) nobody is looking: the marker only guards what happens on screen
+    connect(qApp, &QCoreApplication::aboutToQuit, this, [this] { m_analysisGuard.disarm(); });
+    connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState s) {
+        if (s == Qt::ApplicationActive) { if (m_audio.active()) m_analysisGuard.arm(); }
+        else m_analysisGuard.disarm();
+    });
+#endif
     connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
+    connect(&m_audio, &AudioAnalyzer::beat, &m_musyNote, &MusyNoteGame::onBeat);
+    connect(&m_audio, &AudioAnalyzer::frame, &m_musyNote, [this] {
+        // the pitch of the moment: where the sound sits between the low and the high bands (0 low .. 1 high), smoothed
+        const QVariantList b = m_audio.bands();
+        double sum = 0, weighted = 0;
+        for (int i = 0; i < b.size(); ++i) { const double v = b[i].toDouble(); sum += v; weighted += v * i; }
+        static double pitch = 0.5;
+        if (sum > 0.5 && b.size() > 1) pitch += (weighted / sum / double(b.size() - 1) * 2.6 - 0.3 - pitch) * 0.12;   // stretched: music mostly sits low
+        m_musyNote.setMusic(m_audio.bpm(), qBound(0.0, pitch, 1.0));
+    });
+    connect(&m_player, &Player::playingChanged, &m_musyNote, [this] { m_musyNote.setPlaying(m_player.isPlaying()); });
     connect(&m_audio, &AudioAnalyzer::frame, &m_albumFall, [this] { m_albumFall.setMusic(m_audio.bpm(), m_audio.bass()); });
     connect(&m_player, &Player::playingChanged, &m_albumFall, [this] { m_albumFall.setPlaying(m_player.isPlaying()); });
     m_albumFall.setAnalysis(m_audio.available());
@@ -407,7 +438,7 @@ void App::activate(const QString &id, bool guest)
     m_theme = s.value(QStringLiteral("theme")).toString(QStringLiteral("dark"));
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_nowPlaying = guest ? QJsonObject{} : s.value(QStringLiteral("nowPlaying")).toObject();
-    emit gameSettingsChanged();
+    updateAnalysisAvailable();
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
@@ -786,12 +817,23 @@ QString App::importProfile(const QUrl &file, const QString &name, const QString 
 
 // ---- Now playing: visualizer, games, high scores ------------------------------------------------
 
+// The visualizer and the games are available when the player can tap the sound, the person has not switched them off and the
+// last run did not end while the tap was on.
+void App::updateAnalysisAvailable()
+{
+    const bool wanted = m_nowPlaying.value(QStringLiteral("settings")).toObject().value(QStringLiteral("visualizerGames")).toBool(true);
+    const bool on = m_player.analysisAvailable() && wanted && !m_analysisSafeMode;
+    m_audio.setAvailable(on);
+    if (!on && m_audio.active()) m_audio.setActive(false);
+    emit gameSettingsChanged();
+}
+
 QVariantMap App::gameSettings() const
 {
     QVariantMap out{{QStringLiteral("vizStyle"), QStringLiteral("bars")}, {QStringLiteral("vizColor"), QStringLiteral("accent")},
                     {QStringLiteral("vizIntensity"), 1.0}, {QStringLiteral("vizBackdrop"), false}, {QStringLiteral("chat"), false},
                     {QStringLiteral("stage"), QStringLiteral("art")},
-                    {QStringLiteral("autoNowPlaying"), true}};   // a controller is connected: starting a song opens Now playing
+                    {QStringLiteral("autoNowPlaying"), true}, {QStringLiteral("phoneViz"), false}, {QStringLiteral("visualizerGames"), true}};   // a controller is connected: starting a song opens Now playing
     const QJsonObject o = m_nowPlaying.value(QStringLiteral("settings")).toObject();
     for (auto it = o.constBegin(); it != o.constEnd(); ++it) if (out.contains(it.key())) out.insert(it.key(), it.value().toVariant());
     return out;
@@ -800,11 +842,11 @@ QVariantMap App::gameSettings() const
 void App::setGameSetting(const QString &key, const QVariant &value)
 {
     static const QSet<QString> known = {QStringLiteral("vizStyle"), QStringLiteral("vizColor"), QStringLiteral("vizIntensity"),
-                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage"), QStringLiteral("autoNowPlaying")};
+                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage"), QStringLiteral("autoNowPlaying"), QStringLiteral("phoneViz"), QStringLiteral("visualizerGames")};
     if (!known.contains(key)) return;
     QVariant v = value;
     if (key == QLatin1String("vizIntensity")) v = qBound(0.3, value.toDouble(), 2.0);
-    else if (key == QLatin1String("vizBackdrop") || key == QLatin1String("chat") || key == QLatin1String("autoNowPlaying")) v = value.toBool();
+    else if (key == QLatin1String("vizBackdrop") || key == QLatin1String("chat") || key == QLatin1String("autoNowPlaying") || key == QLatin1String("phoneViz") || key == QLatin1String("visualizerGames")) v = value.toBool();
     else {
         static const QHash<QString, QStringList> allowed = {{QStringLiteral("vizStyle"), {QStringLiteral("bars"), QStringLiteral("mirror"), QStringLiteral("rings")}},
             {QStringLiteral("vizColor"), {QStringLiteral("accent"), QStringLiteral("rainbow"), QStringLiteral("white")}},
@@ -817,7 +859,8 @@ void App::setGameSetting(const QString &key, const QVariant &value)
     o.insert(key, QJsonValue::fromVariant(v));
     m_nowPlaying.insert(QStringLiteral("settings"), o);
     saveProfileSettings();
-    emit gameSettingsChanged();
+    if (key == QLatin1String("visualizerGames") && v.toBool() && m_analysisSafeMode) { m_analysisGuard.clear(); m_analysisSafeMode = false; }
+    updateAnalysisAvailable();
 }
 
 QVariantList App::gameScores(const QString &game) const
@@ -946,6 +989,25 @@ QString App::unmerge(const QString &from, const QString &albumRef)
     if (!had) return QStringLiteral("nothing to split back");
     artistsChanged();
     return {};
+}
+
+void App::setGameScreen(bool on)
+{
+#ifdef Q_OS_ANDROID
+    // 6 = SCREEN_ORIENTATION_SENSOR_LANDSCAPE, -1 = back to whatever the phone does; the bars are hidden with the immersive flags
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread([on] {
+        const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+        if (!activity.isValid()) return;
+        activity.callMethod<void>("setRequestedOrientation", "(I)V", jint(on ? 6 : -1));
+        const QJniObject window = activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+        const QJniObject view = window.callObjectMethod("getDecorView", "()Landroid/view/View;");
+        // IMMERSIVE_STICKY | HIDE_NAVIGATION | FULLSCREEN | LAYOUT_* so the picture really uses all of the screen
+        const jint flags = on ? (0x1000 | 0x2 | 0x4 | 0x100 | 0x200 | 0x400) : 0;
+        view.callMethod<void>("setSystemUiVisibility", "(I)V", flags);
+    });
+#else
+    Q_UNUSED(on);
+#endif
 }
 
 QString App::version() const { return QCoreApplication::applicationVersion(); }

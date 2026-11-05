@@ -98,6 +98,7 @@ GstElement *Player::makeBin()
     g_signal_connect(bin, "about-to-finish", G_CALLBACK(&Player::onAboutToFinish), this);
 #ifndef HOPTUNES_HAVE_GST
     g_signal_connect(bin, "hop-stream-started", G_CALLBACK(&Player::onStreamStartedThread), this);
+    g_signal_connect(bin, "hop-spectrum", G_CALLBACK(&Player::onSpectrumThread), this);
 #endif
     return bin;
 }
@@ -118,7 +119,7 @@ bool Player::analysisAvailable() const
     if (f) gst_object_unref(f);
     return f != nullptr;
 #else
-    return false;
+    return !m_playbin || !hop_shim_analysis_broken(m_playbin);   // Android: the shim taps the decoded samples (GstShim.cpp)
 #endif
 }
 
@@ -162,6 +163,8 @@ void Player::setAnalysisEnabled(bool on)
             gst_object_unref(spec);
         }
     gst_object_unref(filter);
+#else
+    if (m_playbin) hop_shim_set_analysis(m_playbin, on ? TRUE : FALSE);   // Android
 #endif
 }
 
@@ -488,6 +491,17 @@ void Player::onAboutToFinish(GstElement *playbin, void *self)
     }
     g_object_set(playbin, "uri", uri.constData(), nullptr);
 }
+
+#ifndef HOPTUNES_HAVE_GST
+// Android: band levels from the shim's audio thread; hand them to the main thread.
+void Player::onSpectrumThread(GstElement *, const float *bands, int n, void *self)
+{
+    auto *p = static_cast<Player *>(self);
+    QVector<float> v(n);
+    for (int i = 0; i < n; ++i) v[i] = bands[i];
+    QMetaObject::invokeMethod(p, [p, v] { if (p->m_analysis) emit p->spectrum(v); }, Qt::QueuedConnection);
+}
+#endif
 
 void Player::onStreamStartedThread(GstElement *playbin, void *self)
 {

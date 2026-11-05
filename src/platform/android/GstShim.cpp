@@ -8,6 +8,9 @@
 // position, duration and the message bus are shared through atomics and a mutex.
 #include "gst/gst.h"
 
+#include <QAudioBuffer>
+#include <QAudioBufferOutput>
+#include <QAudioFormat>
 #include <QAudioOutput>
 #include <QCoreApplication>
 #include <QMediaPlayer>
@@ -16,6 +19,8 @@
 #include <QQueue>
 #include <QThread>
 #include <QUrl>
+
+#include "game/SpectrumAnalyzer.h"
 
 #include <atomic>
 #include <cstdarg>
@@ -52,6 +57,7 @@ template <class F> void post(F f)
 }
 
 using FinishFn = void (*)(GstElement *, void *);
+using SpectrumFn = void (*)(GstElement *, const float *, int, void *);
 }
 
 struct _GstBus : Obj {
@@ -75,10 +81,16 @@ struct _GstElement : Obj {
     std::atomic<bool> detached{false};
     std::atomic<FinishFn> aboutToFinish{nullptr};
     std::atomic<FinishFn> streamStarted{nullptr};
+    std::atomic<SpectrumFn> spectrum{nullptr};
+    std::atomic<bool> analysis{false};
+    std::atomic<bool> tapBroken{false};
     std::atomic<void *> cbData{nullptr};
     // main-thread view
     GstState state = GST_STATE_NULL;
     // audio thread only
+    QAudioBufferOutput *tap = nullptr;       // the decoded samples, only while analysis is on
+    hop::SpectrumAnalyzer *an = nullptr;
+    int tapRate = 0;
     bool inFinish = false;
     bool uriChanged = false;
     _GstElement() : Obj{KElement} {}
@@ -104,6 +116,37 @@ void setSourceOnAudioThread(_GstElement *e, const QString &uri)
     e->dur = 0;
     if (e->inFinish) e->uriChanged = true;
     e->player->setSource(uri.isEmpty() ? QUrl() : toQUrl(uri));
+}
+
+// Decoded samples of the playing song -> mono -> 32 bands -> the player. Audio thread only.
+void onTapBuffer(_GstElement *e, const QAudioBuffer &b)
+{
+    if (!e->analysis || !b.isValid() || !e->an) return;
+    const QAudioFormat f = b.format();
+    const int ch = qMax(1, f.channelCount()), frames = b.frameCount();
+    if (frames <= 0 || f.sampleRate() <= 0) return;
+    if (f.sampleRate() != e->tapRate) { e->tapRate = f.sampleRate(); e->an->setSampleRate(e->tapRate); e->an->reset(); }
+    QVector<float> mono(frames);
+    auto mix = [&](auto *src, float scale, float bias) {
+        for (int i = 0; i < frames; ++i) {
+            float sum = 0.f;
+            for (int c = 0; c < ch; ++c) sum += (float(src[i * ch + c]) - bias) * scale;
+            mono[i] = sum / float(ch);
+        }
+    };
+    switch (f.sampleFormat()) {
+    case QAudioFormat::Int16: mix(b.constData<qint16>(), 1.f / 32768.f, 0.f); break;
+    case QAudioFormat::Int32: mix(b.constData<qint32>(), 1.f / 2147483648.f, 0.f); break;
+    case QAudioFormat::UInt8: mix(b.constData<quint8>(), 1.f / 128.f, 128.f); break;
+    case QAudioFormat::Float: mix(b.constData<float>(), 1.f, 0.f); break;
+    default: return;
+    }
+    e->an->feed(mono.constData(), frames);
+    QVector<float> bands;
+    while (e->an->next(&bands)) {
+        if (e->detached) return;
+        if (SpectrumFn fn = e->spectrum.load()) fn(e, bands.constData(), int(bands.size()), e->cbData.load());
+    }
 }
 
 // The song ended on the audio thread: let the player queue pick the next one (gapless hand-off), or report the end.
@@ -160,6 +203,19 @@ GstElement *gst_element_factory_make(const char *name, const char *)
             }
         });
         QObject::connect(e->player, &QMediaPlayer::errorOccurred, e->player, [e](QMediaPlayer::Error, const QString &text) {
+            // The sound tap is only a picture for the visualizer and the games: if a song fails while it is attached, take it
+            // out and play the same song again without it, instead of losing the music for a picture.
+            if (e->tap && e->player->audioBufferOutput() == e->tap && !e->tapBroken) {
+                e->tapBroken = true;
+                e->analysis = false;
+                const QUrl src = e->player->source();
+                const qint64 at = e->pos.load();
+                e->player->setAudioBufferOutput(nullptr);
+                e->player->setSource(src);
+                if (at > 0) e->player->setPosition(at);
+                e->player->play();
+                return;
+            }
             e->bus->push(makeMsg(GST_MESSAGE_ERROR, e, text.isEmpty() ? QStringLiteral("playback error") : text));
         });
         QObject::connect(e->player, &QMediaPlayer::positionChanged, e->player, [e](qint64 p) { e->pos = p; });
@@ -175,7 +231,34 @@ unsigned long hop_shim_connect(void *obj, const char *signal, GCallback cb, void
     e->cbData = data;
     if (!std::strcmp(signal, "about-to-finish")) e->aboutToFinish = reinterpret_cast<FinishFn>(cb);
     else if (!std::strcmp(signal, "hop-stream-started")) e->streamStarted = reinterpret_cast<FinishFn>(cb);
+    else if (!std::strcmp(signal, "hop-spectrum")) e->spectrum = reinterpret_cast<SpectrumFn>(cb);
     return 1;
+}
+
+gboolean hop_shim_analysis_broken(GstElement *e)
+{
+    return e && e->kind == KElement && e->tapBroken.load();
+}
+
+void hop_shim_set_analysis(GstElement *e, gboolean on)
+{
+    if (!e || e->kind != KElement || e->tapBroken) return;
+    e->analysis = on != 0;
+    post([e, on] {
+        if (!e->player || e->detached) return;
+        if (on) {
+            if (!e->tap) {
+                e->an = new hop::SpectrumAnalyzer;
+                e->tap = new QAudioBufferOutput(e->player);
+                QObject::connect(e->tap, &QAudioBufferOutput::audioBufferReceived, e->player,
+                                 [e](const QAudioBuffer &b) { onTapBuffer(e, b); });
+            }
+            e->tapRate = 0;
+            e->player->setAudioBufferOutput(e->tap);
+        } else {
+            e->player->setAudioBufferOutput(nullptr);   // no decoding for nothing
+        }
+    });
 }
 
 void hop_shim_disconnect(void *obj, void *)
@@ -185,6 +268,7 @@ void hop_shim_disconnect(void *obj, void *)
     e->detached = true;
     e->aboutToFinish = nullptr;
     e->streamStarted = nullptr;
+    e->spectrum = nullptr;
 }
 
 GstElement *gst_parse_launch(const char *, GError **) { return nullptr; }
@@ -201,6 +285,7 @@ void gst_object_unref(void *o)
     e->detached = true;
     post([e] {   // after everything already queued for it
         delete e->player;
+        delete e->an;
         delete e->out;
         delete e->bus;
         delete e;

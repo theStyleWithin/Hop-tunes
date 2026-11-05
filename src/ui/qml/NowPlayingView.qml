@@ -17,7 +17,8 @@ Rectangle {
     readonly property var gs: hop.gameSettings
     function setStage(s) { hop.setGameSetting("stage", s) }
     // the analysis and the controller are only listened to while they are on screen
-    Binding { target: hop.audio; property: "active"; value: root.visible && root.staged }
+    readonly property bool wantsAudio: root.visible && root.staged
+    onWantsAudioChanged: hop.audio.want("stage", wantsAudio)
     function syncPad() { hop.gamepad.setListening(root.visible && root.stage === "albumfall") }
     onStageChanged: syncPad()
     Component.onCompleted: syncPad()
