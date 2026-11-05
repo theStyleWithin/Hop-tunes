@@ -11,7 +11,7 @@ namespace hop {
 // here, so it is deterministic and unit-tested; the screen (AlbumFall.qml) and the beat (BeatTracker) are plugged in
 // from outside.
 //
-//  * The board is 10 wide, 20 tall. Every block carries an album cover: a piece is one cover, a cell holds
+//  * The board is 10 wide, 20 tall. Every block carries its own random album cover; a cell holds
 //    cover number + 1 (0 = empty).
 //  * A beat (beat()) with a strength 0..1 picks the next piece: a soft beat gives a small piece (2-3 blocks), a normal
 //    one a four-block piece, a heavy one a five-block piece.
@@ -44,9 +44,10 @@ public:
     bool hasPiece() const { return m_active; }
     QVector<QPoint> pieceCells() const;      // absolute positions of the falling piece
     QVector<QPoint> ghostCells() const;      // where it would land
-    int pieceArt() const { return m_piece.art; }
+    // every block of a piece carries its own random cover (index 0..artCount-1), like a box of chocolates
+    QVector<int> pieceArts() const { return m_active ? m_piece.arts : QVector<int>(); }
     QVector<QPoint> nextCells() const { return m_next.cells; }   // shape only, around (0,0)
-    int nextArt() const { return m_next.art; }
+    QVector<int> nextArts() const { return m_next.arts; }
     int score() const { return m_score; }
     int lines() const { return m_lines; }
     int level() const { return 1 + m_lines / 10; }
@@ -62,7 +63,7 @@ public:
     static QVector<QVector<QPoint>> shapesFor(double strength);   // the pool a beat of this strength draws from
 
 private:
-    struct Piece { QVector<QPoint> cells; int art = 0; int x = 0, y = 0; };
+    struct Piece { QVector<QPoint> cells; QVector<int> arts; int x = 0, y = 0; };
     bool fits(const Piece &p, int dx, int dy) const;
     bool move(int dx);
     void lock(qint64 nowMs);

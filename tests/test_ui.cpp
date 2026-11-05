@@ -1568,6 +1568,24 @@ private slots:
         QTRY_VERIFY(m_app->albumFall()->running());
         QVERIFY(!m_app->albumFall()->paused());
         AlbumFall *g = m_app->albumFall();
+        {   // every block takes a cover of its own: make twelve differently coloured "covers" and play with them
+            QVariantList urls;
+            for (int i = 0; i < 12; ++i) {
+                QImage im(96, 96, QImage::Format_RGB32);
+                im.fill(QColor::fromHsv(i * 30, 200, 230));
+                const QString f = m_home.filePath(QStringLiteral("cover%1.png").arg(i));
+                QVERIFY(im.save(f));
+                urls << QUrl::fromLocalFile(f).toString();
+            }
+            item("albumFall")->setProperty("covers", urls);
+            g->start(12);
+            g->onBeat(0.9);
+            QCOMPARE(g->pieceArts().size(), 5);
+            for (int i = 0; i < 4; ++i) { g->act(QStringLiteral("drop")); g->onBeat(0.9); }
+            QTest::qWait(500);
+            shot("np-albumfall-covers");
+            g->start(12);
+        }
         g->onBeat(0.9);                                              // a heavy beat: a five-block piece
         QCOMPARE(g->piece().size(), 10);                             // [x, y] x 5
         const QVariant x0 = g->piece().first();

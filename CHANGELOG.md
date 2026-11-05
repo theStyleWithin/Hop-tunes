@@ -4,6 +4,19 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-11-05
+
+### Fixed
+- **No song would play on some systems (1.7.4).** Clicking play could do nothing and jump to the last song of the list.
+  The audio analysis added for the visualizer sat in the audio path all the time; it is now only added while the
+  visualizer or Album Fall is open, so normal listening is exactly as before. If a song ever fails with it in place it is
+  taken out and the song is retried. And when many songs in a row fail to play (a missing codec, a broken sound
+  device), playback now stops after eight with the reason shown, instead of skipping through the whole list.
+
+### Changed
+- **Album Fall:** every block now takes its own random album cover from all your scanned albums (up to 150 shuffled
+  each game), a box of chocolates: you never know which one you get.
+
 ## [1.7.4] - 2026-11-05
 
 ### Added

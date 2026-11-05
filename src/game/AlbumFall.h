@@ -25,8 +25,8 @@ class AlbumFall : public QObject {
     Q_PROPERTY(QVariantList piece READ piece NOTIFY changed)           // [x, y, x, y, ...] of the falling piece
     Q_PROPERTY(QVariantList ghost READ ghost NOTIFY changed)
     Q_PROPERTY(QVariantList next READ next NOTIFY changed)             // the next piece, around (0,0)
-    Q_PROPERTY(int pieceArt READ pieceArt NOTIFY changed)
-    Q_PROPERTY(int nextArt READ nextArt NOTIFY changed)
+    Q_PROPERTY(QVariantList pieceArts READ pieceArts NOTIFY changed)   // one cover number per block of the piece
+    Q_PROPERTY(QVariantList nextArts READ nextArts NOTIFY changed)
     Q_PROPERTY(int beatFlash READ beatFlash NOTIFY beatFlashChanged)   // counts up on every beat (pulses the screen)
     Q_PROPERTY(int landed READ landed NOTIFY changed)                  // counts up on every landing
     Q_PROPERTY(bool landedOnBeat READ landedOnBeat NOTIFY changed)
@@ -49,8 +49,8 @@ public:
     QVariantList piece() const { return flat(m_board.pieceCells()); }
     QVariantList ghost() const { return flat(m_board.ghostCells()); }
     QVariantList next() const { return flat(m_board.nextCells()); }
-    int pieceArt() const { return m_board.pieceArt(); }
-    int nextArt() const { return m_board.nextArt(); }
+    QVariantList pieceArts() const { QVariantList o; for (int v : m_board.pieceArts()) o.append(v); return o; }
+    QVariantList nextArts() const { QVariantList o; for (int v : m_board.nextArts()) o.append(v); return o; }
     int beatFlash() const { return m_beatFlash; }
     int landed() const { return m_board.lockCount(); }
     bool landedOnBeat() const { return m_board.lastLockOnBeat(); }

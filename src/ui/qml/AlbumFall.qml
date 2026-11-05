@@ -18,12 +18,14 @@ FocusScope {
     readonly property bool needMusic: !hop.player.playing && !game.gameOver
     signal leave()
 
+    // Every block is its own random album from everything that has been scanned: the covers are shuffled, up to 150
+    // of them, and each block draws its own (a box of chocolates, you never know which you get).
     function newGame() {
         const all = hop.mosaicArt.slice()
         for (let i = all.length - 1; i > 0; --i) { const j = Math.floor(Math.random() * (i + 1)); const t = all[i]; all[i] = all[j]; all[j] = t }
-        covers = all.slice(0, 8)
+        covers = all.slice(0, 150)
         lastRank = 0
-        game.start(Math.max(covers.length, 5))
+        game.start(Math.max(covers.length, 1))
     }
     function act(a) {
         if (a === "pause") { if (game.gameOver) newGame(); else game.paused = !game.paused; return }
@@ -104,7 +106,7 @@ FocusScope {
                         Block {
                             required property int index
                             x: root.game.next[index * 2] * 26 - 13; y: root.game.next[index * 2 + 1] * 26 - 13
-                            width: 26; height: 26; art: root.game.nextArt
+                            width: 26; height: 26; art: root.game.nextArts[index]
                         }
                     }
                 }
@@ -164,7 +166,7 @@ FocusScope {
                         required property int index
                         visible: root.game.piece[index * 2 + 1] >= 0
                         x: root.game.piece[index * 2] * root.cs; y: root.game.piece[index * 2 + 1] * root.cs
-                        width: root.cs; height: root.cs; art: root.game.pieceArt
+                        width: root.cs; height: root.cs; art: root.game.pieceArts[index]
                     }
                 }
             }

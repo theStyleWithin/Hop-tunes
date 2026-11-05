@@ -55,6 +55,7 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     m_audio.setAvailable(m_player.analysisAvailable());
     connect(&m_player, &Player::spectrum, &m_audio, &AudioAnalyzer::onSpectrum);
     connect(&m_audio, &AudioAnalyzer::activeChanged, this, [this] { m_player.setAnalysisEnabled(m_audio.active()); });
+    connect(&m_player, &Player::analysisDisabled, this, [this] { m_audio.setAvailable(false); m_albumFall.setAnalysis(false); DiagLog::note(QStringLiteral("audio analysis switched off: it stopped a song playing")); });
     connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
     connect(&m_audio, &AudioAnalyzer::frame, &m_albumFall, [this] { m_albumFall.setMusic(m_audio.bpm(), m_audio.bass()); });
     connect(&m_player, &Player::playingChanged, &m_albumFall, [this] { m_albumFall.setPlaying(m_player.isPlaying()); });

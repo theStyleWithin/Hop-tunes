@@ -79,7 +79,7 @@ FallBoard::Piece FallBoard::makePiece(double strength)
     const QVector<Shape> pool = shapesFor(strength);
     Piece p;
     p.cells = pool[int(rnd() % quint32(pool.size()))];
-    p.art = int(rnd() % quint32(m_artCount));
+    for (int i = 0; i < p.cells.size(); ++i) p.arts.append(int(rnd() % quint32(m_artCount)));   // one cover per block
     for (int turns = int(rnd() % 4); turns > 0; --turns)
         for (QPoint &c : p.cells) c = QPoint(-c.y(), c.x());
     return p;
@@ -148,10 +148,11 @@ void FallBoard::hardDrop()
 
 void FallBoard::lock(qint64 nowMs)
 {
-    for (const QPoint &c : m_piece.cells) {
+    for (int i = 0; i < m_piece.cells.size(); ++i) {
+        const QPoint c = m_piece.cells[i];
         const int x = m_piece.x + c.x(), y = m_piece.y + c.y();
         if (y < 0) { m_state = GameOver; m_active = false; return; }
-        m_grid[y * W + x] = m_piece.art + 1;
+        m_grid[y * W + x] = m_piece.arts[i] + 1;
     }
     m_active = false;
     ++m_lockCount;

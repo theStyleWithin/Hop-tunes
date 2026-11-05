@@ -147,6 +147,7 @@ signals:
     void repeatModeChanged();
     void shuffleChanged();
     void crossfadeChanged();
+    void analysisDisabled();                         // the analysis filter stopped a song playing and was removed
     void spectrum(const QVector<float> &bandsDb);   // 32 bands, -80 (silence) .. 0 dB, ~30 times a second while analysing
     void fadingChanged();
     void replayGainChanged();
@@ -189,6 +190,10 @@ private:
     mutable QMutex m_gaplessMutex;   // guards queue, index and bins against the streaming thread
     int m_pendingIndex = -1;         // set in about-to-finish, applied at STREAM_START
     friend class ::TestPlayer;
+    int m_errorStreak = 0;          // songs in a row that failed to play; a few in a row means something systemic
+    bool m_inErrorSkip = false;     // startAt() was called by the error handler, not by the person
+    bool m_analysisBroken = false;  // the analysis filter made a song fail: it stays off for this run
+    bool m_retriedPlain = false;    // already retried this song without the analysis filter
     std::atomic<bool> m_uiDirty{false};   // the audio thread already moved to the next song; the UI has not been told yet
 
     std::atomic<bool> m_switching{false};   // a state change is in progress: about-to-finish keeps out

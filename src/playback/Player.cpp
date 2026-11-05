@@ -14,6 +14,8 @@
 namespace hop {
 
 namespace {
+constexpr int kMaxErrorsInARow = 8;   // a few bad files in a row are skipped; this many means the problem is not the files
+
 // GstPlayFlags lives in a plugin header; these are its stable values.
 constexpr guint kFlagAudio = 1u << 1;
 constexpr guint kFlagSoftVolume = 1u << 4;
@@ -114,6 +116,7 @@ bool Player::replayGainAvailable() const
 bool Player::analysisAvailable() const
 {
 #ifdef HOPTUNES_HAVE_GST
+    if (m_analysisBroken) return false;
     GstElementFactory *f = gst_element_factory_find("spectrum");
     if (f) gst_object_unref(f);
     return f != nullptr;
@@ -125,7 +128,9 @@ bool Player::analysisAvailable() const
 GstElement *Player::makeGainFilter() const
 {
     const bool gain = m_rgMode != GainOff && replayGainAvailable();
-    const bool spectrum = analysisAvailable();
+    // The spectrum element is in the chain only while something is looking at it (the visualizer, a game), so
+    // normal listening runs the same pipeline as always.
+    const bool spectrum = m_analysis && analysisAvailable();
     if (!gain && !spectrum) return nullptr;
     GError *err = nullptr;
     // rglimiter only exists alongside rgvolume (same plugin); it keeps boosted peaks from clipping.
@@ -149,19 +154,23 @@ GstElement *Player::makeGainFilter() const
 
 void Player::setAnalysisEnabled(bool on)
 {
+    if (on && !analysisAvailable()) return;
     if (on == m_analysis) return;
     m_analysis = on;
 #ifdef HOPTUNES_HAVE_GST
     if (!m_playbin) return;
-    GstElement *filter = nullptr;
-    g_object_get(m_playbin, "audio-filter", &filter, nullptr);
-    if (!filter) return;
-    if (GST_IS_BIN(filter))
-        if (GstElement *spec = gst_bin_get_by_name(GST_BIN(filter), "spec")) {
-            g_object_set(spec, "post-messages", on ? TRUE : FALSE, nullptr);
-            gst_object_unref(spec);
+    if (on) {
+        // The filter can only be put in while the pipeline is stopped, so the song that is playing is restarted from
+        // where it is (a moment of silence, only when the visualizer or a game is opened mid-song).
+        if (hasTrack() && m_playing) {
+            m_startSeekMs = m_position;
+            m_inErrorSkip = true;       // not a new song from the person: keep the error count as it is
+            startAt(m_index);
+            m_inErrorSkip = false;
         }
-    gst_object_unref(filter);
+    }
+    // switching off needs nothing now: the next song is built without the element, and it only posts while asked
+    // (the bus handler ignores its messages when m_analysis is false)
 #endif
 }
 
@@ -389,6 +398,7 @@ void Player::startAt(int index)
 {
     finishFade();
     if (!m_playbin || index < 0 || index >= m_queue.size()) return;
+    if (!m_inErrorSkip) { m_errorStreak = 0; m_retriedPlain = false; }   // a song the person chose gets a fresh start
     m_switching = true;
     gst_element_set_state(m_playbin, GST_STATE_READY);
     m_switching = false;
@@ -570,6 +580,8 @@ void Player::pollBus()
         if (!msg) break;
         switch (GST_MESSAGE_TYPE(msg)) {
         case GST_MESSAGE_STREAM_START: {
+            m_errorStreak = 0;
+            m_retriedPlain = false;
             int pending;
             {
                 QMutexLocker lock(&m_gaplessMutex);
@@ -617,8 +629,29 @@ void Player::pollBus()
             gst_message_unref(msg);
             gst_bus_set_flushing(m_bus, TRUE);
             gst_bus_set_flushing(m_bus, FALSE);
-            if (m_index + 1 < m_queue.size()) startAt(m_index + 1);
-            else stop();
+            // The analysis filter is only a visual extra: if a song will not play with it in the chain, take it out
+            // and try the same song once more, rather than losing the music for a picture.
+            if (m_analysis && analysisAvailable() && !m_retriedPlain) {
+                m_retriedPlain = true;
+                m_analysis = false;
+                m_analysisBroken = true;
+                emit analysisDisabled();
+                m_inErrorSkip = true;
+                startAt(m_index);
+                m_inErrorSkip = false;
+                return;
+            }
+            // Skip a broken file instead of stopping the whole queue, but when several in a row fail the problem is
+            // not the files (a missing codec, a broken sound device): stop and say why instead of marching to the
+            // last song of the list.
+            ++m_errorStreak;
+            if (m_errorStreak < kMaxErrorsInARow && m_index + 1 < m_queue.size()) {
+                m_inErrorSkip = true;
+                startAt(m_index + 1);
+                m_inErrorSkip = false;
+            } else {
+                stop();
+            }
             setError(text);
             return;
         }

@@ -145,6 +145,54 @@ private slots:
         p.setAnalysisEnabled(false);
     }
 
+    // Real music is stereo 44.1 kHz in mp3/flac/ogg/m4a, not 8 kHz mono WAV. Every one of them must play, with the
+    // analysis off (normal listening) and on (visualizer open), without a single bus error. (1.7.4 broke playback on
+    // a real machine: every song failed and the queue was skipped to the end.)
+    void realFormatsPlayWithAndWithoutAnalysis()
+    {
+        const QByteArray dirEnv = qgetenv("HOPTUNES_REAL_AUDIO_DIR");   // a folder holding t.mp3 t.flac t.ogg t.m4a
+        if (dirEnv.isEmpty()) QSKIP("set HOPTUNES_REAL_AUDIO_DIR to a folder with t.mp3 t.flac t.ogg t.m4a");
+        const QByteArray oldSink = qgetenv("HOPTUNES_AUDIO_SINK");
+        qputenv("HOPTUNES_AUDIO_SINK", "audioconvert ! audioresample ! fakesink sync=true");
+        const auto restore = qScopeGuard([&] { qputenv("HOPTUNES_AUDIO_SINK", oldSink); });
+        for (bool analysis : {false, true}) {
+            for (const char *ext : {"mp3", "flac", "ogg", "m4a"}) {
+                const QString f = QDir(QString::fromLocal8Bit(dirEnv)).filePath(QStringLiteral("t.") + QLatin1String(ext));
+                if (!QFile::exists(f)) continue;
+                Player p;
+                p.setAnalysisEnabled(analysis);
+                QSignalSpy errs(&p, &Player::errorChanged);
+                p.setQueue({wavTrack(f, 1, 6000), wavTrack(f, 2, 6000), wavTrack(f, 3, 6000)}, 0);
+                QTest::qWait(1500);
+                const QString what = QStringLiteral("%1 analysis=%2 error='%3'").arg(QLatin1String(ext)).arg(analysis).arg(p.error());
+                if (p.error().contains(QLatin1String("missing a plug-in"))) { qInfo("no decoder for %s here, skipped", ext); continue; }
+                QVERIFY2(p.isPlaying(), qPrintable(what));
+                QVERIFY2(p.currentIndex() == 0, qPrintable(what));     // not skipped on to the end
+                QVERIFY2(p.position() > 300, qPrintable(what));
+                QVERIFY2(p.error().isEmpty(), qPrintable(what));
+            }
+        }
+    }
+
+    // A systemic failure (every file unreadable) must stop after several tries and keep its message, not march
+    // through the whole library to the last song.
+    void aBrokenQueueStopsAfterAFewErrors()
+    {
+        QTemporaryDir dir;
+        QList<Track> list;
+        for (int i = 0; i < 30; ++i) {
+            const QString f = dir.filePath(QStringLiteral("bad%1.mp3").arg(i));
+            QFile out(f); QVERIFY(out.open(QIODevice::WriteOnly)); out.write("this is not audio at all");
+            list << wavTrack(f, i + 1, 1000);
+        }
+        Player p;
+        p.setQueue(list, 0);
+        QTest::qWait(2500);
+        QVERIFY2(p.currentIndex() <= 8, qPrintable(QString::number(p.currentIndex())));   // stopped after a handful, not at the end of 30
+        QVERIFY(!p.isPlaying());
+        QVERIFY(!p.error().isEmpty());
+    }
+
     void gaplessAdvanceAndEnd()
     {
         QTemporaryDir dir;

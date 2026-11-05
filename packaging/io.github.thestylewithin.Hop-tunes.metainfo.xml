@@ -82,6 +82,15 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.5" date="2026-11-05">
+      <description>
+        <p>Fixes songs not playing, and Album Fall covers.</p>
+        <ul>
+          <li>Fixed: on some systems no song would play (the list jumped to the last song). The music analysis used by the visualizer is now only in the audio path while the visualizer or Album Fall is open, and a run of failing songs stops with a message instead of skipping to the end.</li>
+          <li>Album Fall: every block takes its own random album cover from your whole library.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.4" date="2026-11-05">
       <description>
         <p>Games and a visualizer in Now playing, fixing artist names, and folder slots.</p>
