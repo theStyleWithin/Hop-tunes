@@ -1899,6 +1899,25 @@ private slots:
         QTest::qWait(1200);
         QVERIFY(item("nowPlayingChat")->isVisible());
         QVERIFY(item("nowPlayingChat")->height() > 100);
+        {   // whoever types in the chat is a member (nobody pays for a pretend stream), in both looks
+            QQuickItem *chat = item("nowPlayingChat");
+            for (const char *look : {"clean", "lively"}) {
+                m_app->setVideoChatLook(QString::fromLatin1(look));
+                QVariant ok;
+                QVERIFY(QMetaObject::invokeMethod(chat, "send", Q_RETURN_ARG(QVariant, ok), Q_ARG(QVariant, QString::fromLatin1("hello from the test %1").arg(QLatin1String(look)))));
+                if (!ok.toBool()) { QTest::qWait(1300); QVERIFY(QMetaObject::invokeMethod(chat, "send", Q_RETURN_ARG(QVariant, ok), Q_ARG(QVariant, QString::fromLatin1("hello again %1").arg(QLatin1String(look))))); }
+                QVERIFY(ok.toBool());
+                QVariant badge, mine, html;
+                QVERIFY(QMetaObject::invokeMethod(chat, "lastBadge", Q_RETURN_ARG(QVariant, badge)));
+                QVERIFY(QMetaObject::invokeMethod(chat, "lastIsMine", Q_RETURN_ARG(QVariant, mine)));
+                QVERIFY(QMetaObject::invokeMethod(chat, "lastHtml", Q_RETURN_ARG(QVariant, html)));
+                QVERIFY(mine.toBool());
+                QCOMPARE(badge.toString(), QStringLiteral("member"));
+                QVERIFY2(html.toString().contains(look[0] == 'l' ? QStringLiteral("MEMBER") : QStringLiteral("(member)")), qPrintable(html.toString()));
+                QTest::qWait(1300);                                  // slow mode between messages
+            }
+            m_app->setVideoChatLook(QStringLiteral("clean"));
+        }
         shot("np-chat");
         QVERIFY(click("chatToggle"));
         QTRY_VERIFY(!item("nowPlayingChat")->isVisible());
