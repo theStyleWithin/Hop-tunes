@@ -14,6 +14,7 @@ MusyNoteGame::MusyNoteGame(QObject *parent) : QObject(parent)
 
 void MusyNoteGame::start(int artCount)
 {
+    if (qEnvironmentVariableIsSet("HOPTUNES_DEBUG_MUSY")) qWarning("musy: start(%d) autoplay=%d", artCount, m_autoplay);
     m_art = qMax(1, artCount);
     m_g.reset(QRandomGenerator::global()->generate());
     m_g.setArtCount(m_art);
@@ -43,6 +44,7 @@ void MusyNoteGame::setPaused(bool p)
 
 void MusyNoteGame::setAutoplay(bool on)
 {
+    if (qEnvironmentVariableIsSet("HOPTUNES_DEBUG_MUSY")) qWarning("musy: setAutoplay(%d)", on);
     if (on == m_autoplay) return;
     m_autoplay = on;
     if (on && m_started && m_g.state() != MusyNote::Dead) { m_autoUsed = true; emit stateChanged(); }   // from now on this run keeps no score
@@ -51,6 +53,7 @@ void MusyNoteGame::setAutoplay(bool on)
 
 void MusyNoteGame::flap()
 {
+    if (qEnvironmentVariableIsSet("HOPTUNES_DEBUG_MUSY")) qWarning("musy: flap() state=%d autoplay=%d paused=%d started=%d", int(m_g.state()), m_autoplay, m_paused, m_started);
     if (!m_started || m_paused || m_autoplay) return;       // the song has the controls while it plays for you
     if (m_g.state() == MusyNote::Dead) return;
     const bool begin = m_g.state() == MusyNote::Ready;
@@ -112,6 +115,7 @@ void MusyNoteGame::tickOnce(double dt, qint64 now)
     ++m_frame;
     emit frameChanged();
     if (m_g.state() == MusyNote::Dead && !m_wasDead) {
+        if (qEnvironmentVariableIsSet("HOPTUNES_DEBUG_MUSY")) qWarning("musy: died y=%f vy=%f walls=%d autoplay=%d", m_g.noteY(), m_g.noteVy(), int(m_g.walls().size()), m_autoplay);
         m_wasDead = true;
         emit stateChanged();
         emit finished(m_g.score(), m_g.passed(), !m_autoUsed);

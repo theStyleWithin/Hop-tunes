@@ -31,6 +31,7 @@ FocusScope {
         game.start(Math.max(covers.length, 1))
     }
     function act(a) {
+        console.warn("musy act " + a + " state " + game.state)
         if (a === "flap") { if (game.state === 2) newGame(); else game.flap(); return }
         if (a === "pause") { if (game.state === 2) newGame(); else game.paused = !game.paused; return }
         if (a === "exit") { leave(); return }

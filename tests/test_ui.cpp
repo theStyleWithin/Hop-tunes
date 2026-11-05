@@ -1243,6 +1243,7 @@ private slots:
         } restore{w, before};
         m_app->playSongs(0);
         QTRY_VERIFY(m_app->player()->isPlaying());
+        qputenv("HOPTUNES_DEBUG_MUSY", "1");
         w->setProperty("forceMobile", true);
         w->resize(800, 360);
         QTRY_COMPARE(w->width(), 800);
