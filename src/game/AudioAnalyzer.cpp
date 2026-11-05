@@ -11,6 +11,12 @@ void AudioAnalyzer::setActive(bool on)
     emit activeChanged();
 }
 
+void AudioAnalyzer::want(const QString &who, bool on)
+{
+    if (on) m_wants.insert(who); else m_wants.remove(who);
+    setActive(!m_wants.isEmpty());
+}
+
 void AudioAnalyzer::onSpectrum(const QVector<float> &db)
 {
     if (!m_active) return;

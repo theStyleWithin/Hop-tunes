@@ -140,7 +140,18 @@ void Gamepad::readLinux()
             }
             return;
         }
+        // Linux first sends the resting state of every button and axis, flagged as "init". Those are not presses: a stick that
+        // rests off-centre, or a trigger axis at its end, would otherwise look like someone pushing up the moment the pad is opened.
+        const bool initial = e.type & JS_EVENT_INIT;
         e.type &= ~JS_EVENT_INIT;
+        if (initial) {
+            if (e.type == JS_EVENT_AXIS) {                     // remember where the stick rests, silently
+                const bool x = e.number == 0 || e.number == 6, y = e.number == 1 || e.number == 7;
+                if (x) { m_axisDir[0] = e.value < -16000; m_axisDir[1] = e.value > 16000; }
+                if (y) { m_axisDir[2] = e.value < -16000; m_axisDir[3] = e.value > 16000; }
+            }
+            continue;
+        }
         if (e.type == JS_EVENT_BUTTON) {
             if (const char *b = buttonName(e.number)) hold(QLatin1String(b), e.value != 0);
         } else if (e.type == JS_EVENT_AXIS) {

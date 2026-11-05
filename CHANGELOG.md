@@ -4,6 +4,35 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **Android: game controllers, the visualizer and a game, Musy Note.** Hop-tunes now sees game controllers (USB, Bluetooth,
+  clip-on ones like the Red Magic Gravity X) and reads their buttons. With a controller connected, starting a song in the
+  collection, or plugging the controller in while one plays, opens Now playing (setting: "controller"). Now playing on a
+  phone has a **visualizer** (bars, mirror or rings, in your accent, a rainbow or white; the same one as on the desktop) in
+  place of the cover, in portrait and landscape, and a **games** button for **Musy Note**: a cute music note that flies
+  through gaps in walls made of your album covers. The walls reach the note on the beat of the song, the tempo sets the pace
+  and the pitch decides where the gap is. Tap, or press any button on a controller, to flap; "let the song play" flies it for
+  you (and then no score is kept). Best scores are kept per profile. On Android the visualizer and the game listen to the
+  song through an optional sound tap that is only on while one of them is on screen; if a song ever fails with it on, it is
+  taken out and the song retried, if the app ends while it is on it stays off next time, and Settings has a "visualizer &
+  games" switch. Music playback never depends on it.
+- **Landscape Now playing on phones**: the cover on the left, the song and buttons on the right.
+- **Media on a drive that is not plugged in is left out, and comes back by itself.** Music, videos, books, podcasts and
+  pictures in a folder that cannot be reached (an external drive, a USB stick, a network share that is away) no longer show
+  as songs that cannot play: they are simply not listed until the drive is back, and Settings marks the folder "not
+  connected". Every few seconds Hop-tunes notices a drive coming or going and scans what came back. Nothing is deleted.
+- **Album Fall (desktop): a pause button and "let the song play".** The game now has an on-screen pause button (P still works),
+  and "let the song play" hands the controls to an autopilot that plays on the rhythm of the song, turning, sliding and
+  dropping each piece. Nothing is scored while the song plays: a game it played never goes on your best list.
+- **Live chat: whoever types is a member.** Your own messages in the pretend live chat (films and Now playing) carry the
+  MEMBER badge, because nobody pays for a pretend stream.
+
+### Fixed
+- **Now playing on a narrow phone** (portrait) was cut off at the right and the bottom: the buttons at the top, the cover and
+  the controls now fit, and the cover shrinks on a short phone.
+- **A game controller whose stick rests off-centre could press buttons by itself** the moment it was opened (the "resting
+  state" Linux reports at start was taken for presses).
+
 ## [1.7.4] - 2026-11-05
 
 ### Added

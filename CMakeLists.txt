@@ -52,8 +52,12 @@ add_library(hoptunes_core STATIC
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
     src/game/BeatTracker.h    src/game/BeatTracker.cpp
     src/game/FallBoard.h      src/game/FallBoard.cpp
+    src/game/MusyNote.h       src/game/MusyNote.cpp
     src/game/AudioAnalyzer.h  src/game/AudioAnalyzer.cpp
+    src/game/AnalysisGuard.h  src/game/AnalysisGuard.cpp
+    src/game/SpectrumAnalyzer.h src/game/SpectrumAnalyzer.cpp
     src/game/AlbumFall.h      src/game/AlbumFall.cpp
+    src/game/MusyNoteGame.h   src/game/MusyNoteGame.cpp
     src/game/Gamepad.h        src/game/Gamepad.cpp
     src/library/ProfileDb.h   src/library/ProfileDb.cpp
     src/library/ProfileArchive.h src/library/ProfileArchive.cpp

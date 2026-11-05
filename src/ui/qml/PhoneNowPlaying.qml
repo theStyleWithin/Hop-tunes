@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Window
 
 // Phones: now playing as in the mockups: a big cover, the song, a seek bar, the transport with a solid play
 // button, and heart / queue / volume underneath. Turned sideways (landscape) the cover moves to the left and
@@ -12,6 +13,11 @@ Item {
     readonly property var player: hop.player
     property bool showQueue: false
     property bool showVolume: false
+    // the visualizer takes the cover's place (portrait and landscape): the same one as on the desktop, with its own choices
+    readonly property bool showViz: hop.audio.available && hop.gameSettings.phoneViz && !showQueue
+    readonly property bool wantsAudio: root.visible && showViz
+    onWantsAudioChanged: hop.audio.want("phoneviz", wantsAudio)
+    readonly property var gs: hop.gameSettings
     property int queueRev: 0
     readonly property bool land: width > height * 1.1   // the phone is turned sideways
     Connections { target: root.player; function onQueueChanged() { root.queueRev++ } }
@@ -22,7 +28,8 @@ Item {
         spacing: root.land ? 2 : 8
 
         RowLayout {
-            Layout.fillWidth: true
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            spacing: 6
             AbstractButton {
                 objectName: "phoneNpBack"
                 implicitWidth: 44; implicitHeight: root.land ? 36 : 44
@@ -31,24 +38,78 @@ Item {
                 background: Item {}
                 contentItem: Item { Icon { anchors.centerIn: parent; kind: "down"; ink: Theme.text2; width: 26; height: 26 } }
             }
-            Label { text: "now playing"; color: Theme.muted; font { family: Theme.font; pixelSize: root.land ? 17 : 20 } }
-            Item { Layout.fillWidth: true }
+            Label { visible: root.land || root.width >= 420; text: "now playing"; color: Theme.muted; font { family: Theme.font; pixelSize: root.land ? 17 : 20 } }
+            Item { Layout.fillWidth: true; Layout.minimumWidth: 0 }
+            AbstractButton {   // the visualizer in place of the cover
+                objectName: "phoneVizToggle"
+                visible: hop.audio.available
+                implicitHeight: root.land ? 32 : 36; implicitWidth: vizLabel.implicitWidth + 22
+                onClicked: hop.setGameSetting("phoneViz", !hop.gameSettings.phoneViz)
+                Accessible.name: "visualizer"
+                background: Rectangle { radius: height / 2; color: root.showViz ? Theme.accent : "transparent"; border { width: 1; color: Theme.accent } }
+                contentItem: Label { id: vizLabel; text: root.showViz ? "cover" : "visualizer"; color: root.showViz ? Theme.ink : Theme.accent
+                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 15 } }
+            }
+            AbstractButton {   // the game: a music note flying through your album covers
+                objectName: "phoneGames"
+                visible: hop.audio.available
+                implicitHeight: root.land ? 32 : 36; implicitWidth: gamesLabel.implicitWidth + 22
+                onClicked: if (Window.window && Window.window.openMusyNote) Window.window.openMusyNote()
+                Accessible.name: "games"
+                background: Rectangle { radius: height / 2; color: "transparent"; border { width: 1; color: Theme.accent } }
+                contentItem: Label { id: gamesLabel; text: "\u266a games"; color: Theme.accent; horizontalAlignment: Text.AlignHCenter
+                                     verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 15 } }
+            }
         }
 
         GridLayout {   // portrait: the cover above the rest. landscape: the cover left, the rest right
-            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 0; Layout.minimumHeight: 0
             columns: root.land ? 2 : 1
             columnSpacing: 28; rowSpacing: root.land ? 0 : 8
 
             Item {   // the cover, or the up-next list
                 id: coverBox
                 Layout.fillWidth: !root.land
-                Layout.fillHeight: root.land || root.showQueue
+                Layout.minimumWidth: 0
+                Layout.fillHeight: true                    // the cover gives way when the phone is short, the controls never do
                 Layout.preferredWidth: root.land ? Math.min(height, root.width * 0.42) : -1
                 Layout.preferredHeight: root.land ? -1 : Math.min(width, 340) + 12
-                Layout.minimumHeight: root.land ? 80 : 120
+                Layout.minimumHeight: root.land ? 80 : 70
+                Item {   // the visualizer, as big as the cover's slot, with its look one tap away
+                    id: vizBox
+                    objectName: "phoneViz"
+                    visible: root.showViz
+                    anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: root.land ? 0 : 6 }
+                    width: root.land ? parent.width : parent.width; height: parent.height - (root.land ? 0 : 6)
+                    Rectangle { anchors.fill: parent; radius: 10; color: Qt.rgba(1, 1, 1, 0.04) }
+                    Visualizer {
+                        objectName: "phoneVisualizer"
+                        anchors { fill: parent; margins: 8; bottomMargin: 40 }
+                        style: root.gs.vizStyle; colorMode: root.gs.vizColor; intensity: root.gs.vizIntensity
+                    }
+                    Flow {   // the look: shape and colour, one tap each
+                        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 8 }
+                        spacing: 4
+                        Repeater {
+                            model: ["bars", "mirror", "rings", "accent", "rainbow", "white"]
+                            delegate: AbstractButton {
+                                id: vchip
+                                required property string modelData
+                                readonly property bool isShape: ["bars", "mirror", "rings"].indexOf(modelData) >= 0
+                                readonly property bool on: isShape ? root.gs.vizStyle === modelData : root.gs.vizColor === modelData
+                                objectName: "phoneViz_" + modelData
+                                implicitHeight: 28; implicitWidth: vlab.implicitWidth + 16
+                                onClicked: hop.setGameSetting(isShape ? "vizStyle" : "vizColor", modelData)
+                                background: Rectangle { radius: 14; color: vchip.on ? Theme.accent : "transparent"; border { width: 1; color: vchip.on ? Theme.accent : Theme.border } }
+                                contentItem: Label { id: vlab; text: vchip.modelData; color: vchip.on ? Theme.ink : Theme.muted
+                                                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font { family: Theme.font; pixelSize: 12 } }
+                            }
+                        }
+                    }
+                }
                 AlbumArt {
-                    visible: !root.showQueue
+                    objectName: "phoneCover"
+                    visible: !root.showQueue && !root.showViz
                     anchors { top: parent.top; horizontalCenter: parent.horizontalCenter; topMargin: root.land ? 0 : 6 }
                     width: Math.min(parent.width, parent.height - (root.land ? 0 : 6), 340); height: width
                     key: root.player.album; source: root.player.artUrl; radius: 10; cornerColor: Theme.bg
@@ -77,7 +138,7 @@ Item {
             }
 
             ColumnLayout {   // the song, the seek bar and the buttons
-                Layout.fillWidth: true
+                Layout.fillWidth: true; Layout.minimumWidth: 0
                 Layout.fillHeight: root.land
                 Layout.alignment: Qt.AlignVCenter
                 spacing: root.land ? 2 : 8
@@ -111,14 +172,14 @@ Item {
                     handle: Item { width: 0; height: 0 }   // the design has no knob, only the filled track
                 }
                 RowLayout {
-                    Layout.fillWidth: true
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
                     Label { text: root.player.hasTrack ? hop.formatTime(Math.max(1, root.player.position)) : "–"; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
                     Item { Layout.fillWidth: true }
                     Label { text: root.player.hasTrack ? hop.formatTime(root.player.duration) : ""; color: Theme.muted; font { family: Theme.font; pixelSize: 14 } }
                 }
 
                 RowLayout {
-                    Layout.fillWidth: true; Layout.topMargin: root.land ? 0 : 4
+                    Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.topMargin: root.land ? 0 : 4
                     spacing: 0
                     Item { Layout.fillWidth: true }
                     TransportButton { glyph: "shuffle"; iconSize: 20; active: root.player.shuffle; onClicked: root.player.shuffle = !root.player.shuffle
@@ -142,7 +203,7 @@ Item {
                 }
 
                 RowLayout {
-                    Layout.fillWidth: true; Layout.topMargin: 2
+                    Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.topMargin: 2
                     spacing: 0
                     Item { Layout.fillWidth: true }
                     HeartButton { size: 28; visible: root.player.hasTrack; on: hop.currentHearted; onClicked: hop.toggleHeartCurrent() }

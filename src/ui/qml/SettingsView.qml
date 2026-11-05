@@ -401,6 +401,22 @@ Item {
                 onPicked: function (v) { hop.theme = v }
             }
         }
+        SRow {   // the sound tap behind the visualizer and the games can be switched off: music never depends on it
+            objectName: "visualizerGamesRow"
+            visible: hop.player.analysisAvailable
+            spacing: 16
+            Label { text: "visualizer & games"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Label { visible: Theme.compact || hop.analysisSafeMode; Layout.fillWidth: true; wrapMode: Text.WordWrap; Layout.topMargin: Theme.compact ? -6 : 0
+                    text: hop.analysisSafeMode ? "switched off: the app stopped unexpectedly while it was on. turn it back on if you want to try again."
+                                               : "listens to the song for the visualizer and the games. if you ever have a playback problem, switch it off."
+                    color: hop.analysisSafeMode ? Theme.danger : Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+            Choice {
+                objectName: "visualizerGamesChoice"
+                options: [["vgOn", "on"], ["vgOff", "off"]]
+                value: hop.gameSettings.visualizerGames && !hop.analysisSafeMode ? "vgOn" : "vgOff"
+                onPicked: function (v) { hop.setGameSetting("visualizerGames", v === "vgOn") }
+            }
+        }
         SRow {   // a game controller: starting a song opens Now playing
             objectName: "autoNowPlayingRow"
             spacing: 16
@@ -518,6 +534,8 @@ Item {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
                     Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    Label { objectName: "folderNotConnected"; visible: hop.missingFolders.indexOf(modelData) >= 0; text: "not connected"; color: Theme.danger
+                            font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     Button {
                         text: "remove"
                         onClicked: hop.removeFolder(modelData)

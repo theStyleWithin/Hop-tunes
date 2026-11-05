@@ -57,11 +57,12 @@ Item {
         if (kind === "notice") return '<i>' + body + '</i>'
         let head = ""
         if (lively) {
-            if (mine) head += chip("YOU", "#f0c040")
+            if (mine) head += chip("MEMBER", Theme.accent)      // whoever types here is a member: nobody pays for a pretend stream
             else if (badge === "mod") head += chip("MOD", "#3fb950")
             else if (badge === "vip") head += chip("VIP", "#b388ff")
             else if (badge === "member") head += chip("MEMBER", Theme.accent)
-        } else if (badge === "mod") head += '<font color="' + dim + '">(mod) </font>'
+        } else if (mine) head += '<font color="' + dim + '">(member) </font>'
+        else if (badge === "mod") head += '<font color="' + dim + '">(mod) </font>'
         head += '<font color="' + (mine ? Theme.accent : color) + '"><b>' + Gen.esc(name) + '</b></font>' + (lively ? ': ' : '&nbsp;&nbsp;')
         return head + body
     }
@@ -105,12 +106,17 @@ Item {
     }
     onSeedChanged: { lastAt = -1; pending = []; msgs.clear() }
 
+    // for tests: the badge of the newest message, and whether it is the user's
+    function lastBadge() { return msgs.count > 0 ? msgs.get(msgs.count - 1).badge : "" }
+    function lastIsMine() { return msgs.count > 0 && msgs.get(msgs.count - 1).mine }
+    function lastHtml() { if (msgs.count === 0) return ""; const m = msgs.get(msgs.count - 1); return htmlOf(m.partsJson, m.kind, m.name, m.color, m.badge, m.mine) }
+
     function send(text) {
         const t = text.trim().slice(0, 160)
         const now = Date.now()
         if (t === "" || now - lastSent < 1200) return false   // slow mode, like a real stream
         lastSent = now
-        append({ name: me, color: Theme.accent, me: true, parts: Gen.parts(t) })
+        append({ name: me, color: Theme.accent, me: true, badge: "member", parts: Gen.parts(t) })
         const answers = Gen.replies(seed, me, t, nonce++, ctx)
         const list = pending.slice()
         for (let i = 0; i < answers.length; i++)

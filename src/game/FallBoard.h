@@ -58,6 +58,12 @@ public:
     int lastLinesCleared() const { return m_lastCleared; }
     int clearCount() const { return m_clearCount; }
 
+    // The autopilot (for "let the song play"): the best rotation and column for the falling piece, by the classic rules of thumb
+    // (keep the stack low and flat, leave no holes, clear lines). `rotations` turns clockwise from where it is now.
+    struct Plan { bool valid = false; int rotations = 0; int x = 0; };
+    Plan suggest() const;
+    int pieceX() const { return m_piece.x; }
+
     static constexpr int kOnBeatMs = 120;
     static QVector<QVector<QPoint>> shapesFor(double strength);   // the pool a beat of this strength draws from
 
