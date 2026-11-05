@@ -82,6 +82,16 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.4" date="2026-11-05">
+      <description>
+        <p>Games and a visualizer in Now playing, fixing artist names, and folder slots.</p>
+        <ul>
+          <li>Now playing: a music visualizer and Album Fall, a falling-blocks game driven by the beat (keyboard or controller), plus an optional pretend live chat.</li>
+          <li>Merge, rename and drag albums between artists to fix names the scan got wrong, with an undo.</li>
+          <li>Videos, audiobooks and podcasts show one named slot per folder, like pictures.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.3" date="2026-11-04">
       <description>
         <p>Video on Android, and a fix for choosing folders there.</p>
