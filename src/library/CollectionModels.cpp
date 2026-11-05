@@ -2,22 +2,44 @@
 #include "library/CollectionModels.h"
 
 #include <QHash>
+#include <QSet>
 #include <QUrl>
 
 #include <algorithm>
 
 namespace hop {
 
-void Collection::build(const QList<Track> &tracks)
+QString ArtistMap::resolve(const QString &artist, const QString &album) const
+{
+    QString out = artist;
+    const QString albumKey = album.toCaseFolded();
+    QSet<QString> seen;
+    for (int step = 0; step < 32; ++step) {
+        const QString key = out.toCaseFolded();
+        if (seen.contains(key)) break;   // a loop: stop where we are
+        seen.insert(key);
+        const auto mv = albumMoves.constFind(key + QLatin1Char('\x1f') + albumKey);
+        if (mv != albumMoves.constEnd()) { out = mv.value(); continue; }   // this one album goes elsewhere
+        const auto it = merges.constFind(key);
+        if (it == merges.constEnd()) break;
+        out = it.value();
+    }
+    return out;
+}
+
+void Collection::build(const QList<Track> &tracks, const ArtistMap &map)
 {
     m_albums.clear();
     m_artists.clear();
 
     QHash<QString, int> albumIndex;   // "artist\x1falbum" -> index in m_albums
+    QSet<int> winnerArt;              // albums whose cover already came from the receiving artist
     for (int row = 0; row < tracks.size(); ++row) {
         const Track &t = tracks[row];
-        const QString artist = t.albumArtist.isEmpty() ? t.displayArtist() : t.albumArtist;
+        const QString ownArtist = t.albumArtist.isEmpty() ? t.displayArtist() : t.albumArtist;
         const QString title = t.displayAlbum();
+        const QString artist = map.isEmpty() ? ownArtist : map.resolve(ownArtist, title);
+        const bool fromWinner = artist.compare(ownArtist, Qt::CaseInsensitive) == 0;
         const QString key = artist.toCaseFolded() + QLatin1Char('\x1f') + title.toCaseFolded();
         auto it = albumIndex.constFind(key);
         if (it == albumIndex.constEnd()) {
@@ -28,6 +50,8 @@ void Collection::build(const QList<Track> &tracks)
         a.trackRows.append(row);
         a.year = std::max(a.year, t.year);
         if (a.art.isEmpty()) a.art = t.art;
+        else if (fromWinner && !t.art.isEmpty() && !winnerArt.contains(*it)) a.art = t.art;   // the receiving artist's cover wins
+        if (fromWinner && !t.art.isEmpty()) winnerArt.insert(*it);
     }
 
     // Albums within an artist: newest first (like a discography), untagged years last.

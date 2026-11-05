@@ -296,6 +296,16 @@ public:
     Q_INVOKABLE void unpinTile(const QString &kind, const QString &ref);
     Q_INVOKABLE bool isPinned(const QString &kind, const QString &ref) const;
     Q_INVOKABLE QString albumRef(int allAlbumsRow) const;
+
+    // Fixing artist names the scan got wrong (this profile only; no file is ever changed). The artist
+    // you merge INTO takes over: its name and cover are shown and matching albums combine. "" = ok.
+    Q_INVOKABLE QString mergeArtist(const QString &from, const QString &into);
+    Q_INVOKABLE QString renameArtist(const QString &from, const QString &name);   // an existing name is a merge
+    Q_INVOKABLE QString moveAlbumToArtist(const QString &albumRef, const QString &artist);   // one album, by its ref
+    Q_INVOKABLE QVariantList mergedInto(const QString &artist) const;   // [{from, album, ref}] for "split back"
+    Q_INVOKABLE QString unmerge(const QString &from, const QString &albumRef = {});   // undo one of the above
+    Q_INVOKABLE bool artistExists(const QString &name) const;
+    Q_INVOKABLE QStringList artistNames() const;   // every artist in the collection, in list order
     Q_INVOKABLE QString selectedAlbumRef() const;
     Q_INVOKABLE void playTile(const QString &kind, const QString &ref);
     Q_INVOKABLE bool showAlbum(const QString &ref);                   // select it in collection › artists
@@ -421,6 +431,8 @@ private:
     void applySelection(const QString &artistName, const QString &albumTitle);
     QList<Track> albumTracks(const Album &a) const;
     void applyAlbumOverrides(QList<Album> &albums) const;
+    ArtistMap artistMap() const;
+    void artistsChanged();   // rebuild the collection after a merge/move/undo and remember it
     void activate(const QString &id, bool guest);
     static void setAside(const QString &file);
     void applySearch();
@@ -502,6 +514,8 @@ private:
     int m_selAlbum = -1;
     QStringList m_mosaicArt;
 
+    QMap<QString, QString> m_artistMerges;   // artist as scanned -> the artist it was merged into
+    QMap<QString, QString> m_albumMoves;     // album ref -> the artist it was moved to
     QHash<QString, QString> m_albumNames;   // folder -> the name this profile gave its album
     QVariantList m_pictureAlbums;
     QString m_pictureAlbum;

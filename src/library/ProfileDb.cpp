@@ -539,6 +539,57 @@ bool ProfileDb::setSongOrder(const QStringList &paths)
     return exec("COMMIT");
 }
 
+// ---- artist merges follow their albums' edits ------------------------------------------------
+
+bool ProfileDb::copyArtistRefs(const QString &from, const QString &to)
+{
+    if (!m_db || from.isEmpty() || to.isEmpty() || from == to) return false;
+    if (!exec("BEGIN")) return false;
+    // refs are "<artist>\x1f<album>"; match the artist part exactly (no LIKE: names may hold % or _)
+    const char *copy[] = {
+        "INSERT OR IGNORE INTO album_override(ref, title, art) SELECT ?2 || substr(ref, length(?1) + 1), title, art "
+        "FROM album_override WHERE substr(ref, 1, length(?1) + 1) = ?1 || char(31)",
+        "INSERT OR IGNORE INTO album_track_order(ref, pos, path) SELECT ?2 || substr(ref, length(?1) + 1), pos, path "
+        "FROM album_track_order WHERE substr(ref, 1, length(?1) + 1) = ?1 || char(31)",
+        "INSERT OR IGNORE INTO pin(kind, ref, label, pos) SELECT kind, ?2 || substr(ref, length(?1) + 1), label, "
+        "(SELECT COALESCE(MAX(pos), 0) FROM pin) + 1 FROM pin WHERE kind = 'album' AND substr(ref, 1, length(?1) + 1) = ?1 || char(31)",
+        "INSERT OR IGNORE INTO pin(kind, ref, label, pos) SELECT 'artist', ?2, ?2, "
+        "(SELECT COALESCE(MAX(pos), 0) FROM pin) + 1 FROM pin WHERE kind = 'artist' AND ref = ?1",
+    };
+    bool ok = true;
+    for (const char *sql : copy) {
+        Stmt s(m_db, sql);
+        if (!s.ok()) { ok = false; break; }
+        s.bind(1, from); s.bind(2, to);
+        ok = s.run();
+        if (!ok) break;
+    }
+    if (!ok) { exec("ROLLBACK"); return false; }
+    return exec("COMMIT");
+}
+
+bool ProfileDb::copyAlbumRefs(const QString &fromRef, const QString &toRef)
+{
+    if (!m_db || fromRef.isEmpty() || toRef.isEmpty() || fromRef == toRef) return false;
+    if (!exec("BEGIN")) return false;
+    const char *copy[] = {
+        "INSERT OR IGNORE INTO album_override(ref, title, art) SELECT ?2, title, art FROM album_override WHERE ref = ?1",
+        "INSERT OR IGNORE INTO album_track_order(ref, pos, path) SELECT ?2, pos, path FROM album_track_order WHERE ref = ?1",
+        "INSERT OR IGNORE INTO pin(kind, ref, label, pos) SELECT kind, ?2, label, (SELECT COALESCE(MAX(pos), 0) FROM pin) + 1 "
+        "FROM pin WHERE kind = 'album' AND ref = ?1",
+    };
+    bool ok = true;
+    for (const char *sql : copy) {
+        Stmt s(m_db, sql);
+        if (!s.ok()) { ok = false; break; }
+        s.bind(1, fromRef); s.bind(2, toRef);
+        ok = s.run();
+        if (!ok) break;
+    }
+    if (!ok) { exec("ROLLBACK"); return false; }
+    return exec("COMMIT");
+}
+
 // ---- export / import ----------------------------------------------------------------------
 
 namespace {
