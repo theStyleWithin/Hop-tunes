@@ -1192,6 +1192,45 @@ private slots:
         QVERIFY2(failures.isEmpty(), qPrintable(QStringLiteral("overflowing: ") + failures.join(QStringLiteral(", "))));
     }
 
+    // Turned sideways (landscape) Now playing has its own layout: the cover left, the song and buttons right, all of it
+    // inside the screen (nothing runs past the right edge or off the bottom).
+    void phoneNowPlayingLandscape()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->hasTrack());
+        w->setProperty("forceMobile", true);
+        for (const QSize &sz : {QSize(800, 360), QSize(892, 412), QSize(640, 320)}) {
+            w->resize(sz);
+            QTRY_COMPARE(w->width(), sz.width());
+            w->setProperty("view", QStringLiteral("now playing"));
+            QTest::qWait(400);
+            const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
+            shot(qPrintable(QStringLiteral("phone-nowplaying-landscape-") + tag));
+            QVERIFY2(overflowing().isEmpty(), qPrintable(tag + QStringLiteral(" overflows right: ") + overflowing().join(QStringLiteral(", "))));
+            for (const char *name : {"phonePlay", "phoneSeek", "phoneQueueButton", "phoneNpBack"}) {
+                QQuickItem *it = item(name);
+                QVERIFY2(it && it->isVisible(), name);
+                const QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+                QVERIFY2(r.bottom() <= w->height() + 1 && r.right() <= w->width() + 1 && r.top() >= -1,
+                         qPrintable(QStringLiteral("%1 off screen at %2: %3,%4 %5x%6").arg(QLatin1String(name), tag).arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())));
+            }
+        }
+        // portrait is as before
+        w->resize(412, 892);
+        QTRY_COMPARE(w->width(), 412);
+        QTest::qWait(300);
+        QVERIFY(overflowing().isEmpty());
+        QQuickItem *play = item("phonePlay");
+        QVERIFY(play && play->mapRectToScene(QRectF(0, 0, play->width(), play->height())).bottom() <= w->height());
+        m_app->player()->stop();
+    }
+
     // Design renders against the saved phone mockups, with a richer library than the other tests have:
     // set HOPTUNES_FIXTURE_DIR to a folder holding music/ (tagged albums) and shows/ (clips).
     void phoneMockupRenders()
@@ -1654,6 +1693,25 @@ private slots:
         pad.setDevice(QStringLiteral("Red Magic attachable controller"));
         m_app->playSongs(0);
         QTRY_COMPARE(win->property("view").toString(), QStringLiteral("now playing"));
+
+        // plugging the controller in while a song is already playing opens Now playing too
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("collection"));
+        pad.setDevice({});
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+        pad.setDevice(QStringLiteral("Redmagic shadow blade gamepad"));
+        QTRY_COMPARE(win->property("view").toString(), QStringLiteral("now playing"));
+        // (and not when nothing is playing)
+        m_app->player()->stop();
+        QTRY_VERIFY(!m_app->player()->isPlaying());
+        win->setProperty("view", QStringLiteral("collection"));
+        pad.setDevice({});
+        pad.setDevice(QStringLiteral("Redmagic shadow blade gamepad"));
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
 
         // switched off in settings: it stays in the collection
         m_app->player()->stop();

@@ -52,17 +52,17 @@ ApplicationWindow {
         return views.indexOf(v) >= 0 ? v : "collection"
     }
 
-    // With a game controller connected (plugged in, or clipped onto the phone), starting a song from the collection
-    // jumps to Now playing, where the controller's games are. Only for a song that has just started (not a resume
-    // or the next song of a queue while you browse), only from the collection, and it can be switched off.
-    Connections {
-        target: hop.player
-        function onPlayingChanged() {
-            if (hop.player.playing && hop.player.position < 3000 && win.view === "collection" && hop.profileReady
-                && hop.gamepad.connected && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen)
-                win.view = "now playing"
-        }
+    // With a game controller connected (plugged in, or clipped onto the phone), the collection hands over to Now playing,
+    // where the controller's games are: when a song starts while a controller is there, and when a controller shows up
+    // while a song is already playing. Only from the collection (never yanks you out of another screen) and it can be
+    // switched off in settings.
+    function maybeOpenNowPlaying() {
+        if (win.view === "collection" && hop.profileReady && hop.player.playing && hop.gamepad.connected
+            && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen)
+            win.view = "now playing"
     }
+    Connections { target: hop.player; function onPlayingChanged() { win.maybeOpenNowPlaying() } }
+    Connections { target: hop.gamepad; function onConnectedChanged() { win.maybeOpenNowPlaying() } }
 
     FolderPick {
         id: videoFolderDialog
