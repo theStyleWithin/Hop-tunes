@@ -1266,10 +1266,21 @@ private slots:
         }
         item("musyNote")->setProperty("covers", urls);
         shot("musy-ready");
+        {   // a close look at the note's moods: a big note on a plain background
+            QObject *sprite = item("musyNote")->findChild<QObject *>(QStringLiteral("musyNoteSprite"));
+            QVERIFY(sprite);
+            QTest::qWait(150);
+            shot("musy-note-happy");
+        }
 
         // keys, then a controller button, then the screen start and flap it
         QTest::keyClick(w, Qt::Key_Space);
         QTRY_COMPARE(g->state(), 1);
+        g->advance(6, 1.0 / 60);
+        g->setPaused(true);                                // (real time must not run while the picture is taken)
+        QTest::qWait(120);
+        shot("musy-flying");
+        g->setPaused(false);
         const double y0 = g->noteY();
         m_app->gamepad()->feedAction(QStringLiteral("a"), true);
         m_app->gamepad()->feedAction(QStringLiteral("a"), false);

@@ -127,33 +127,113 @@ FocusScope {
             }
         }
 
-        Canvas {   // the note: a head, a stem and a flag
+        // The note: a round, chubby little music note with big shiny eyes, rosy cheeks and tiny wings. It blinks, beams
+        // when it flies up, gasps when it falls fast and sees stars when it crashes. (Drawn a little bigger than the part
+        // that can be hit, so it is forgiving and easy to love.)
+        Canvas {
             id: noteCv
             objectName: "musyNoteSprite"
-            readonly property real d: game.noteR * 2 * root.s * 1.9
+            readonly property real rad: game.noteR * 1.45 * root.s            // the body's radius on screen
+            readonly property real d: rad * 4.6
+            property bool blink: false
+            readonly property string mood: game.state === 2 ? "dizzy" : (game.state === 0 ? "happy"
+                                         : (game.noteVy > 5.5 ? "scared" : (game.noteVy < -2.5 ? "beam" : "happy")))
+            readonly property int wing: game.state === 1 ? (game.noteVy < -1 ? 1 : (game.noteVy > 3 ? -1 : 0)) : 0
             width: d; height: d
             x: game.noteX * root.s - width / 2
-            y: { game.frame; return game.noteY * root.s - height / 2 }
-            rotation: { game.frame; return Math.max(-35, Math.min(55, game.noteVy * 5)) }
+            y: { game.frame; return game.noteY * root.s - height * 0.56 }
+            rotation: { game.frame; return game.state === 2 ? 25 : Math.max(-28, Math.min(40, game.noteVy * 4)) }
+            transformOrigin: Item.Center
+            onMoodChanged: requestPaint()
+            onBlinkChanged: requestPaint()
+            onWingChanged: requestPaint()
+            onRadChanged: requestPaint()
+            Timer { interval: 2600; running: root.active; repeat: true; onTriggered: { noteCv.blink = true; blinkOff.start() } }
+            Timer { id: blinkOff; interval: 130; onTriggered: noteCv.blink = false }
             onPaint: {
-                const c = getContext("2d")
-                c.reset()
-                c.fillStyle = Theme.accent
-                c.strokeStyle = Theme.accent
-                c.lineWidth = Math.max(2, width * 0.09)
-                c.lineCap = "round"
-                c.beginPath()                                       // the head
-                c.ellipse(width * 0.12, height * 0.58, width * 0.42, height * 0.3)
-                c.fill()
-                c.beginPath()                                       // the stem
-                c.moveTo(width * 0.5, height * 0.7); c.lineTo(width * 0.5, height * 0.14); c.stroke()
-                c.beginPath()                                       // the flag
-                c.moveTo(width * 0.5, height * 0.14)
-                c.bezierCurveTo(width * 0.78, height * 0.2, width * 0.84, height * 0.42, width * 0.7, height * 0.56)
-                c.stroke()
+                const g = getContext("2d")
+                g.reset()
+                const cx = width / 2, cy = height * 0.56, r = rad
+                const body = Theme.accent
+                const dark = "#2b2140"
+                // soft glow
+                const glow = g.createRadialGradient(cx, cy, r * 0.8, cx, cy, r * 2.0)
+                glow.addColorStop(0, Qt.rgba(1, 0.9, 0.4, 0.28)); glow.addColorStop(1, Qt.rgba(1, 0.9, 0.4, 0))
+                g.fillStyle = glow; g.beginPath(); g.arc(cx, cy, r * 2.0, 0, 6.2832); g.fill()
+                // wings: two little white ovals, up when flying up, down when falling
+                const wa = wing > 0 ? -0.9 : (wing < 0 ? 0.55 : -0.25)
+                for (const side of [-1, 1]) {
+                    g.save()
+                    g.translate(cx + side * r * 0.95, cy + r * 0.05)
+                    g.rotate(side * wa)
+                    g.fillStyle = "#ffffff"; g.globalAlpha = 0.92
+                    g.beginPath(); g.ellipse(side > 0 ? 0 : -r * 0.95, -r * 0.3, r * 0.95, r * 0.62); g.fill()
+                    g.globalAlpha = 1
+                    g.restore()
+                }
+                // the stem and the flag (the note's little tuft)
+                g.strokeStyle = body; g.fillStyle = body; g.lineWidth = r * 0.3; g.lineCap = "round"
+                g.beginPath(); g.moveTo(cx + r * 0.78, cy - r * 0.55); g.lineTo(cx + r * 0.78, cy - r * 2.0); g.stroke()
+                g.beginPath()
+                g.moveTo(cx + r * 0.78, cy - r * 2.0)
+                g.bezierCurveTo(cx + r * 1.7, cy - r * 1.95, cx + r * 1.95, cy - r * 1.3, cx + r * 1.4, cy - r * 0.75)
+                g.bezierCurveTo(cx + r * 1.55, cy - r * 1.35, cx + r * 1.25, cy - r * 1.6, cx + r * 0.78, cy - r * 1.6)
+                g.closePath(); g.fill()
+                // the round body with a little shine and a darker rim
+                const bg = g.createRadialGradient(cx - r * 0.35, cy - r * 0.4, r * 0.15, cx, cy, r * 1.05)
+                bg.addColorStop(0, Qt.lighter(body, 1.35)); bg.addColorStop(0.7, body); bg.addColorStop(1, Qt.darker(body, 1.25))
+                g.fillStyle = bg
+                g.beginPath(); g.arc(cx, cy, r, 0, 6.2832); g.fill()
+                // rosy cheeks
+                g.fillStyle = "#ff7aa2"; g.globalAlpha = 0.55
+                g.beginPath(); g.ellipse(cx - r * 0.82, cy + r * 0.18, r * 0.34, r * 0.22); g.fill()
+                g.beginPath(); g.ellipse(cx + r * 0.48, cy + r * 0.18, r * 0.34, r * 0.22); g.fill()
+                g.globalAlpha = 1
+                // eyes
+                const ex = r * 0.36, ey = cy - r * 0.08
+                if (mood === "dizzy") {                                    // x x
+                    g.strokeStyle = dark; g.lineWidth = r * 0.12; g.lineCap = "round"
+                    for (const sx of [-1, 1]) {
+                        const x = cx + sx * ex, y = ey
+                        g.beginPath(); g.moveTo(x - r * 0.16, y - r * 0.16); g.lineTo(x + r * 0.16, y + r * 0.16); g.stroke()
+                        g.beginPath(); g.moveTo(x + r * 0.16, y - r * 0.16); g.lineTo(x - r * 0.16, y + r * 0.16); g.stroke()
+                    }
+                } else if (blink) {                                         // a happy closed-eye curve
+                    g.strokeStyle = dark; g.lineWidth = r * 0.1; g.lineCap = "round"
+                    for (const sx of [-1, 1]) { g.beginPath(); g.arc(cx + sx * ex, ey + r * 0.04, r * 0.17, 3.4, 6.0); g.stroke() }
+                } else {
+                    const big = mood === "scared" ? 1.22 : 1.0
+                    for (const sx of [-1, 1]) {
+                        const x = cx + sx * ex
+                        g.fillStyle = dark
+                        g.beginPath(); g.ellipse(x - r * 0.2 * big, ey - r * 0.27 * big, r * 0.4 * big, r * 0.54 * big); g.fill()
+                        g.fillStyle = "#ffffff"                                // big and small sparkles
+                        g.beginPath(); g.arc(x - r * 0.07, ey - r * 0.14 * big, r * 0.12 * big, 0, 6.2832); g.fill()
+                        g.beginPath(); g.arc(x + r * 0.08, ey + r * 0.12 * big, r * 0.055 * big, 0, 6.2832); g.fill()
+                    }
+                }
+                // the mouth
+                g.strokeStyle = dark; g.fillStyle = dark; g.lineWidth = r * 0.1; g.lineCap = "round"
+                const my = cy + r * 0.36
+                if (mood === "scared") {                                    // a little "o"
+                    g.beginPath(); g.ellipse(cx - r * 0.1, my - r * 0.08, r * 0.2, r * 0.26); g.fill()
+                } else if (mood === "dizzy") {                              // a wobbly line
+                    g.beginPath(); g.moveTo(cx - r * 0.22, my); g.quadraticCurveTo(cx - r * 0.1, my - r * 0.1, cx, my); g.quadraticCurveTo(cx + r * 0.1, my + r * 0.1, cx + r * 0.22, my); g.stroke()
+                } else if (mood === "beam") {                               // an open happy smile
+                    g.beginPath(); g.moveTo(cx - r * 0.24, my - r * 0.08); g.quadraticCurveTo(cx, my + r * 0.34, cx + r * 0.24, my - r * 0.08); g.closePath(); g.fill()
+                } else {                                                    // a gentle smile
+                    g.beginPath(); g.moveTo(cx - r * 0.2, my - r * 0.02); g.quadraticCurveTo(cx, my + r * 0.2, cx + r * 0.2, my - r * 0.02); g.stroke()
+                }
+                if (mood === "dizzy") {                                     // little stars circling its head
+                    g.fillStyle = "#ffe27a"
+                    for (let i = 0; i < 3; ++i) {
+                        const a = i * 2.094 + 0.6, x = cx + Math.cos(a) * r * 1.35, y = cy - r * 1.3 + Math.sin(a) * r * 0.35, k = r * 0.16
+                        g.beginPath(); g.moveTo(x, y - k * 1.6); g.lineTo(x + k * 0.5, y - k * 0.5); g.lineTo(x + k * 1.6, y); g.lineTo(x + k * 0.5, y + k * 0.5)
+                        g.lineTo(x, y + k * 1.6); g.lineTo(x - k * 0.5, y + k * 0.5); g.lineTo(x - k * 1.6, y); g.lineTo(x - k * 0.5, y - k * 0.5); g.closePath(); g.fill()
+                    }
+                }
             }
             Component.onCompleted: requestPaint()
-            onWidthChanged: requestPaint()
         }
     }
 
