@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-11-06
+
 ### Added
 - **Cover Pinball (desktop).** A pinball table made from the cover of the song that is playing: the bumpers stand where the cover is brightest and take its colours, the beat of the song kicks them (a hit on the beat pays double) and the bass changes how heavy the ball feels. Flippers on Z and / (or left and right, or a controller's LB and RB), space to launch, three balls, a best list per profile, and "let the song play" plays it for you without keeping a score.
 

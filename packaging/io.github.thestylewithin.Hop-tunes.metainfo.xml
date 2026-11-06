@@ -82,6 +82,17 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.8.0" date="2026-11-06">
+      <description>
+        <p>Cover Pinball, and Notesy the mascot as the new app icon.</p>
+        <ul>
+          <li>Cover Pinball: a pinball table made from the cover of the song that is playing, kicked by the beat (keyboard or controller).</li>
+          <li>Now playing: the "album fall" chip became "games", with a picker for Album Fall and Cover Pinball.</li>
+          <li>Notesy, the little winking note, is the new app icon on the desktop and on Android.</li>
+          <li>Clicking a button in a game no longer takes the keys (Space pressed it again).</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.5" date="2026-11-06">
       <description>
         <p>Android game controllers, a phone visualizer and a game, plus drive and layout fixes.</p>
