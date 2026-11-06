@@ -4,6 +4,8 @@
 
 **Hop-tunes** · Linux · GPL-3.0 · no accounts, no tracking
 
+<p align="right"><img src="design/app/notesy-mascot.png" alt="Notesy, the Hop-tunes mascot, winking" width="220"></p>
+
 > [!WARNING]
 > **Feature complete. Download at your own risk.** Hop-tunes 1.2 includes every planned feature — M7 video playback included — and passes its automated test suite on 16 Linux distributions. The developer has now tested it on real hardware (a Steam Deck running CachyOS Handheld Edition, AppImage only) — that testing is what found and fixed a video-playback bug for this release. Other install methods and hardware are still untested by the developer, so if you choose to try it, you do so at your own risk.
 
@@ -115,11 +117,13 @@ More renders, plus the original design targets, are in [`design/`](design/).
 
 **visual music games** (desktop)
 
-Two optional extras on Now playing: a **visualizer** that moves with the song, and **Album Fall**, falling blocks made of your own album covers where the beat of the song picks the piece and sets the speed. Play with the keyboard or a controller, or let the song play it for you (no score is kept then). Everything is off the moment you switch it off in Settings › visualizer & games, and the analysis only listens while one of them is on screen.
+Optional extras on Now playing, under the **games** chip and the visualizer: a **visualizer** that moves with the song, **Album Fall**, falling blocks made of your own album covers where the beat of the song picks the piece and sets the speed, and **Cover Pinball**, a pinball table made from the cover of the song that is playing: the bumpers stand where the cover is brightest, in its colours, and the beat kicks them (a hit on the beat pays double). Play with the keyboard or a controller, or let the song play it for you (no score is kept then). Everything is off the moment you switch it off in Settings › visualizer & games, and the analysis only listens while one of them is on screen.
 
 | visualizer | Album Fall (visualizer behind the game) |
 |---|---|
 | ![visualizer](design/app/games-visualizer.png) | ![Album Fall](design/app/games-albumfall.png) |
+| **Cover Pinball** | **Cover Pinball (visualizer behind the table)** |
+| ![Cover Pinball](design/app/games-pinball.png) | ![Cover Pinball with the visualizer behind](design/app/games-pinball-visualizer.png) |
 
 **On Android: the phone layout**
 
