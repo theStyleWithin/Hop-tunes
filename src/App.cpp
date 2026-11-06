@@ -840,7 +840,7 @@ QVariantMap App::gameSettings() const
 {
     QVariantMap out{{QStringLiteral("vizStyle"), QStringLiteral("bars")}, {QStringLiteral("vizColor"), QStringLiteral("accent")},
                     {QStringLiteral("vizIntensity"), 1.0}, {QStringLiteral("vizBackdrop"), false}, {QStringLiteral("chat"), false},
-                    {QStringLiteral("stage"), QStringLiteral("art")},
+                    {QStringLiteral("stage"), QStringLiteral("art")}, {QStringLiteral("game"), QStringLiteral("albumfall")},
                     {QStringLiteral("autoNowPlaying"), true}, {QStringLiteral("phoneViz"), false}, {QStringLiteral("visualizerGames"), true}};   // a controller is connected: starting a song opens Now playing
     const QJsonObject o = m_nowPlaying.value(QStringLiteral("settings")).toObject();
     for (auto it = o.constBegin(); it != o.constEnd(); ++it) if (out.contains(it.key())) out.insert(it.key(), it.value().toVariant());
@@ -850,7 +850,7 @@ QVariantMap App::gameSettings() const
 void App::setGameSetting(const QString &key, const QVariant &value)
 {
     static const QSet<QString> known = {QStringLiteral("vizStyle"), QStringLiteral("vizColor"), QStringLiteral("vizIntensity"),
-                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage"), QStringLiteral("autoNowPlaying"), QStringLiteral("phoneViz"), QStringLiteral("visualizerGames")};
+                                        QStringLiteral("vizBackdrop"), QStringLiteral("chat"), QStringLiteral("stage"), QStringLiteral("game"), QStringLiteral("autoNowPlaying"), QStringLiteral("phoneViz"), QStringLiteral("visualizerGames")};
     if (!known.contains(key)) return;
     QVariant v = value;
     if (key == QLatin1String("vizIntensity")) v = qBound(0.3, value.toDouble(), 2.0);
@@ -858,7 +858,8 @@ void App::setGameSetting(const QString &key, const QVariant &value)
     else {
         static const QHash<QString, QStringList> allowed = {{QStringLiteral("vizStyle"), {QStringLiteral("bars"), QStringLiteral("mirror"), QStringLiteral("rings")}},
             {QStringLiteral("vizColor"), {QStringLiteral("accent"), QStringLiteral("rainbow"), QStringLiteral("white")}},
-            {QStringLiteral("stage"), {QStringLiteral("art"), QStringLiteral("visualizer"), QStringLiteral("albumfall")}}};
+            {QStringLiteral("stage"), {QStringLiteral("art"), QStringLiteral("visualizer"), QStringLiteral("albumfall"), QStringLiteral("pinball")}},
+            {QStringLiteral("game"), {QStringLiteral("albumfall"), QStringLiteral("pinball")}}};
         if (!allowed.value(key).contains(value.toString())) return;
         v = value.toString();
     }

@@ -7,6 +7,7 @@
 #include <QElapsedTimer>
 #include <QObject>
 #include <QTimer>
+#include <QVariantList>
 
 namespace hop {
 
@@ -36,6 +37,12 @@ class PinballGame : public QObject {
     Q_PROPERTY(double worldH READ worldH CONSTANT)
     Q_PROPERTY(double ballR READ ballR CONSTANT)
     Q_PROPERTY(double laneX READ laneX CONSTANT)
+    Q_PROPERTY(double flipLen READ flipLen CONSTANT)
+    Q_PROPERTY(double flipR READ flipR CONSTANT)
+    Q_PROPERTY(double flipY READ flipY CONSTANT)
+    Q_PROPERTY(double leftPivotX READ leftPivotX CONSTANT)
+    Q_PROPERTY(double rightPivotX READ rightPivotX CONSTANT)
+    Q_PROPERTY(QVariantList walls READ walls CONSTANT)     // [ax, ay, bx, by, ...] of every wall
 public:
     explicit PinballGame(QObject *parent = nullptr);
 
@@ -63,6 +70,12 @@ public:
     static double worldH() { return PinTable::kH; }
     static double ballR() { return PinTable::kBallR; }
     static double laneX() { return PinTable::kLaneX; }
+    static double flipLen() { return PinTable::kFlipLen; }
+    static double flipR() { return PinTable::kFlipR; }
+    static double flipY() { return PinTable::kFlipPy; }
+    static double leftPivotX() { return PinTable::kLeftPx; }
+    static double rightPivotX() { return PinTable::kRightPx; }
+    QVariantList walls() const { QVariantList o; for (const QLineF &l : m_t.wallLines()) o << l.x1() << l.y1() << l.x2() << l.y2(); return o; }
 
     // a fresh game on the table the cover gives (a file URL or path; empty or unreadable gives the plain table)
     Q_INVOKABLE void start(const QString &coverUrl);

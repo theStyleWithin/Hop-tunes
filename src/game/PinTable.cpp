@@ -10,7 +10,7 @@ namespace {
 constexpr double kStep = 1.0 / 240.0;
 constexpr double kGravity = 11.0;
 constexpr double kMaxSpeed = 26.0;
-constexpr double kFlipLen = 1.6, kFlipR = 0.2, kFlipRest = 0.49, kFlipUp = -0.49, kFlipSpeed = 20.0;
+constexpr double kFlipLen = PinTable::kFlipLen, kFlipR = PinTable::kFlipR, kFlipRest = 0.49, kFlipUp = -0.49, kFlipSpeed = 20.0;
 constexpr double kBeatWindow = 0.12;
 constexpr double kLaneStartY = 16.2;
 inline double dot(const QPointF &a, const QPointF &b) { return a.x() * b.x() + a.y() * b.y(); }
@@ -26,7 +26,7 @@ QPointF PinTable::flipperTip(const Flipper &f)
 QVector<PinTable::Bumper> PinTable::layoutFromImage(const QImage &cover)
 {
     // places a bumper may sit: clear of the walls, the lane, the top corners and the flippers
-    const double x0 = 1.3, x1 = 8.0, y0 = 2.7, y1 = 10.4, minGap = 1.9;
+    const double x0 = 1.3, x1 = 8.0, y0 = 2.7, y1 = 10.4, minGap = 2.3;
     QVector<Bumper> out;
     auto add = [&](double x, double y, double r, QColor c) { Bumper b; b.x = x; b.y = y; b.r = r; b.color = c; out.append(b); };
     static const double defs[6][3] = {{3.2, 4.2, 0.7}, {6.2, 4.2, 0.7}, {4.7, 6.6, 0.75}, {2.4, 8.2, 0.55}, {7.0, 8.2, 0.55}, {4.7, 9.9, 0.55}};
@@ -85,8 +85,8 @@ void PinTable::reset(const QVector<Bumper> &layout, quint32 seed)
     seg(kLaneX, 16.6, kW, 16.6, wb);     // the lane floor
     seg(0, 12.4, 2.5, 14.45, sb);        // the slopes down to the flippers
     seg(kLaneX, 12.4, 6.65, 14.45, sb);
-    m_fl = Flipper{2.6, 14.6, kFlipRest, 0, false, 1};
-    m_fr = Flipper{6.55, 14.6, kFlipRest, 0, false, -1};
+    m_fl = Flipper{kLeftPx, kFlipPy, kFlipRest, 0, false, 1};
+    m_fr = Flipper{kRightPx, kFlipPy, kFlipRest, 0, false, -1};
     m_score = 0; m_balls = kBalls; m_hits = 0; m_lastBumper = -1; m_rounds = 0; m_lastOnBeat = false;
     m_time = 0; m_lastBeat = -10; m_slow = 0;
     parkBall();
@@ -208,7 +208,7 @@ void PinTable::collideBumpers()
         const QPointF n = d / dist;
         m_p += n * (reach - dist);
         const double vn = dot(m_v, n);
-        const double kick = 7.0 + 5.0 * b.pulse;                    // a bumper that just pulsed throws harder
+        const double kick = 5.5 + 3.5 * b.pulse;                    // a bumper that just pulsed throws harder
         if (vn < kick) m_v += n * (kick - vn);
         const bool onBeat = (m_time - m_lastBeat) <= kBeatWindow;
         m_score += onBeat ? 200 : 100;
@@ -219,7 +219,7 @@ void PinTable::collideBumpers()
         b.lit = true;
         bool all = true;
         for (const Bumper &o : m_bumpers) if (!o.lit) { all = false; break; }
-        if (all) { m_score += 1000; ++m_rounds; for (Bumper &o : m_bumpers) o.lit = false; }
+        if (all) { m_score += 500; ++m_rounds; for (Bumper &o : m_bumpers) o.lit = false; }
     }
 }
 

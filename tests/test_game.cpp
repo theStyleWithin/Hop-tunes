@@ -558,7 +558,7 @@ private slots:
             QCOMPARE(t.hits(), h + 1);
         }
         QCOMPARE(t.rounds(), 1);
-        QVERIFY(t.score() >= 1000 + 100 * bs.size());
+        QVERIFY(t.score() >= 500 + 100 * bs.size());
     }
 
     void pinballFlippersLiftTheBallAndNothingEscapes()
@@ -595,7 +595,7 @@ private slots:
             }
             QVERIFY(g.hits() > 0);
             if (!bot) QCOMPARE(g.state(), PinTable::Over);
-            else QVERIFY2(g.score() > 1000, qPrintable(QString("bot score %1, balls %2").arg(g.score()).arg(g.ballsLeft())));
+            else QVERIFY2(g.score() > 500, qPrintable(QString("bot score %1, balls %2").arg(g.score()).arg(g.ballsLeft())));
         }
     }
 
