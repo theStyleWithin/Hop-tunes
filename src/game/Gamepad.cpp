@@ -79,7 +79,7 @@ void Gamepad::hold(const QString &action, bool down)
         if (down) { m_held = action; m_repeatPhase = 0; m_repeat.setInterval(180); m_repeat.start(); }
         else if (m_held == action) { m_held.clear(); m_repeat.stop(); }
     }
-    if (down) emit pressed(action);
+    if (down) emit pressed(action); else emit released(action);
 }
 
 void Gamepad::repeatTick()

@@ -11,18 +11,20 @@ Rectangle {
     readonly property var player: hop.player
     signal back()
 
-    // The stage: the song and up-next as always ("art"), the music made visible, or Album Fall. Desktop only.
+    // The stage: the song and up-next as always ("art"), the music made visible, or one of the games (Album Fall, Cover Pinball). Desktop only.
     readonly property string stage: Theme.compact || !hop.audio.available ? "art" : hop.gameSettings.stage
     readonly property bool staged: stage !== "art"
+    readonly property bool inGames: stage === "albumfall" || stage === "pinball"
     readonly property var gs: hop.gameSettings
     function setStage(s) { hop.setGameSetting("stage", s) }
+    function setGame(g) { hop.setGameSetting("game", g); hop.setGameSetting("stage", g) }
     // the analysis and the controller are only listened to while they are on screen
     readonly property bool wantsAudio: root.visible && root.staged
     onWantsAudioChanged: hop.audio.want("stage", wantsAudio)
-    function syncPad() { hop.gamepad.setListening(root.visible && root.stage === "albumfall") }
+    function syncPad() { hop.gamepad.setListening(root.visible && root.inGames) }
     onStageChanged: syncPad()
     Component.onCompleted: syncPad()
-    Shortcut { sequence: "G"; enabled: root.visible && !Theme.compact && hop.audio.available && root.stage !== "albumfall"; onActivated: root.setStage(root.stage === "art" ? "visualizer" : (root.stage === "visualizer" ? "albumfall" : "art")) }
+    Shortcut { sequence: "G"; enabled: root.visible && !Theme.compact && hop.audio.available && !root.inGames; onActivated: root.setStage(root.stage === "art" ? "visualizer" : root.gs.game) }
 
     // Controls fade out after a few idle seconds while music plays (spec §4.3); any mouse
     // movement or key brings them back.
@@ -92,25 +94,26 @@ Rectangle {
             contentItem: Label { text: "‹"; color: Theme.text; font.pixelSize: Theme.fs(26); horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; bottomPadding: 4 }
         }
         Item { Layout.fillWidth: true }
-        Row {   // art | visualizer | album fall (where the player can analyse the sound: not on Android yet)
+        Row {   // the song | visualizer | games (where the player can analyse the sound: not on Android yet)
             visible: hop.audio.available
             spacing: 6
             Layout.rightMargin: 24
             Repeater {
-                model: [["art", "the song"], ["visualizer", "visualizer"], ["albumfall", "album fall"]]
+                model: [["art", "the song"], ["visualizer", "visualizer"], ["games", "games"]]
                 delegate: AbstractButton {
                     id: chip
                     required property var modelData
+                    readonly property bool active: modelData[0] === "games" ? root.inGames : root.stage === modelData[0]
                     objectName: "stage_" + modelData[0]
                     hoverEnabled: true
-                    onClicked: root.setStage(modelData[0])
+                    onClicked: root.setStage(modelData[0] === "games" ? root.gs.game : modelData[0])
                     Accessible.name: modelData[1]
-                    contentItem: Label { text: chip.modelData[1]; color: root.stage === chip.modelData[0] ? Theme.ink : (chip.hovered ? Theme.text : Theme.muted)
+                    contentItem: Label { text: chip.modelData[1]; color: chip.active ? Theme.ink : (chip.hovered ? Theme.text : Theme.muted)
                                          horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                                          font { family: Theme.font; pixelSize: Theme.fs(15) } }
                     background: Rectangle { implicitWidth: Math.max(90, chip.contentItem.implicitWidth + 28); implicitHeight: 34
-                                            color: root.stage === chip.modelData[0] ? Theme.accent : "transparent"
-                                            border { width: root.stage === chip.modelData[0] ? 0 : 1; color: Theme.border } }
+                                            color: chip.active ? Theme.accent : "transparent"
+                                            border { width: chip.active ? 0 : 1; color: Theme.border } }
                 }
             }
         }
@@ -137,15 +140,22 @@ Rectangle {
         Visualizer {
             objectName: "visualizer"
             anchors { left: parent.left; right: parent.right; top: parent.top; bottom: stageOptions.top; bottomMargin: 10 }
-            visible: root.stage === "visualizer" || (root.stage === "albumfall" && root.gs.vizBackdrop)
+            visible: root.stage === "visualizer" || (root.inGames && root.gs.vizBackdrop)
             style: root.gs.vizStyle; colorMode: root.gs.vizColor; intensity: root.gs.vizIntensity
-            opacityScale: root.stage === "albumfall" ? 0.28 : 1.0
+            opacityScale: root.inGames ? 0.28 : 1.0
         }
         AlbumFall {
             id: fall
             anchors { left: parent.left; right: parent.right; top: parent.top; bottom: stageOptions.top; bottomMargin: 10 }
             visible: root.stage === "albumfall"
             shown: root.visible && root.stage === "albumfall"
+            onLeave: root.setStage("art")
+        }
+        CoverPinball {
+            id: pinball
+            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: stageOptions.top; bottomMargin: 10 }
+            visible: root.stage === "pinball"
+            shown: root.visible && root.stage === "pinball"
             onLeave: root.setStage("art")
         }
         Label {   // the song, small, over the visualizer
@@ -168,6 +178,10 @@ Rectangle {
                 contentItem: Label { text: oc.text; color: oc.on ? Theme.accent : (oc.hovered ? Theme.text : Theme.muted); font { family: Theme.font; pixelSize: Theme.fs(14); underline: oc.on } }
                 background: Item {}
             }
+            Label { visible: root.inGames; text: "game"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+            Repeater { model: [["albumfall", "album fall"], ["pinball", "cover pinball"]]     // (a constant model: items that come and go inside a layout crash Qt 6.4)
+                       delegate: OptChip { required property var modelData; objectName: "game_" + modelData[0]; text: modelData[1]; on: root.stage === modelData[0]
+                                           visible: root.inGames; onClicked: root.setGame(modelData[0]) } }
             Label { text: "visualizer"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
             Repeater { model: ["bars", "mirror", "rings"]
                        delegate: OptChip { required property string modelData; objectName: "vizStyle_" + modelData; text: modelData; on: root.gs.vizStyle === modelData
@@ -179,10 +193,10 @@ Rectangle {
             Label { text: "strength"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
             Slider { objectName: "vizIntensity"; from: 0.3; to: 2.0; value: root.gs.vizIntensity; implicitWidth: 120
                      onMoved: hop.setGameSetting("vizIntensity", value) }
-            OptChip { objectName: "vizBackdrop"; visible: root.stage === "albumfall"; text: root.gs.vizBackdrop ? "\u2611 visualizer behind the game" : "\u2610 visualizer behind the game"
+            OptChip { objectName: "vizBackdrop"; visible: root.inGames; text: root.gs.vizBackdrop ? "\u2611 visualizer behind the game" : "\u2610 visualizer behind the game"
                       on: root.gs.vizBackdrop; onClicked: hop.setGameSetting("vizBackdrop", !root.gs.vizBackdrop) }
             Item { Layout.fillWidth: true }
-            Label { visible: root.stage === "albumfall" && hop.gamepad.connected; text: "\u25cf " + hop.gamepad.name; color: Theme.dim; elide: Text.ElideRight; Layout.maximumWidth: 260
+            Label { visible: root.inGames && hop.gamepad.connected; text: "\u25cf " + hop.gamepad.name; color: Theme.dim; elide: Text.ElideRight; Layout.maximumWidth: 260
                     font { family: Theme.font; pixelSize: Theme.fs(13) } }
         }
     }

@@ -1869,7 +1869,7 @@ private slots:
         m_app->playSongs(0);
         QTRY_VERIFY(m_app->player()->isPlaying());
         QVERIFY(m_app->gameSettings().value("stage").toString() == QLatin1String("art"));
-        QVERIFY(item("stage_visualizer") && item("stage_albumfall"));
+        QVERIFY(item("stage_visualizer") && item("stage_games"));
         QVERIFY(!m_app->audio()->active());                          // nothing listens while it is the song page
 
         // the visualizer: analysis starts only now, and the choices are remembered with the profile
@@ -1903,7 +1903,7 @@ private slots:
         QCOMPARE(st.value("nowPlaying").toObject().value("settings").toObject().value("vizColor").toString(), QStringLiteral("rainbow"));
 
         // Album Fall: a beat picks the piece, keys move it, the score and the best list are kept
-        QVERIFY(click("stage_albumfall"));
+        QVERIFY(click("stage_games"));
         QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
         QTRY_VERIFY(m_app->albumFall()->running());
         QVERIFY(!m_app->albumFall()->paused());
@@ -2006,7 +2006,7 @@ private slots:
         shot("np-chat");
         QVERIFY(click("chatToggle"));
         QTRY_VERIFY(!item("nowPlayingChat")->isVisible());
-        QVERIFY(click("stage_albumfall"));
+        QVERIFY(click("stage_games"));
 
         // back to the song: the analysis stops listening again
         QVERIFY(click("stage_art"));
@@ -2014,6 +2014,74 @@ private slots:
         QVERIFY(m_app->gameSettings().value("stage").toString() == QLatin1String("art"));
         m_app->player()->toggle();
         window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // Cover Pinball: the games chip opens a game picker; the table is made from the cover; flippers hold with keys and the
+    // controller; the song playing it keeps no score; Esc leaves
+    void coverPinballOpensFromTheGamesChipAndPlays()
+    {
+        auto *w = window();
+        w->setProperty("view", QStringLiteral("now playing"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(item("stage_games"));
+        QVERIFY(click("stage_games"));
+        QVERIFY(item("game_albumfall") && item("game_pinball"));       // the picker for the two games
+        QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
+        QVERIFY(click("game_pinball"));
+        QCOMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("pinball"));
+        QCOMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("pinball"));
+        QTRY_VERIFY(item("coverPinball") && item("coverPinball")->isVisible());
+        QTRY_VERIFY(!item("albumFall")->isVisible());
+        PinballGame *g = m_app->pinball();
+        QTRY_VERIFY(g->running());
+        QCOMPARE(g->state(), 0);                                       // the ball waits in the lane
+        QVERIFY(g->bumperCount() >= 5);
+        QVERIFY(item("pbTable") && item("pbTable")->isVisible());
+        // the controller only listens while a game is on screen
+        m_app->gamepad()->feedAction(QStringLiteral("start"), true);   // start pauses
+        QTRY_VERIFY(g->paused());
+        m_app->gamepad()->feedAction(QStringLiteral("start"), true);
+        QTRY_VERIFY(!g->paused());
+        // space launches; keys and controller buttons hold the flippers up and let them down again
+        QTest::keyClick(w, Qt::Key_Space);
+        QTRY_COMPARE(g->state(), 1);
+        const double rest = g->leftAngle();
+        QTest::keyPress(w, Qt::Key_Z);
+        QTRY_VERIFY(g->leftAngle() < rest - 0.5);
+        QTest::keyRelease(w, Qt::Key_Z);
+        QTRY_VERIFY(g->leftAngle() > rest - 0.05);
+        const double rrest = g->rightAngle();
+        m_app->gamepad()->feedAction(QStringLiteral("rb"), true);
+        QTRY_VERIFY(g->rightAngle() < rrest - 0.5);
+        m_app->gamepad()->feedAction(QStringLiteral("rb"), false);
+        QTRY_VERIFY(g->rightAngle() > rrest - 0.05);
+        shot("np-pinball");
+        // the song plays it: nothing is scored, however it ends
+        const int before = m_app->gameScores(QStringLiteral("pinball")).size();
+        QVERIFY(click("pbAutoplay"));
+        QVERIFY(g->autoplay() && !g->scored());
+        QVERIFY(item("pbOverlay"));
+        g->advance(60 * 120, 1.0 / 60);
+        QVERIFY(g->hits() > 0);
+        QCOMPARE(m_app->gameScores(QStringLiteral("pinball")).size(), before);
+        QVERIFY(click("pbAutoplay"));
+        QVERIFY(!g->autoplay());
+        // a click on a button must not take the keys away: Space is still the launch, not a second click on that button
+        QTest::keyClick(w, Qt::Key_Space);
+        QVERIFY(!g->autoplay());
+        // Esc leaves back to the song; the game pauses and the choice of game is remembered
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_COMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("art"));
+        QTRY_VERIFY(g->paused());
+        QCOMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("pinball"));
+        QVERIFY(click("stage_games"));                                 // the chip comes back to the last game
+        QCOMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("pinball"));
+        QTest::qWait(300);
+        QVERIFY(click("game_albumfall"));
+        QTRY_COMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("albumfall"));
+        QVERIFY(click("stage_art"));
+        m_app->setGameSetting(QStringLiteral("game"), QStringLiteral("albumfall"));
     }
 
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
@@ -2370,6 +2438,7 @@ private slots:
                 QVERIFY(QFile::copy(fx + QStringLiteral("/music/") + f, dir + QLatin1Char('/') + f));
             }
         }
+        for (const QString &f : m_app->folders()) m_app->removeFolder(f);   // only the fixture songs, so what plays has a cover (this test runs last)
         m_app->addFolder(QUrl::fromLocalFile(lib));
         QTRY_VERIFY_WITH_TIMEOUT(m_app->librarySize() >= 12 && !m_app->scanning(), 20000);
         QTRY_VERIFY_WITH_TIMEOUT(m_app->mosaicArt().size() >= 4, 10000);
@@ -2395,7 +2464,7 @@ private slots:
         w->setProperty("view", QStringLiteral("now playing"));
         m_app->playSongs(0);
         QTRY_VERIFY(m_app->player()->isPlaying());
-        QVERIFY(click("stage_albumfall"));
+        QVERIFY(click("stage_games"));
         QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
         AlbumFall *af = m_app->albumFall();
         af->setAutoplay(false);
@@ -2412,6 +2481,20 @@ private slots:
         QTest::qWait(900);
         shot("games-albumfall");
         m_app->setGameSetting(QStringLiteral("vizBackdrop"), false);
+        // Cover Pinball: the table is the cover of the song that plays
+        QTest::qWait(300);
+        QVERIFY(click("game_pinball"));
+        QTRY_VERIFY(item("coverPinball") && item("coverPinball")->isVisible());
+        PinballGame *pb = m_app->pinball();
+        QTRY_VERIFY(pb->running());
+        QTest::keyClick(w, Qt::Key_Space);
+        QTRY_COMPARE(pb->state(), 1);
+        pb->advance(60 * 6, 1.0 / 60);                       // a few seconds of play, so the bumpers are lit
+        QTest::qWait(300);
+        shot("games-pinball");
+        QTest::qWait(300);
+        QVERIFY(click("game_albumfall"));
+        m_app->setGameSetting(QStringLiteral("game"), QStringLiteral("albumfall"));
         QVERIFY(click("stage_visualizer"));
         m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("mirror"));
         m_app->setGameSetting(QStringLiteral("vizColor"), QStringLiteral("rainbow"));

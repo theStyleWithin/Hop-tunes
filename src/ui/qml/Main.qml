@@ -110,7 +110,7 @@ ApplicationWindow {
         onAccepted: hop.addFolder(selectedFolder)
     }
 
-    Shortcut { sequence: "Space"; enabled: hop.profileReady && !musyNote.active && !(win.view === "now playing" && hop.gameSettings.stage === "albumfall"); onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
+    Shortcut { sequence: "Space"; enabled: hop.profileReady && !musyNote.active && !(win.view === "now playing" && (hop.gameSettings.stage === "albumfall" || hop.gameSettings.stage === "pinball")); onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
     Shortcut { sequences: ["Ctrl+Right", "Media Next"]; enabled: hop.profileReady; onActivated: hop.player.next() }
     Shortcut { sequences: ["Ctrl+Left", "Media Previous"]; enabled: hop.profileReady; onActivated: hop.player.previous() }
     Shortcut { sequence: "Ctrl+1"; enabled: hop.profileReady; onActivated: win.view = "collection" }
