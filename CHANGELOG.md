@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-11-06
+
 ### Added
 - **Android: game controllers, the visualizer and a game, Musy Note.** Hop-tunes now sees game controllers (USB, Bluetooth,
   clip-on ones like the Red Magic Gravity X) and reads their buttons. With a controller connected, starting a song in the
