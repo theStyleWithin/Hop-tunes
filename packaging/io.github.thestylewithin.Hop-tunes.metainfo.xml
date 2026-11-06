@@ -82,6 +82,19 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.7.5" date="2026-11-06">
+      <description>
+        <p>Android game controllers, a phone visualizer and a game, plus drive and layout fixes.</p>
+        <ul>
+          <li>Android: game controllers work; with one connected, starting a song opens Now playing.</li>
+          <li>Android: a visualizer and Musy Note, a rhythm game where a cute music note flies through your album covers (tap or controller).</li>
+          <li>Android: Now playing has a landscape layout and fits narrow phones.</li>
+          <li>Media on a drive that is not plugged in is left out and comes back by itself when it is.</li>
+          <li>Album Fall: a pause button and "let the song play" (no score is kept for autoplay).</li>
+          <li>Live chat: whoever types is a member.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.7.4" date="2026-11-05">
       <description>
         <p>Games and a visualizer in Now playing, fixing artist names, and folder slots.</p>
