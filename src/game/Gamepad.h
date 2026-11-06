@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QSocketNotifier>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 #include <memory>
 
@@ -18,6 +19,7 @@ class Gamepad : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
     Q_PROPERTY(QString name READ name NOTIFY connectedChanged)
+    Q_PROPERTY(QStringList recentEvents READ recentEvents NOTIFY eventsChanged)   // the last 20 raw controller events, for diagnostics
 public:
     explicit Gamepad(QObject *parent = nullptr);
     ~Gamepad() override;
@@ -27,10 +29,22 @@ public:
     // Only look for a controller while something wants it (Now playing's games); nothing is opened otherwise.
     Q_INVOKABLE void setListening(bool on);
 
+    QStringList recentEvents() const { return m_events; }
+
     // for tests and for the keyboard-free paths: behaves as if the controller did this
     void feedAction(const QString &action, bool down);
+    // A controller was plugged in or removed (name "" = none). Android learns this from its activity; also for tests.
+    void setDevice(const QString &name);
+    void logEvent(const QString &text);
+    // Android: the activity (HopActivity.java) reports controller events here; the one Gamepad that is listening gets them.
+    static Gamepad *instance() { return s_instance; }
+#if defined(Q_OS_ANDROID)
+    void registerAndroid();
+    static void androidSetListening(bool on);
+#endif
 
 signals:
+    void eventsChanged();
     void connectedChanged();
     void pressed(const QString &action);
 
@@ -42,6 +56,8 @@ private:
     void repeatTick();
     void setConnected(bool c, const QString &name = {});
 
+    static Gamepad *s_instance;
+    QStringList m_events;
     bool m_connected = false, m_listening = false;
     QString m_name;
     QTimer m_scan, m_repeat;

@@ -306,13 +306,16 @@ Item {
             Layout.leftMargin: Theme.pad; Layout.topMargin: 40
             spacing: 18
             Label {
-                text: hop.folders.length === 0 ? "add your music" : "no songs found yet"
+                readonly property bool notConnected: hop.folders.length > 0 && hop.folders.every(function (f) { return hop.missingFolders.indexOf(f) >= 0 })
+                text: hop.folders.length === 0 ? "add your music" : (notConnected ? "your music isn't connected" : "no songs found yet")
                 color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(56); weight: Font.Light }
             }
             Label {
                 text: hop.folders.length === 0
                       ? "pick a folder and hop-tunes will find your songs. nothing is uploaded anywhere."
-                      : "hop-tunes looked in " + hop.folders.join(", ") + " and found no audio files."
+                      : (hop.folders.every(function (f) { return hop.missingFolders.indexOf(f) >= 0 })
+                         ? "the folder " + hop.folders.join(", ") + " can't be reached. if it is on an external drive, plug it in: your music comes back by itself, nothing is lost."
+                         : "hop-tunes looked in " + hop.folders.join(", ") + " and found no audio files.")
                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(18) }
                 wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 640
             }

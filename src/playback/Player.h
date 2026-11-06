@@ -156,6 +156,7 @@ private:
     // Android only (no GStreamer): called on the audio thread when the next song has just started, so the queue
     // position moves on even while the app is in the background and its main loop is paused.
     static void onStreamStartedThread(GstElement *playbin, void *self);
+    static void onSpectrumThread(GstElement *playbin, const float *bands, int n, void *self);   // Android only
     GstElement *makeBin();
     GstElement *makeGainFilter() const;
     void applyGainFilter(GstElement *bin);

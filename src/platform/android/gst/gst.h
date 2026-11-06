@@ -48,6 +48,13 @@ enum GstMessageType { GST_MESSAGE_UNKNOWN = 0, GST_MESSAGE_EOS = 1, GST_MESSAGE_
 #define g_signal_connect(i, s, c, d) hop_shim_connect((i), (s), (c), (d))
 #define g_signal_handlers_disconnect_by_data(i, d) hop_shim_disconnect((i), (d))
 
+// A third signal, "hop-spectrum": while analysis is on (hop_shim_set_analysis) the callback gets 32 band levels in dB
+// (-80 silence .. 0 full scale) about 30 times a second, on the audio thread. It is what GStreamer's spectrum element
+// is on the desktop, made from the decoded samples of the song that is playing (Qt Multimedia's QAudioBufferOutput).
+void hop_shim_set_analysis(GstElement *e, gboolean on);
+// true once the tap made a song fail: it was taken out, the song was retried without it, and analysis stays off for this run
+gboolean hop_shim_analysis_broken(GstElement *e);
+
 void g_object_set(void *obj, const char *first, ...);   // "uri", "volume" matter here; the rest are accepted and ignored
 unsigned long hop_shim_connect(void *obj, const char *signal, GCallback cb, void *data);
 void hop_shim_disconnect(void *obj, void *data);

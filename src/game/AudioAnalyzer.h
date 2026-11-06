@@ -5,6 +5,8 @@
 
 #include <QElapsedTimer>
 #include <QObject>
+#include <QSet>
+#include <QString>
 #include <QVariantList>
 #include <QVector>
 
@@ -32,6 +34,9 @@ public:
     void setAvailable(bool a) { if (a != m_available) { m_available = a; emit availableChanged(); } }
     bool active() const { return m_active; }
     void setActive(bool on);
+    // Several screens can want the analysis at once (the desktop stage, the phone visualizer, the game): each names itself
+    // and says yes or no; the analysis runs while anyone wants it.
+    Q_INVOKABLE void want(const QString &who, bool on);
     QVariantList bands() const { return m_bands; }
     double bass() const { return m_t.bass(); }
     double mid() const { return m_t.mid(); }
@@ -51,6 +56,7 @@ signals:
     void beat(double strength);
 
 private:
+    QSet<QString> m_wants;
     BeatTracker m_t;
     QVariantList m_bands;
     QElapsedTimer m_clock;

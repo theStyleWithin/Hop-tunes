@@ -401,6 +401,35 @@ Item {
                 onPicked: function (v) { hop.theme = v }
             }
         }
+        SRow {   // the sound tap behind the visualizer and the games can be switched off: music never depends on it
+            objectName: "visualizerGamesRow"
+            visible: hop.player.analysisAvailable
+            spacing: 16
+            Label { text: "visualizer & games"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Label { visible: Theme.compact || hop.analysisSafeMode; Layout.fillWidth: true; wrapMode: Text.WordWrap; Layout.topMargin: Theme.compact ? -6 : 0
+                    text: hop.analysisSafeMode ? "switched off: the app stopped unexpectedly while it was on. turn it back on if you want to try again."
+                                               : "listens to the song for the visualizer and the games. if you ever have a playback problem, switch it off."
+                    color: hop.analysisSafeMode ? Theme.danger : Theme.muted; font { family: Theme.font; pixelSize: 14 } }
+            Choice {
+                objectName: "visualizerGamesChoice"
+                options: [["vgOn", "on"], ["vgOff", "off"]]
+                value: hop.gameSettings.visualizerGames && !hop.analysisSafeMode ? "vgOn" : "vgOff"
+                onPicked: function (v) { hop.setGameSetting("visualizerGames", v === "vgOn") }
+            }
+        }
+        SRow {   // a game controller: starting a song opens Now playing
+            objectName: "autoNowPlayingRow"
+            spacing: 16
+            Label { text: "controller"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Label { visible: Theme.compact; text: "when a game controller is connected, starting a song opens Now playing"; color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                    font { family: Theme.font; pixelSize: 14 } Layout.topMargin: -6 }
+            Choice {
+                objectName: "autoNowPlayingChoice"
+                options: [["controllerOpen", "open Now playing"], ["controllerStay", "stay where I am"]]
+                value: hop.gameSettings.autoNowPlaying ? "controllerOpen" : "controllerStay"
+                onPicked: function (v) { hop.setGameSetting("autoNowPlaying", v === "controllerOpen") }
+            }
+        }
         SRow {
             spacing: 16
             Label { text: "motion"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
@@ -505,6 +534,8 @@ Item {
                 RowLayout {
                     anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
                     Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    Label { objectName: "folderNotConnected"; visible: hop.missingFolders.indexOf(modelData) >= 0; text: "not connected"; color: Theme.danger
+                            font { family: Theme.font; pixelSize: Theme.fs(13) } }
                     Button {
                         text: "remove"
                         onClicked: hop.removeFolder(modelData)
@@ -690,6 +721,13 @@ Item {
                 text: "a small log of what the app did, kept on this phone only. if something goes wrong, restart the app, open this page, tap copy and paste it to the developer."
                 color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
                 font { family: Theme.font; pixelSize: 14 }
+            }
+            Label {
+                objectName: "diagController"
+                text: "game controller: " + (hop.gamepad.connected ? hop.gamepad.name : "none found")
+                      + (hop.gamepad.recentEvents.length > 0 ? "\n" + hop.gamepad.recentEvents.slice(-8).join("\n") : "\n(press a button on it and it shows up here)")
+                color: Theme.text2; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: "monospace"; pixelSize: 12 }
             }
             Flow {
                 Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.preferredWidth: 100

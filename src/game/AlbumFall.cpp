@@ -26,6 +26,8 @@ void AlbumFall::start(int artCount)
     m_board.setArtCount(m_art);
     m_board.reset(QRandomGenerator::global()->generate());
     m_started = true;
+    m_autoUsed = m_autoplay;            // a game only counts if the song never played it
+    m_planned = false;
     m_paused = false;
     m_wasOver = false;
     m_last = m_clock.elapsed();
@@ -35,6 +37,35 @@ void AlbumFall::start(int artCount)
     emit runningChanged();
     emit pausedChanged();
     emit changed();
+}
+
+void AlbumFall::setAutoplay(bool on)
+{
+    if (on == m_autoplay) return;
+    m_autoplay = on;
+    if (on && m_started && m_board.state() == FallBoard::Playing) { m_autoUsed = true; emit changed(); }
+    m_planned = false;
+    emit autoplayChanged();
+}
+
+// The autopilot: one move at a time, paced, so it looks like playing: turn, slide, then drop.
+void AlbumFall::autoStep(qint64 now)
+{
+    if (now - m_lastAuto < 110) return;
+    m_lastAuto = now;
+    if (!m_board.hasPiece()) { m_planned = false; return; }
+    if (!m_planned || m_planLock != m_board.lockCount()) {
+        m_plan = m_board.suggest();
+        m_planned = m_plan.valid;
+        m_planLock = m_board.lockCount();
+        m_turned = 0;
+        if (!m_planned) return;
+    }
+    if (m_turned < m_plan.rotations) { ++m_turned; perform(QStringLiteral("rotate")); return; }
+    const int x = m_board.pieceX();
+    if (x < m_plan.x) perform(QStringLiteral("right"));
+    else if (x > m_plan.x) perform(QStringLiteral("left"));
+    else perform(QStringLiteral("drop"));
 }
 
 void AlbumFall::setPaused(bool p)
@@ -59,6 +90,12 @@ void AlbumFall::onBeat(double strength)
 
 void AlbumFall::act(const QString &a)
 {
+    if (m_autoplay) return;            // the song has the controls while it plays for you
+    perform(a);
+}
+
+void AlbumFall::perform(const QString &a)
+{
     if (!m_started || m_paused || m_board.state() != FallBoard::Playing) return;
     bool moved = false;
     if (a == QLatin1String("left")) moved = m_board.moveLeft();
@@ -70,7 +107,7 @@ void AlbumFall::act(const QString &a)
     if (!moved) return;
     ++m_rev;
     emit changed();
-    if (m_board.state() == FallBoard::GameOver && !m_wasOver) { m_wasOver = true; emit runningChanged(); emit finished(m_board.score(), m_board.lines()); }
+    if (m_board.state() == FallBoard::GameOver && !m_wasOver) { m_wasOver = true; emit runningChanged(); emit finished(m_board.score(), m_board.lines(), !m_autoUsed); }
 }
 
 void AlbumFall::step()
@@ -79,6 +116,7 @@ void AlbumFall::step()
     const double dt = qMin(0.1, double(now - m_last) / 1000.0);
     m_last = now;
     if (!m_started || m_paused || !m_playing || m_board.state() != FallBoard::Playing) return;
+    if (m_autoplay) autoStep(now);
 
     // the song stands in with its own pulse when no beat has come for a while (quiet or beatless music, no analysis)
     const double gap = 60000.0 / qBound(60.0, m_bpm, 180.0);
@@ -99,7 +137,7 @@ void AlbumFall::step()
         ++m_rev;
         emit changed();
     }
-    if (m_board.state() == FallBoard::GameOver && !m_wasOver) { m_wasOver = true; emit runningChanged(); emit changed(); emit finished(m_board.score(), m_board.lines()); }
+    if (m_board.state() == FallBoard::GameOver && !m_wasOver) { m_wasOver = true; emit runningChanged(); emit changed(); emit finished(m_board.score(), m_board.lines(), !m_autoUsed); }
 }
 
 } // namespace hop

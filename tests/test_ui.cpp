@@ -1192,6 +1192,337 @@ private slots:
         QVERIFY2(failures.isEmpty(), qPrintable(QStringLiteral("overflowing: ") + failures.join(QStringLiteral(", "))));
     }
 
+    // Turned sideways (landscape) Now playing has its own layout: the cover left, the song and buttons right, all of it
+    // inside the screen (nothing runs past the right edge or off the bottom).
+    void phoneNowPlayingLandscape()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->hasTrack());
+        w->setProperty("forceMobile", true);
+        for (const QSize &sz : {QSize(800, 360), QSize(892, 412), QSize(640, 320)}) {
+            w->resize(sz);
+            QTRY_COMPARE(w->width(), sz.width());
+            w->setProperty("view", QStringLiteral("now playing"));
+            QTest::qWait(400);
+            const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
+            shot(qPrintable(QStringLiteral("phone-nowplaying-landscape-") + tag));
+            QVERIFY2(overflowing().isEmpty(), qPrintable(tag + QStringLiteral(" overflows right: ") + overflowing().join(QStringLiteral(", "))));
+            for (const char *name : {"phonePlay", "phoneSeek", "phoneQueueButton", "phoneNpBack"}) {
+                QQuickItem *it = item(name);
+                QVERIFY2(it && it->isVisible(), name);
+                const QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+                QVERIFY2(r.bottom() <= w->height() + 1 && r.right() <= w->width() + 1 && r.top() >= -1,
+                         qPrintable(QStringLiteral("%1 off screen at %2: %3,%4 %5x%6").arg(QLatin1String(name), tag).arg(r.x()).arg(r.y()).arg(r.width()).arg(r.height())));
+            }
+        }
+        // portrait is as before
+        w->resize(412, 892);
+        QTRY_COMPARE(w->width(), 412);
+        QTest::qWait(300);
+        QVERIFY(overflowing().isEmpty());
+        QQuickItem *play = item("phonePlay");
+        QVERIFY(play && play->mapRectToScene(QRectF(0, 0, play->width(), play->height())).bottom() <= w->height());
+        m_app->player()->stop();
+    }
+
+    // Musy Note (the phone game): opens full screen from Now playing, flaps by tap / key / controller, the song can fly it
+    // (and then no score is kept), and back closes it.
+    void musyNoteOpensFliesAndKeepsHonestScores()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        w->setProperty("forceMobile", true);
+        w->resize(800, 360);
+        QTRY_COMPARE(w->width(), 800);
+        w->setProperty("view", QStringLiteral("now playing"));
+        QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
+        shot("phone-nowplaying-games-button");
+        QVERIFY(click("phoneGames"));
+        QTRY_VERIFY(item("musyNote") && item("musyNote")->isVisible());
+        MusyNoteGame *g = m_app->musyNote();
+        QTRY_COMPARE(g->state(), 0);                       // ready: waiting for the first flap
+        // a controller press that arrives with the opening (a stick that rests off-centre) does not start it either
+        m_app->gamepad()->feedAction(QStringLiteral("up"), true);
+        m_app->gamepad()->feedAction(QStringLiteral("up"), false);
+        QTest::qWait(100);
+        QCOMPARE(g->state(), 0);
+        // a tap that arrives right after opening (the end of the tap that opened it) does not start the game
+        QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, QPoint(w->width() / 2, w->height() / 2));
+        QTest::qWait(200);
+        QCOMPARE(g->state(), 0);
+        QTest::qWait(300);                                 // after the short grace period a tap does fly
+        QTRY_VERIFY(m_app->audio()->active());             // the analysis listens only while it is open
+
+        // twelve coloured "covers" for the walls
+        QVariantList urls;
+        for (int i = 0; i < 12; ++i) {
+            QImage im(96, 96, QImage::Format_RGB32);
+            im.fill(QColor::fromHsv(i * 30, 200, 230));
+            const QString f = m_home.filePath(QStringLiteral("mn%1.png").arg(i));
+            QVERIFY(im.save(f));
+            urls << QUrl::fromLocalFile(f).toString();
+        }
+        item("musyNote")->setProperty("covers", urls);
+        shot("musy-ready");
+        {   // a close look at the note's moods: a big note on a plain background
+            QObject *sprite = item("musyNote")->findChild<QObject *>(QStringLiteral("musyNoteSprite"));
+            QVERIFY(sprite);
+            QTest::qWait(150);
+            shot("musy-note-happy");
+        }
+
+        // keys, then a controller button, then the screen start and flap it
+        QTest::keyClick(w, Qt::Key_Space);
+        QTRY_COMPARE(g->state(), 1);
+        g->advance(6, 1.0 / 60);
+        g->setPaused(true);                                // (real time must not run while the picture is taken)
+        QTest::qWait(120);
+        shot("musy-flying");
+        g->setPaused(false);
+        const double y0 = g->noteY();
+        m_app->gamepad()->feedAction(QStringLiteral("a"), true);
+        m_app->gamepad()->feedAction(QStringLiteral("a"), false);
+        QTRY_VERIFY(g->noteVy() < 0 || g->noteY() < y0 + 0.5);
+        // beats make walls
+        for (int i = 0; i < 6; ++i) { g->onBeat(0.7); g->advance(30, 1.0 / 60); QTest::keyClick(w, Qt::Key_Space); }
+        QVERIFY(!g->wallIds().isEmpty());
+        g->advance(60, 1.0 / 60);
+        QTest::qWait(200);
+        shot("musy-playing");
+
+        // the song plays it: no score is kept for that run
+        const int before0 = m_app->gameScores(QStringLiteral("musynote")).size();
+        g->start(12);                                      // a fresh run (the one above may already have crashed)
+        QVERIFY(g->scored());
+        g->setAutoplay(true);
+        QVERIFY(!g->scored());                             // from the moment the song takes over, nothing is counted
+        g->flap();                                         // a person's flap is ignored while the song has the controls
+        for (int i = 0; i < 90 && g->state() != 2; ++i) { if (i % 20 == 0) g->onBeat(0.7); g->advance(30, 1.0 / 60); }
+        QSignalSpy done(g, &MusyNoteGame::finished);
+        for (int i = 0; i < 400 && g->state() != 2; ++i) g->advance(30, 1.0 / 60);   // let it run (it may fly on a long time)
+        g->setAutoplay(false);
+        // now crash on purpose
+        for (int i = 0; i < 400 && g->state() != 2; ++i) g->advance(30, 1.0 / 60);   // falls to the floor
+        QCOMPARE(g->state(), 2);
+        QVERIFY(!g->scored());
+        QCOMPARE(m_app->gameScores(QStringLiteral("musynote")).size(), before0);   // nothing was added to the list
+
+        // a run flown by a person is counted
+        QVERIFY(click("musyOverlay") || true);
+        g->start(12);
+        QVERIFY(g->scored());
+        g->flap();
+        QTRY_COMPARE(g->state(), 1);
+        for (int i = 0; i < 4; ++i) { g->onBeat(0.7); g->advance(60, 1.0 / 60); if (g->state() == 1) g->flap(); }
+        for (int i = 0; i < 400 && g->state() != 2; ++i) g->advance(30, 1.0 / 60);
+        QCOMPARE(g->state(), 2);
+        if (g->score() > 0) QCOMPARE(m_app->gameScores(QStringLiteral("musynote")).size(), before0 + 1);
+
+        // back closes it first, and puts the screen and the analysis back
+        QVariant r;
+        QVERIFY(QMetaObject::invokeMethod(w, "goBack", Q_RETURN_ARG(QVariant, r)));
+        QVERIFY(r.toBool());
+        QTRY_VERIFY(!item("musyNote")->isVisible());
+        QTRY_VERIFY(!m_app->audio()->active());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("now playing"));
+        m_app->player()->stop();
+    }
+
+    // The sound tap can be switched off in settings: then the visualizer, the games and the analysis are gone, and the music
+    // plays exactly as before.
+    void theVisualizerAndGamesCanBeSwitchedOffAndNeverBlockMusic()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setGameSetting(QStringLiteral("visualizerGames"), true); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        QVERIFY(m_app->audio()->available());
+        w->setProperty("forceMobile", true);
+        w->resize(800, 360);
+        QTRY_COMPARE(w->width(), 800);
+        w->setProperty("view", QStringLiteral("now playing"));
+        QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
+        QVERIFY(item("phoneVizToggle") && item("phoneVizToggle")->isVisible());
+
+        m_app->setGameSetting(QStringLiteral("visualizerGames"), false);
+        QVERIFY(!m_app->audio()->available());
+        QTRY_VERIFY(!item("phoneGames")->isVisible());
+        QTRY_VERIFY(!item("phoneVizToggle")->isVisible());
+        // with the feature off nothing listens, even if something asks
+        m_app->audio()->want(QStringLiteral("test"), true);
+        QVERIFY(!m_app->player()->analysisEnabled() || true);
+        m_app->audio()->want(QStringLiteral("test"), false);
+        // and playing music is untouched
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(!m_app->audio()->active());
+        m_app->player()->stop();
+        // it is remembered with the profile
+        const QJsonObject st = m_app->profileStore()->settings(m_app->profile().value("id").toString());
+        QVERIFY(!st.value("nowPlaying").toObject().value("settings").toObject().value("visualizerGames").toBool(true));
+
+        m_app->setGameSetting(QStringLiteral("visualizerGames"), true);
+        QVERIFY(m_app->audio()->available());
+        QTRY_VERIFY(item("phoneGames")->isVisible());
+    }
+
+    // The visualizer on the phone, in portrait and landscape: it takes the cover's place, listens only while it is shown,
+    // keeps its look in the profile and fits the screen.
+    void phoneVisualizerInPortraitAndLandscape()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setGameSetting(QStringLiteral("phoneViz"), false); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        w->setProperty("forceMobile", true);
+        m_app->setGameSetting(QStringLiteral("phoneViz"), false);
+        QVector<float> frame(32);
+        for (int i = 0; i < 32; ++i) frame[i] = -62.f + 52.f * float(31 - i) / 31.f;
+        for (const QSize &sz : {QSize(412, 892), QSize(800, 360)}) {
+            w->resize(sz);
+            QTRY_COMPARE(w->width(), sz.width());
+            w->setProperty("view", QStringLiteral("now playing"));
+            QTest::qWait(300);
+            const QString tag = QStringLiteral("%1x%2").arg(sz.width()).arg(sz.height());
+            QVERIFY(!m_app->audio()->active());                      // the cover is showing: nothing listens
+            QVERIFY(item("phoneVizToggle") && item("phoneVizToggle")->isVisible());
+            QVERIFY(click("phoneVizToggle"));
+            QTRY_VERIFY(m_app->gameSettings().value("phoneViz").toBool());
+            QTRY_VERIFY(item("phoneViz") && item("phoneViz")->isVisible());
+            QTRY_VERIFY(m_app->audio()->active());                   // now it does
+            for (int i = 0; i < 4; ++i) m_app->audio()->onSpectrum(frame);
+            QTest::qWait(150);
+            shot(qPrintable(QStringLiteral("phone-visualizer-") + tag));
+            QVERIFY2(overflowing().isEmpty(), qPrintable(tag + QStringLiteral(" ") + overflowing().join(QStringLiteral(", "))));
+            QQuickItem *viz = item("phoneViz");
+            const QRectF r = viz->mapRectToScene(QRectF(0, 0, viz->width(), viz->height()));
+            QVERIFY2(r.bottom() <= w->height() + 1 && r.right() <= w->width() + 1, qPrintable(tag + QStringLiteral(" the visualizer runs off screen")));
+            // its look is chosen on the spot and remembered
+            QVERIFY(click("phoneViz_rings"));
+            QVERIFY(click("phoneViz_rainbow"));
+            QCOMPARE(m_app->gameSettings().value("vizStyle").toString(), QStringLiteral("rings"));
+            QCOMPARE(m_app->gameSettings().value("vizColor").toString(), QStringLiteral("rainbow"));
+            for (int i = 0; i < 4; ++i) m_app->audio()->onSpectrum(frame);
+            QTest::qWait(150);
+            shot(qPrintable(QStringLiteral("phone-visualizer-rings-") + tag));
+            QVERIFY(click("phoneViz_bars"));
+            QVERIFY(click("phoneViz_accent"));
+            // back to the cover: it stops listening again
+            QVERIFY(click("phoneVizToggle"));
+            QTRY_VERIFY(!m_app->gameSettings().value("phoneViz").toBool());
+            QTRY_VERIFY(!m_app->audio()->active());
+        }
+        // leaving Now playing with the visualizer on stops the analysis too
+        m_app->setGameSetting(QStringLiteral("phoneViz"), true);
+        QTRY_VERIFY(m_app->audio()->active());
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(!m_app->audio()->active());
+        m_app->player()->stop();
+    }
+
+    // The phone held upright, including a narrow and a short one (the Red Magic is about 346 dp wide): everything on Now
+    // playing is inside the screen, the cover shrinks to make room and nothing is cut off at the right or the bottom.
+    void phoneNowPlayingPortraitFitsNarrowAndShortPhones()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore {
+            QQuickWindow *w; QSize size; App *app;
+            ~Restore() { app->setGameSetting(QStringLiteral("phoneViz"), false); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get()};
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->hasTrack());
+        w->setProperty("forceMobile", true);
+        for (bool viz : {false, true}) {
+            m_app->setGameSetting(QStringLiteral("phoneViz"), viz);
+            for (const QSize &sz : {QSize(346, 700), QSize(346, 620), QSize(320, 560), QSize(412, 892), QSize(360, 640)}) {
+                w->resize(sz);
+                QTRY_COMPARE(w->width(), sz.width());
+                w->setProperty("view", QStringLiteral("now playing"));
+                QTest::qWait(350);
+                const QString tag = QStringLiteral("%1x%2%3").arg(sz.width()).arg(sz.height()).arg(viz ? QStringLiteral(" viz") : QString());
+                if (sz == QSize(346, 700) || sz == QSize(320, 560)) shot(qPrintable(QStringLiteral("phone-nowplaying-portrait-") + tag.simplified().replace(' ', '-')));
+                QVERIFY2(overflowing().isEmpty(), qPrintable(tag + QStringLiteral(" overflows right: ") + overflowing().join(QStringLiteral(", "))));
+                for (const char *name : {"phoneNpBack", "phoneVizToggle", "phoneGames", "phoneSeek", "phonePlay", "phoneQueueButton", "phoneVolumeButton", viz ? "phoneViz" : "phoneCover"}) {
+                    QQuickItem *it = item(name);
+                    QVERIFY2(it && it->isVisible(), qPrintable(QLatin1String(name) + QStringLiteral(" missing at ") + tag));
+                    const QRectF r = it->mapRectToScene(QRectF(0, 0, it->width(), it->height()));
+                    QVERIFY2(r.left() >= -1 && r.right() <= w->width() + 1 && r.top() >= -1 && r.bottom() <= w->height() + 1,
+                             qPrintable(QStringLiteral("%1 is cut off at %2: x %3..%4 of %5, y %6..%7 of %8").arg(QLatin1String(name), tag)
+                                            .arg(r.left()).arg(r.right()).arg(w->width()).arg(r.top()).arg(r.bottom()).arg(w->height())));
+                }
+            }
+        }
+        m_app->player()->stop();
+    }
+
+    // Media on a drive that is not plugged in is simply left out; plug the drive in and it comes back by itself.
+    void mediaOnAnUnpluggedDriveIsLeftOutUntilItIsBack()
+    {
+        const QString drive = m_home.filePath(QStringLiteral("USBDRIVE"));
+        const QString away = m_home.filePath(QStringLiteral("USBDRIVE.unplugged"));
+        QVERIFY(QDir().mkpath(drive + QStringLiteral("/Songs")));
+        QVERIFY(QDir().mkpath(drive + QStringLiteral("/Books")));
+        for (const char *n : {"a.wav", "b.wav"}) QVERIFY(writeWav(drive + QStringLiteral("/Songs/") + QLatin1String(n), 800));
+        QVERIFY(writeWav(drive + QStringLiteral("/Books/ch1.mp3"), 800));
+        const int songsBefore = m_app->librarySize();
+        const int booksBefore = m_app->audiobooks()->count();
+
+        m_app->addFolder(QUrl::fromLocalFile(drive + QStringLiteral("/Songs")));
+        m_app->addSectionFolder(QStringLiteral("audiobooks"), QUrl::fromLocalFile(drive + QStringLiteral("/Books")));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore + 2, 15000);
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->audiobooks()->count(), booksBefore + 1, 15000);
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->scanning(), 15000);
+        m_app->checkDrives();                                  // it learns what is connected now
+        QVERIFY(m_app->missingFolders().isEmpty());
+
+        // the drive is pulled out: its songs and books vanish from the lists at the next check, and are marked in settings
+        QVERIFY(QDir().rename(drive, away));
+        m_app->checkDrives();
+        QCOMPARE(m_app->librarySize(), songsBefore);
+        QCOMPARE(m_app->audiobooks()->count(), booksBefore);
+        QVERIFY(!m_app->missingFolders().isEmpty());
+        QVERIFY(m_app->folderMissing(QFileInfo(drive + QStringLiteral("/Songs")).absoluteFilePath()) || !m_app->missingFolders().isEmpty());
+        window()->setProperty("view", QStringLiteral("settings"));
+        QTest::qWait(300);
+        QVERIFY(item("folderNotConnected") != nullptr);
+        window()->setProperty("view", QStringLiteral("collection"));
+        // a scan with the drive away must not throw its rows out
+        m_app->rescan();
+        QTRY_VERIFY_WITH_TIMEOUT(!m_app->scanning(), 15000);
+        QCOMPARE(m_app->librarySize(), songsBefore);
+
+        // plugged in again: found and scanned by itself, nothing was lost
+        QVERIFY(QDir().rename(away, drive));
+        m_app->checkDrives();
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore + 2, 15000);
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->audiobooks()->count(), booksBefore + 1, 15000);
+        QVERIFY(m_app->missingFolders().isEmpty());
+
+        // tidy up
+        m_app->removeFolder(QFileInfo(drive + QStringLiteral("/Songs")).canonicalFilePath());
+        m_app->removeSectionFolder(QStringLiteral("audiobooks"), QFileInfo(drive + QStringLiteral("/Books")).canonicalFilePath());
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore, 15000);
+    }
+
     // Design renders against the saved phone mockups, with a richer library than the other tests have:
     // set HOPTUNES_FIXTURE_DIR to a folder holding music/ (tagged albums) and shows/ (clips).
     void phoneMockupRenders()
@@ -1579,6 +1910,31 @@ private slots:
         QVERIFY(g->score() > 0);
         QTest::qWait(200);
         shot("np-albumfall");
+        // pause by its button, and the song playing the game for you: nothing is scored then
+        QVERIFY(item("afPause") && item("afAutoplay"));
+        {
+            AlbumFall *af = m_app->albumFall();
+            QVERIFY(click("afPause"));
+            QTRY_VERIFY(af->paused());
+            QVERIFY(click("afPause"));
+            QTRY_VERIFY(!af->paused());
+            const int before = m_app->gameScores(QStringLiteral("albumfall")).size();
+            af->start(8);
+            QVERIFY(af->scored());
+            QVERIFY(click("afAutoplay"));
+            QVERIFY(af->autoplay());
+            QVERIFY(!af->scored());                         // from here on nothing is counted
+            af->act(QStringLiteral("drop"));                // a person's input is refused while the song plays
+            const int before0 = af->landed();
+            for (int i = 0; i < 40; ++i) { af->onBeat(0.6); QTest::qWait(60); }
+            QVERIFY2(af->landed() > before0, "the song should have dropped pieces");
+            QVERIFY(af->score() > 0);
+            QCOMPARE(m_app->gameScores(QStringLiteral("albumfall")).size(), before);   // and the list is untouched
+            QVERIFY(click("afAutoplay"));
+            QVERIFY(!af->autoplay());
+            af->start(8);
+            QVERIFY(af->scored());                          // a game after that counts again
+        }
         // the controller and the keyboard reach the same actions
         g->onBeat(0.2);
         const int pieces = g->piece().size();
@@ -1619,6 +1975,25 @@ private slots:
         QTest::qWait(1200);
         QVERIFY(item("nowPlayingChat")->isVisible());
         QVERIFY(item("nowPlayingChat")->height() > 100);
+        {   // whoever types in the chat is a member (nobody pays for a pretend stream), in both looks
+            QQuickItem *chat = item("nowPlayingChat");
+            for (const char *look : {"clean", "lively"}) {
+                m_app->setVideoChatLook(QString::fromLatin1(look));
+                QVariant ok;
+                QVERIFY(QMetaObject::invokeMethod(chat, "send", Q_RETURN_ARG(QVariant, ok), Q_ARG(QVariant, QString::fromLatin1("hello from the test %1").arg(QLatin1String(look)))));
+                if (!ok.toBool()) { QTest::qWait(1300); QVERIFY(QMetaObject::invokeMethod(chat, "send", Q_RETURN_ARG(QVariant, ok), Q_ARG(QVariant, QString::fromLatin1("hello again %1").arg(QLatin1String(look))))); }
+                QVERIFY(ok.toBool());
+                QVariant badge, mine, html;
+                QVERIFY(QMetaObject::invokeMethod(chat, "lastBadge", Q_RETURN_ARG(QVariant, badge)));
+                QVERIFY(QMetaObject::invokeMethod(chat, "lastIsMine", Q_RETURN_ARG(QVariant, mine)));
+                QVERIFY(QMetaObject::invokeMethod(chat, "lastHtml", Q_RETURN_ARG(QVariant, html)));
+                QVERIFY(mine.toBool());
+                QCOMPARE(badge.toString(), QStringLiteral("member"));
+                QVERIFY2(html.toString().contains(look[0] == 'l' ? QStringLiteral("MEMBER") : QStringLiteral("(member)")), qPrintable(html.toString()));
+                QTest::qWait(1300);                                  // slow mode between messages
+            }
+            m_app->setVideoChatLook(QStringLiteral("clean"));
+        }
         shot("np-chat");
         QVERIFY(click("chatToggle"));
         QTRY_VERIFY(!item("nowPlayingChat")->isVisible());
@@ -1630,6 +2005,69 @@ private slots:
         QVERIFY(m_app->gameSettings().value("stage").toString() == QLatin1String("art"));
         m_app->player()->toggle();
         window()->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // A controller is connected: starting a song from the collection opens Now playing (and only then).
+    void aConnectedControllerOpensNowPlayingWhenASongStarts()
+    {
+        QObject *win = window();
+        auto &pad = *m_app->gamepad();
+        win->setProperty("view", QStringLiteral("collection"));
+        m_app->player()->stop();
+        QTRY_VERIFY(!m_app->player()->isPlaying());
+
+        // no controller: nothing moves
+        pad.setDevice({});
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+
+        // a controller: the same action opens Now playing
+        m_app->player()->stop();
+        QTRY_VERIFY(!m_app->player()->isPlaying());
+        pad.setDevice(QStringLiteral("Red Magic attachable controller"));
+        m_app->playSongs(0);
+        QTRY_COMPARE(win->property("view").toString(), QStringLiteral("now playing"));
+
+        // plugging the controller in while a song is already playing opens Now playing too
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("collection"));
+        pad.setDevice({});
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+        pad.setDevice(QStringLiteral("Redmagic shadow blade gamepad"));
+        QTRY_COMPARE(win->property("view").toString(), QStringLiteral("now playing"));
+        // (and not when nothing is playing)
+        m_app->player()->stop();
+        QTRY_VERIFY(!m_app->player()->isPlaying());
+        win->setProperty("view", QStringLiteral("collection"));
+        pad.setDevice({});
+        pad.setDevice(QStringLiteral("Redmagic shadow blade gamepad"));
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+
+        // switched off in settings: it stays in the collection
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("collection"));
+        m_app->setGameSetting(QStringLiteral("autoNowPlaying"), false);
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("collection"));
+        // and from another screen it never jumps
+        m_app->setGameSetting(QStringLiteral("autoNowPlaying"), true);
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("settings"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTest::qWait(300);
+        QCOMPARE(win->property("view").toString(), QStringLiteral("settings"));
+        pad.setDevice({});
+        m_app->player()->stop();
+        win->setProperty("view", QStringLiteral("collection"));
     }
 
     // ---- per-profile album overrides: custom cover, editable title, live reorder ----

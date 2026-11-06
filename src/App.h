@@ -16,7 +16,10 @@
 #include "library/VideoListModel.h"
 #include "library/VideoScanner.h"
 #include "playback/GstVideoPlayer.h"
+#include "core/Paths.h"
 #include "game/AlbumFall.h"
+#include "game/AnalysisGuard.h"
+#include "game/MusyNoteGame.h"
 #include "game/AudioAnalyzer.h"
 #include "game/Gamepad.h"
 #include "playback/Player.h"
@@ -46,8 +49,12 @@ class App : public QObject {
     // `gamepad` a connected controller. `gameSettings` holds this profile's choices (visualizer, backdrop, chat).
     Q_PROPERTY(hop::AudioAnalyzer *audio READ audio CONSTANT)
     Q_PROPERTY(hop::AlbumFall *albumFall READ albumFall CONSTANT)
+    Q_PROPERTY(hop::MusyNoteGame *musyNote READ musyNote CONSTANT)
     Q_PROPERTY(hop::Gamepad *gamepad READ gamepad CONSTANT)
     Q_PROPERTY(QVariantMap gameSettings READ gameSettings NOTIFY gameSettingsChanged)
+    // The visualizer and games listen to the music through an optional tap. True when the last run ended while it was on (a
+    // crash), so it was switched off until the person turns it back on in settings. Music never depends on it.
+    Q_PROPERTY(bool analysisSafeMode READ analysisSafeMode NOTIFY gameSettingsChanged)
     Q_PROPERTY(QStringList folders READ folders NOTIFY foldersChanged)
     // Folders the videos tab scans: its own list once the profile has set one, else the shared media folders.
     Q_PROPERTY(QStringList videoFolders READ videoFolders NOTIFY foldersChanged)
@@ -165,8 +172,12 @@ public:
     Player *player() { return &m_player; }
     AudioAnalyzer *audio() { return &m_audio; }
     AlbumFall *albumFall() { return &m_albumFall; }
+    MusyNoteGame *musyNote() { return &m_musyNote; }
+    // A game that wants the whole screen: on Android turned sideways with the system bars hidden (restored when it ends).
+    Q_INVOKABLE void setGameScreen(bool on);
     Gamepad *gamepad() { return &m_gamepad; }
     QVariantMap gameSettings() const;
+    bool analysisSafeMode() const { return m_analysisSafeMode; }
     Q_INVOKABLE void setGameSetting(const QString &key, const QVariant &value);   // visualizer, backdrop, chat...
     Q_INVOKABLE QVariantList gameScores(const QString &game) const;               // best first: [{score, lines, at}]
     Q_INVOKABLE int submitScore(const QString &game, int score, int lines);       // the rank it earned (1 = best), 0 = none
@@ -395,6 +406,12 @@ public:
     Q_INVOKABLE void saveBookProgress(double fractionInChapter);
     Q_INVOKABLE void closeBook(double fractionInChapter);   // mark an audiobook / episode played or unplayed
     Q_INVOKABLE void rescan();
+    // Media on a drive that is not plugged in is simply left out until the drive is back: every list shows only the folders that
+    // can be reached right now, and a check every few seconds notices a drive coming or going (it then scans what came back).
+    Q_PROPERTY(QStringList missingFolders READ missingFolders NOTIFY drivesChanged)
+    QStringList missingFolders() const;
+    Q_INVOKABLE bool folderMissing(const QString &path) const;
+    Q_INVOKABLE void checkDrives();   // runs every few seconds on its own; callable for tests
     Q_INVOKABLE void playSongs(int row);    // play the song list starting at row
     Q_INVOKABLE void shuffleAll();
     Q_INVOKABLE QString formatTime(qint64 ms) const { return TrackListModel::formatDuration(ms); }
@@ -423,6 +440,7 @@ public:
 signals:
     void foldersChanged();
     void pictureAlbumsChanged();
+    void drivesChanged();
     void gameSettingsChanged();
     void sectionSlotsChanged();
     void videoSlotsChanged();
@@ -534,6 +552,10 @@ private:
     Player m_player;
     AudioAnalyzer m_audio;
     AlbumFall m_albumFall;
+    MusyNoteGame m_musyNote;
+    AnalysisGuard m_analysisGuard{Paths::dataDir()};
+    bool m_analysisSafeMode = false;
+    void updateAnalysisAvailable();
     Gamepad m_gamepad;
     QJsonObject m_nowPlaying;   // this profile's Now playing choices and high scores (settings.json "nowPlaying")
     QStringList m_folders;
@@ -595,6 +617,11 @@ private:
     QString m_videoSlot;
     QVariantMap m_sectionSlots, m_sectionOpenSlot;
     void resetSlots();
+    QStringList reachable(const QStringList &folders) const;
+    QStringList everyFolder() const;
+    QTimer m_driveTimer;
+    QSet<QString> m_reachableNow;
+    bool m_driveStateKnown = false;
     void rebuildSectionSlots(SectionState &sec, const QList<SectionItem> &items, const QHash<QString, double> &progress);
     GstVideoPlayer m_gstVideo;
     LibraryWatcher m_watcher;

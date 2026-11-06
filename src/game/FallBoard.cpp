@@ -216,6 +216,46 @@ void FallBoard::tick(double dt, double rowsPerSec, qint64 nowMs)
     }
 }
 
+FallBoard::Plan FallBoard::suggest() const
+{
+    Plan best;
+    if (!m_active || m_state != Playing) return best;
+    double bestScore = -1e18;
+    for (int rot = 0; rot < 4; ++rot) {
+        Piece p = m_piece;
+        for (int r = 0; r < rot; ++r) for (QPoint &c : p.cells) c = QPoint(-c.y(), c.x());
+        for (int x = -4; x < W + 4; ++x) {
+            p.x = x;
+            p.y = m_piece.y;
+            if (!fits(p, 0, 0)) continue;
+            while (fits(p, 0, 1)) ++p.y;
+            int g[W * H];
+            std::memcpy(g, m_grid, sizeof(g));
+            bool above = false;
+            for (const QPoint &c : p.cells) {
+                const int cx = p.x + c.x(), cy = p.y + c.y();
+                if (cy < 0) { above = true; continue; }
+                g[cy * W + cx] = 1;
+            }
+            if (above) continue;                       // would top out
+            int lines = 0;
+            for (int y = 0; y < H; ++y) { bool full = true; for (int xx = 0; xx < W && full; ++xx) full = g[y * W + xx] != 0; lines += full; }
+            int heights[W] = {0}, holes = 0, total = 0, bump = 0;
+            for (int xx = 0; xx < W; ++xx) {
+                int y = 0;
+                while (y < H && !g[y * W + xx]) ++y;
+                heights[xx] = H - y;
+                total += heights[xx];
+                for (int yy = y; yy < H; ++yy) if (!g[yy * W + xx]) ++holes;
+            }
+            for (int xx = 0; xx + 1 < W; ++xx) bump += qAbs(heights[xx] - heights[xx + 1]);
+            const double score = -0.51 * total + 0.76 * lines - 0.36 * holes - 0.18 * bump;
+            if (score > bestScore) { bestScore = score; best.valid = true; best.rotations = rot; best.x = x; }
+        }
+    }
+    return best;
+}
+
 QVector<QPoint> FallBoard::pieceCells() const
 {
     QVector<QPoint> out;

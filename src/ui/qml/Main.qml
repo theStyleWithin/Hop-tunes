@@ -29,6 +29,7 @@ ApplicationWindow {
             else if (gate.mode === "pin") gate.show("pick")
             return true
         }
+        if (musyNote.active) { musyNote.active = false; return true }
         if (hop.videoPlayerOpen) { videoView.goBack(); return true }
         if (hop.videoDetailRow >= 0) { hop.closeVideoDetail(); return true }
         if (view === "settings" || view === "quickplay") { view = "profile"; return true }
@@ -50,6 +51,26 @@ ApplicationWindow {
         var v = String(initialView || "").replace("nowplaying", "now playing")
         if (v === "albums" || v === "songs" || v === "artists" || v === "playlists") v = "collection"
         return views.indexOf(v) >= 0 ? v : "collection"
+    }
+
+    // With a game controller connected (plugged in, or clipped onto the phone), the collection hands over to Now playing,
+    // where the controller's games are: when a song starts while a controller is there, and when a controller shows up
+    // while a song is already playing. Only from the collection (never yanks you out of another screen) and it can be
+    // switched off in settings.
+    function maybeOpenNowPlaying() {
+        if (win.view === "collection" && hop.profileReady && hop.player.playing && hop.gamepad.connected
+            && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen)
+            win.view = "now playing"
+    }
+    Connections { target: hop.player; function onPlayingChanged() { win.maybeOpenNowPlaying() } }
+    Connections { target: hop.gamepad; function onConnectedChanged() { win.maybeOpenNowPlaying() } }
+
+    // Musy Note, the phone game: fullscreen over everything, opened from Now playing > games
+    function openMusyNote() { musyNote.active = true }
+    MusyNote {
+        id: musyNote
+        anchors.fill: parent
+        onLeave: active = false
     }
 
     FolderPick {
@@ -89,7 +110,7 @@ ApplicationWindow {
         onAccepted: hop.addFolder(selectedFolder)
     }
 
-    Shortcut { sequence: "Space"; enabled: hop.profileReady && !(win.view === "now playing" && hop.gameSettings.stage === "albumfall"); onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
+    Shortcut { sequence: "Space"; enabled: hop.profileReady && !musyNote.active && !(win.view === "now playing" && hop.gameSettings.stage === "albumfall"); onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
     Shortcut { sequences: ["Ctrl+Right", "Media Next"]; enabled: hop.profileReady; onActivated: hop.player.next() }
     Shortcut { sequences: ["Ctrl+Left", "Media Previous"]; enabled: hop.profileReady; onActivated: hop.player.previous() }
     Shortcut { sequence: "Ctrl+1"; enabled: hop.profileReady; onActivated: win.view = "collection" }
