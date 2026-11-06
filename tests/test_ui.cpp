@@ -179,11 +179,17 @@ class TestUi : public QObject {
         return out;
     }
     // HOPTUNES_UI_SHOTS=<dir> saves design renders of each screen while the test runs.
+    bool m_liveShots = false;   // the render test wants games running (not paused) in its pictures
     void shot(const char *name)
     {
         const QString dir = qEnvironmentVariable("HOPTUNES_UI_SHOTS");
         if (dir.isEmpty()) return;
+        // real time must not run the game while the picture is taken
+        MusyNoteGame *mg = m_app->musyNote();
+        const bool wasPaused = mg->paused();
+        if (!m_liveShots) mg->setPaused(true);
         QTest::qWait(300);
+        mg->setPaused(wasPaused);
         window()->grabWindow().save(dir + QLatin1Char('/') + QLatin1String(name) + QStringLiteral(".png"));
     }
     QString gateMode() { return item("profileGate")->property("mode").toString(); }
@@ -1295,8 +1301,11 @@ private slots:
         m_app->gamepad()->feedAction(QStringLiteral("a"), true);
         m_app->gamepad()->feedAction(QStringLiteral("a"), false);
         QTRY_VERIFY(g->noteVy() < 0 || g->noteY() < y0 + 0.5);
-        // beats make walls
-        for (int i = 0; i < 6; ++i) { g->onBeat(0.7); g->advance(30, 1.0 / 60); QTest::keyClick(w, Qt::Key_Space); }
+        // beats make walls (only the stepped time counts here, not the clock)
+        for (int i = 0; i < 6; ++i) {                      // flap only when the note sags, so the run lasts whatever the clock did
+            g->onBeat(0.7);
+            for (int k = 0; k < 6; ++k) { if (g->noteY() > 4.5) QTest::keyClick(w, Qt::Key_Space); g->advance(5, 1.0 / 60); }
+        }
         QVERIFY(!g->wallIds().isEmpty());
         g->advance(60, 1.0 / 60);
         QTest::qWait(200);
@@ -2323,6 +2332,133 @@ private slots:
         QCOMPARE(m_app->openProfile(profileId), QString());
         QCOMPARE(m_app->songs()->tracks().at(1).path, firstPath);
         shot("m8-songs-drag");
+    }
+
+    // README renders of the visual music games, with the richer fixture library (see phoneMockupRenders):
+    // Album Fall on the desktop, Musy Note and the phone visualizer on a phone. Skipped unless both variables are set.
+    void visualGameRenders()
+    {
+        const QString fx = qEnvironmentVariable("HOPTUNES_FIXTURE_DIR");
+        if (fx.isEmpty() || qEnvironmentVariable("HOPTUNES_UI_SHOTS").isEmpty()) QSKIP("set HOPTUNES_FIXTURE_DIR and HOPTUNES_UI_SHOTS");
+        auto *w = window();
+        const QSize before = w->size();
+        // the fixture songs, one folder per album, each with a painted cover (the games are made of covers)
+        const QString lib = m_home.filePath(QStringLiteral("GameMusic"));
+        {
+            int n = 0;
+            const QStringList songs = QDir(fx + QStringLiteral("/music")).entryList({QStringLiteral("*.flac")}, QDir::Files);
+            for (const QString &f : songs) {
+                const QString album = f.section(QStringLiteral(" - "), 0, 1);
+                const QString dir = lib + QLatin1Char('/') + album;
+                if (!QDir(dir).exists()) {
+                    QVERIFY(QDir().mkpath(dir));
+                    QImage im(300, 300, QImage::Format_RGB32);
+                    QPainter pt(&im);
+                    QLinearGradient gr(0, 0, 300, 300);
+                    gr.setColorAt(0, QColor::fromHsv((n * 47) % 360, 190, 235));
+                    gr.setColorAt(1, QColor::fromHsv((n * 47 + 70) % 360, 230, 110));
+                    pt.fillRect(im.rect(), gr);
+                    pt.setPen(Qt::NoPen);
+                    pt.setBrush(QColor(255, 255, 255, 70));
+                    pt.drawEllipse(QPoint(90 + 25 * (n % 4), 120), 70, 70);
+                    pt.setBrush(QColor(0, 0, 0, 60));
+                    pt.drawRect(150, 170 + 8 * (n % 3), 120, 90);
+                    pt.end();
+                    QVERIFY(im.save(dir + QStringLiteral("/cover.jpg")));
+                    ++n;
+                }
+                QVERIFY(QFile::copy(fx + QStringLiteral("/music/") + f, dir + QLatin1Char('/') + f));
+            }
+        }
+        m_app->addFolder(QUrl::fromLocalFile(lib));
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->librarySize() >= 12 && !m_app->scanning(), 20000);
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->mosaicArt().size() >= 4, 10000);
+        QVector<float> frame(32);
+        auto loud = [&](int seed) {
+            for (int i = 0; i < 32; ++i) {
+                const float base = -62.f + 50.f * float(31 - i) / 31.f;
+                frame[i] = base + 9.f * std::sin(0.9f * i + seed) + 4.f * std::sin(2.3f * i + 2 * seed);
+            }
+            for (int i = 0; i < 4; ++i) m_app->audio()->onSpectrum(frame);
+        };
+        // the silent test song keeps sending quiet frames of its own: keep feeding loud ones while a picture is made
+        m_liveShots = true;
+        int tick = 0;
+        QTimer feeder;
+        feeder.setInterval(15);
+        connect(&feeder, &QTimer::timeout, this, [&] { loud(tick++ / 6); });
+        feeder.start();
+
+        // desktop: Album Fall with a stack worth looking at, and the visualizer behind it
+        w->resize(1280, 800);
+        QTRY_COMPARE(w->width(), 1280);
+        w->setProperty("view", QStringLiteral("now playing"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(click("stage_albumfall"));
+        QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
+        AlbumFall *af = m_app->albumFall();
+        af->setAutoplay(false);
+        QTRY_VERIFY(af->running());
+        for (int n = 0; n < 8 && af->running(); ++n) {
+            af->onBeat(0.35 + 0.1 * (n % 6));
+            for (int k = 0; k < (n * 3) % 7; ++k) af->act(QStringLiteral("left"));
+            for (int k = 0; k < (n * 5) % 5; ++k) af->act(QStringLiteral("right"));
+            if (n % 3 == 0) af->act(QStringLiteral("rotate"));
+            af->act(QStringLiteral("drop"));
+        }
+        QVERIFY(af->running());
+        m_app->setGameSetting(QStringLiteral("vizBackdrop"), true);
+        QTest::qWait(900);
+        shot("games-albumfall");
+        m_app->setGameSetting(QStringLiteral("vizBackdrop"), false);
+        QVERIFY(click("stage_visualizer"));
+        m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("mirror"));
+        m_app->setGameSetting(QStringLiteral("vizColor"), QStringLiteral("rainbow"));
+        QTest::qWait(900);
+        shot("games-visualizer");
+        QVERIFY(click("stage_art"));
+
+        // phone: the visualizer in portrait, then Musy Note in landscape
+        w->setProperty("forceMobile", true);
+        w->resize(412, 892);
+        QTRY_COMPARE(w->width(), 412);
+        w->setProperty("view", QStringLiteral("now playing"));
+        m_app->setGameSetting(QStringLiteral("vizStyle"), QStringLiteral("bars"));
+        m_app->setGameSetting(QStringLiteral("phoneViz"), true);
+        QTRY_VERIFY(item("phoneViz") && item("phoneViz")->isVisible());
+        QTest::qWait(900);
+        shot("games-phone-visualizer");
+        w->resize(800, 360);
+        QTRY_COMPARE(w->width(), 800);
+        QTRY_VERIFY(item("phoneGames") && item("phoneGames")->isVisible());
+        QVERIFY(click("phoneGames"));
+        QTRY_VERIFY(item("musyNote") && item("musyNote")->isVisible());
+        MusyNoteGame *g = m_app->musyNote();
+        QTRY_COMPARE(g->state(), 0);
+        QTest::qWait(600);
+        QTest::keyClick(w, Qt::Key_Space);
+        QTRY_COMPARE(g->state(), 1);
+        g->setAutoplay(true);                              // the song plays it (nothing is scored), so the run lasts
+        for (int i = 0; i < 7; ++i) {
+            g->onBeat(0.7);
+            for (int k = 0; k < 8; ++k) g->advance(5, 1.0 / 60);
+        }
+        QVERIFY2(g->state() == 1, qPrintable(QString::number(g->state())));
+        shot("games-musy-note");
+
+        // tidy up
+        g->setAutoplay(false);
+        m_app->setGameSetting(QStringLiteral("phoneViz"), false);
+        QTest::keyClick(w, Qt::Key_Escape);
+        feeder.stop();
+        m_liveShots = false;
+        m_app->player()->stop();
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        m_app->removeFolder(QFileInfo(lib).canonicalFilePath());
+        QTest::qWait(400);
     }
 };
 

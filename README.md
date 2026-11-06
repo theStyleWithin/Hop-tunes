@@ -17,6 +17,14 @@ The big link above always opens the newest regular release. Pick the file for yo
 > **Just want the mobile version? Follow this link and enjoy!**
 > **[Download the Android app (`Hop-tunes-android.apk`)](https://github.com/theStyleWithin/Hop-tunes/releases/latest/download/Hop-tunes-android.apk)**: it always gives you the newest one. It is for Android 7 and newer on 64-bit phones and tablets: your music, pictures, books and podcasts in a layout made for the phone, with a bottom bar or a side drawer (your choice in settings). Open the file to install it; Android may ask you to allow installs from this source. Videos play too (no subtitles or speed boost yet, and no thumbnails in the list). The phone version is new, so [tell the developer](https://github.com/theStyleWithin/Hop-tunes/issues) what works and what does not.
 
+**visual music games** (Android)
+
+The phone gets a **visualizer** on Now playing (portrait and landscape) and **Musy Note**: a little music note that flies through gaps in walls made of your album covers, with the walls timed to the beat. Tap to flap, or use a controller (the Red Magic Gravity X clip-on works: Start pauses, Back leaves). Auto-switching to Now playing when a controller connects is a setting too.
+
+| visualizer | Musy Note (landscape) |
+|---|---|
+| ![phone visualizer](design/app/games-phone-visualizer.png) | ![Musy Note](design/app/games-musy-note.png) |
+
 > [!NOTE]
 > **Want to try Party Watch (beta)?** Party Watch is an optional, **experimental** idea: share part of your library with guests you trust, who stream it from your computer (no downloading, no accounts, nothing leaves your home unless you open it up), and watch together in step. It **needs more testing**, so it is **not** in the regular release above; the developer would like to add it to the main program once it has proved itself. If you are curious, try the **[Party Watch beta pre-release](https://github.com/theStyleWithin/Hop-tunes/releases/tag/v180beta)** (its files have `180beta` in their names). It is off until you switch it on, it has only been tested on Linux, things may change or break, and your feedback on how it works for you is very welcome.
 
@@ -104,6 +112,14 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 | ![artists](design/app/m2-collection-artists.png) | ![now playing](design/app/m2-now-playing.png) |
 
 More renders, plus the original design targets, are in [`design/`](design/).
+
+**visual music games** (desktop)
+
+Two optional extras on Now playing: a **visualizer** that moves with the song, and **Album Fall**, falling blocks made of your own album covers where the beat of the song picks the piece and sets the speed. Play with the keyboard or a controller, or let the song play it for you (no score is kept then). Everything is off the moment you switch it off in Settings › visualizer & games, and the analysis only listens while one of them is on screen.
+
+| visualizer | Album Fall (visualizer behind the game) |
+|---|---|
+| ![visualizer](design/app/games-visualizer.png) | ![Album Fall](design/app/games-albumfall.png) |
 
 **On Android: the phone layout**
 
