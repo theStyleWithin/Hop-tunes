@@ -58,6 +58,8 @@ add_library(hoptunes_core STATIC
     src/game/SpectrumAnalyzer.h src/game/SpectrumAnalyzer.cpp
     src/game/AlbumFall.h      src/game/AlbumFall.cpp
     src/game/MusyNoteGame.h   src/game/MusyNoteGame.cpp
+    src/game/PinTable.h       src/game/PinTable.cpp
+    src/game/PinballGame.h    src/game/PinballGame.cpp
     src/game/Gamepad.h        src/game/Gamepad.cpp
     src/library/ProfileDb.h   src/library/ProfileDb.cpp
     src/library/ProfileArchive.h src/library/ProfileArchive.cpp
@@ -77,7 +79,7 @@ add_library(hoptunes_core STATIC
     src/library/EpubBook.h    src/library/EpubBook.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
-target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
+target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------

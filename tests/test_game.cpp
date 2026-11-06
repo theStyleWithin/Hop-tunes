@@ -4,9 +4,13 @@
 #include "game/BeatTracker.h"
 #include "game/FallBoard.h"
 #include "game/MusyNote.h"
+#include "game/PinTable.h"
+#include "game/PinballGame.h"
 #include "game/Gamepad.h"
 #include "game/SpectrumAnalyzer.h"
 
+#include <QPainter>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -470,6 +474,167 @@ private slots:
         FallBoard a(42), b(42);
         a.setArtCount(5); b.setArtCount(5);
         for (int i = 1; i <= 5; ++i) { a.beat(0.5, i * 1000); b.beat(0.5, i * 1000); QCOMPARE(a.pieceCells(), b.pieceCells()); QCOMPARE(a.pieceArt(), b.pieceArt()); a.hardDrop(); b.hardDrop(); }
+    }
+
+    // ---- Cover Pinball ----
+
+    void pinballBumpersSitOnTheBrightPlacesOfTheCover()
+    {
+        // a dark cover with two bright, colourful spots: those spots are where the bumpers go
+        QImage im(200, 340, QImage::Format_RGB32);
+        im.fill(QColor(15, 15, 20));
+        QPainter p(&im);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 60, 40));  p.drawEllipse(QPoint(60, 100), 22, 22);     // upper left
+        p.setBrush(QColor(60, 220, 255)); p.drawEllipse(QPoint(150, 220), 22, 22);    // lower right
+        p.end();
+        const auto a = PinTable::layoutFromImage(im);
+        const auto b = PinTable::layoutFromImage(im);
+        QVERIFY(a.size() >= 5 && a.size() <= 7);
+        QCOMPARE(a.size(), b.size());
+        for (int i = 0; i < a.size(); ++i) { QCOMPARE(a[i].x, b[i].x); QCOMPARE(a[i].y, b[i].y); }   // same cover, same table
+        auto near = [&](double x, double y) { for (const auto &k : a) if (qHypot(k.x - x, k.y - y) < 0.9) return true; return false; };
+        QVERIFY(near(3.0, 5.0));      // (60,100) of 200x340 on a 10x17 table
+        QVERIFY(near(7.5, 11.0) || near(7.5, 10.4));   // the lower spot, pulled up to where a bumper may stand
+        for (int i = 0; i < a.size(); ++i) {
+            QVERIFY(a[i].x > 1.0 && a[i].x < 8.4 && a[i].y > 2.4 && a[i].y < 10.8);
+            for (int j = i + 1; j < a.size(); ++j) QVERIFY(qHypot(a[i].x - a[j].x, a[i].y - a[j].y) >= 1.8);
+        }
+        const auto none = PinTable::layoutFromImage(QImage());           // no cover: a plain table
+        QVERIFY(none.size() >= 5);
+        QImage flat(64, 64, QImage::Format_RGB32); flat.fill(Qt::black);
+        QVERIFY(PinTable::layoutFromImage(flat).size() >= 5);              // a flat picture still gives a table
+    }
+
+    void pinballLaunchesScoresAndDrains()
+    {
+        PinTable t(7);
+        QCOMPARE(t.state(), PinTable::Ready);
+        QCOMPARE(t.ballsLeft(), 3);
+        t.tick(0.5);
+        QVERIFY(t.ballInLane());                                  // it waits
+        t.launch(0.5);
+        QCOMPARE(t.state(), PinTable::Playing);
+        bool leftLane = false;
+        for (int i = 0; i < 600 && t.state() == PinTable::Playing; ++i) { t.tick(1.0 / 60); if (!t.ballInLane()) leftLane = true; }
+        QVERIFY(leftLane);                                        // the lane throws it into the table
+        // a ball dropped onto a bumper scores 100 and gets kicked away
+        PinTable u(3);
+        const auto b0 = u.bumpers().first();
+        u.placeBall(QPointF(b0.x, b0.y - b0.r - 0.5), QPointF(0, 3));
+        const int before = u.score();
+        for (int i = 0; i < 60 && u.hits() == 0; ++i) u.tick(1.0 / 60);
+        QCOMPARE(u.hits(), 1);
+        QCOMPARE(u.score() - before, 100);
+        QVERIFY(!u.lastHitOnBeat());
+        QVERIFY(u.ballVelocity().y() < 0);
+        // the same hit just after a beat pays double
+        PinTable w(3);
+        w.placeBall(QPointF(b0.x, b0.y - b0.r - 0.5), QPointF(0, 3));
+        w.beat(0.8);
+        for (int i = 0; i < 60 && w.hits() == 0; ++i) w.tick(1.0 / 60);
+        QCOMPARE(w.score(), 200);
+        QVERIFY(w.lastHitOnBeat());
+        // balls drain, three of them end the game, and Over takes no more input
+        PinTable d(1);
+        for (int ball = 0; ball < 3; ++ball) {
+            d.placeBall(QPointF(4.7, 15.8), QPointF(0, 6));     // straight down between the flippers
+            for (int i = 0; i < 300 && d.state() == PinTable::Playing; ++i) d.tick(1.0 / 60);
+            QCOMPARE(d.ballsLeft(), 2 - ball);
+        }
+        QCOMPARE(d.state(), PinTable::Over);
+        d.launch(1.0);
+        QCOMPARE(d.state(), PinTable::Over);
+    }
+
+    void pinballLightingEveryBumperPaysARound()
+    {
+        PinTable t(5);
+        const auto bs = t.bumpers();
+        for (int i = 0; i < bs.size(); ++i) {
+            t.placeBall(QPointF(bs[i].x, bs[i].y - bs[i].r - 0.4), QPointF(0, 4));
+            const int h = t.hits();
+            for (int k = 0; k < 40 && t.hits() == h; ++k) t.tick(1.0 / 60);
+            QCOMPARE(t.hits(), h + 1);
+        }
+        QCOMPARE(t.rounds(), 1);
+        QVERIFY(t.score() >= 1000 + 100 * bs.size());
+    }
+
+    void pinballFlippersLiftTheBallAndNothingEscapes()
+    {
+        // a ball resting on the left flipper is thrown up when it is raised
+        PinTable t(2);
+        t.placeBall(QPointF(3.4, 13.9), QPointF(0, 0));
+        for (int i = 0; i < 30; ++i) t.tick(1.0 / 60);
+        const double rest = t.ball().y();
+        t.flip(true, true);
+        double top = rest;
+        for (int i = 0; i < 60; ++i) { t.tick(1.0 / 60); top = qMin(top, t.ball().y()); }
+        QVERIFY2(top < rest - 1.0, qPrintable(QString("%1 -> %2").arg(rest).arg(top)));
+        // long scripted games; the ball never leaves the table and nothing goes NaN.
+        // (1) random flips only: the game ends well inside five minutes. (2) a flipper-minding bot: it plays on, scores a lot.
+        for (int bot = 0; bot < 2; ++bot) {
+            PinTable g(11 + bot);
+            quint32 s = 12345 + bot;
+            for (int i = 0; i < 60 * 60 * 5 && g.state() != PinTable::Over; ++i) {
+                s = s * 1664525u + 1013904223u;
+                if (g.state() == PinTable::Ready && (s >> 20) % 30 == 0) g.launch((s >> 8 & 255) / 255.0);
+                if (bot) {
+                    const bool swing = (i / 14) % 2 == 0;        // a player lets go again: a ball under a held flipper stays there
+                    g.flip(true, swing && g.ballNearFlipper(true));
+                    g.flip(false, swing && g.ballNearFlipper(false));
+                } else {
+                    if ((s >> 12) % 7 == 0) g.flip(true, (s >> 3) & 1);
+                    if ((s >> 14) % 7 == 0) g.flip(false, (s >> 5) & 1);
+                }
+                if (i % 40 == 0) g.beat(0.6);
+                g.tick(1.0 / 60);
+                QVERIFY(std::isfinite(g.ball().x()) && std::isfinite(g.ball().y()));
+                QVERIFY(g.ball().x() > -1.0 && g.ball().x() < PinTable::kW + 1.0 && g.ball().y() > -1.0 && g.ball().y() < PinTable::kH + 1.0);
+            }
+            QVERIFY(g.hits() > 0);
+            if (!bot) QCOMPARE(g.state(), PinTable::Over);
+            else QVERIFY2(g.score() > 1000, qPrintable(QString("bot score %1, balls %2").arg(g.score()).arg(g.ballsLeft())));
+        }
+    }
+
+    void pinballGameKeepsHonestScoresAndItsOwnPulse()
+    {
+        // a game you play: the lane, a launch, and a finished game reports a score that counts
+        PinballGame g;
+        g.setPlaying(true);
+        QSignalSpy done(&g, &PinballGame::finished);
+        g.start(QString());
+        QVERIFY(g.running() && g.state() == 0 && g.scored());
+        for (int ball = 0; ball < 3; ++ball) {              // nobody touches a flipper: every ball drains
+            g.launch();
+            QCOMPARE(g.state(), 1);
+            for (int i = 0; i < 30 && g.state() == 1; ++i) g.advance(120, 1.0 / 60);   // (one call keeps its own clock running)
+        }
+        QCOMPARE(g.state(), 2);
+        QCOMPARE(done.size(), 1);
+        QVERIFY(done.first().at(2).toBool());               // scored
+        QVERIFY(g.pulse());                                  // no beat was ever heard: the table kept its own pulse
+        QVERIFY(g.beatFlash() >= 1);
+        // the song plays it: it launches and flips by itself, and nothing is scored
+        PinballGame a;
+        a.setPlaying(true);
+        QSignalSpy adone(&a, &PinballGame::finished);
+        a.setAutoplay(true);
+        a.start(QString());
+        QVERIFY(!a.scored());
+        a.flip(true, true);                                  // a person's input is ignored while it plays
+        a.advance(60 * 90, 1.0 / 60);
+        QVERIFY(a.hits() > 0 && a.score() > 0);
+        QVERIFY(a.autoplay() && !a.scored());
+        // switching it on in the middle of a game also stops that game from counting
+        PinballGame m;
+        m.setPlaying(true);
+        m.start(QString());
+        QVERIFY(m.scored());
+        m.setAutoplay(true);
+        QVERIFY(!m.scored());
     }
 };
 
