@@ -2487,11 +2487,17 @@ private slots:
         QTRY_VERIFY(item("coverPinball") && item("coverPinball")->isVisible());
         PinballGame *pb = m_app->pinball();
         QTRY_VERIFY(pb->running());
+        pb->start(m_app->player()->artUrl());               // a fresh game on this song's cover
         QTest::keyClick(w, Qt::Key_Space);
         QTRY_COMPARE(pb->state(), 1);
-        pb->advance(60 * 6, 1.0 / 60);                       // a few seconds of play, so the bumpers are lit
+        for (int i = 0; i < 12 && pb->hits() < 4; ++i) pb->advance(45, 1.0 / 60);   // until a few bumpers are lit, the ball in the field
+        QVERIFY(pb->state() == 1 && pb->ballY() < 12);
         QTest::qWait(300);
         shot("games-pinball");
+        m_app->setGameSetting(QStringLiteral("vizBackdrop"), true);      // the visualizer behind the table
+        QTest::qWait(900);
+        shot("games-pinball-visualizer");
+        m_app->setGameSetting(QStringLiteral("vizBackdrop"), false);
         QTest::qWait(300);
         QVERIFY(click("game_albumfall"));
         m_app->setGameSetting(QStringLiteral("game"), QStringLiteral("albumfall"));
