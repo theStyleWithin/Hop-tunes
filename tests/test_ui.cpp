@@ -2016,6 +2016,74 @@ private slots:
         window()->setProperty("view", QStringLiteral("collection"));
     }
 
+    // Cover Pinball: the games chip opens a game picker; the table is made from the cover; flippers hold with keys and the
+    // controller; the song playing it keeps no score; Esc leaves
+    void coverPinballOpensFromTheGamesChipAndPlays()
+    {
+        auto *w = window();
+        w->setProperty("view", QStringLiteral("now playing"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(item("stage_games"));
+        QVERIFY(click("stage_games"));
+        QVERIFY(item("game_albumfall") && item("game_pinball"));       // the picker for the two games
+        QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
+        QVERIFY(click("game_pinball"));
+        QCOMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("pinball"));
+        QCOMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("pinball"));
+        QTRY_VERIFY(item("coverPinball") && item("coverPinball")->isVisible());
+        QTRY_VERIFY(!item("albumFall")->isVisible());
+        PinballGame *g = m_app->pinball();
+        QTRY_VERIFY(g->running());
+        QCOMPARE(g->state(), 0);                                       // the ball waits in the lane
+        QVERIFY(g->bumperCount() >= 5);
+        QVERIFY(item("pbTable") && item("pbTable")->isVisible());
+        // the controller only listens while a game is on screen
+        m_app->gamepad()->feedAction(QStringLiteral("start"), true);   // start pauses
+        QTRY_VERIFY(g->paused());
+        m_app->gamepad()->feedAction(QStringLiteral("start"), true);
+        QTRY_VERIFY(!g->paused());
+        // space launches; keys and controller buttons hold the flippers up and let them down again
+        QTest::keyClick(w, Qt::Key_Space);
+        QTRY_COMPARE(g->state(), 1);
+        const double rest = g->leftAngle();
+        QTest::keyPress(w, Qt::Key_Z);
+        QTRY_VERIFY(g->leftAngle() < rest - 0.5);
+        QTest::keyRelease(w, Qt::Key_Z);
+        QTRY_VERIFY(g->leftAngle() > rest - 0.05);
+        const double rrest = g->rightAngle();
+        m_app->gamepad()->feedAction(QStringLiteral("rb"), true);
+        QTRY_VERIFY(g->rightAngle() < rrest - 0.5);
+        m_app->gamepad()->feedAction(QStringLiteral("rb"), false);
+        QTRY_VERIFY(g->rightAngle() > rrest - 0.05);
+        shot("np-pinball");
+        // the song plays it: nothing is scored, however it ends
+        const int before = m_app->gameScores(QStringLiteral("pinball")).size();
+        QVERIFY(click("pbAutoplay"));
+        QVERIFY(g->autoplay() && !g->scored());
+        QVERIFY(item("pbOverlay"));
+        g->advance(60 * 120, 1.0 / 60);
+        QVERIFY(g->hits() > 0);
+        QCOMPARE(m_app->gameScores(QStringLiteral("pinball")).size(), before);
+        QVERIFY(click("pbAutoplay"));
+        QVERIFY(!g->autoplay());
+        // a click on a button must not take the keys away: Space is still the launch, not a second click on that button
+        QTest::keyClick(w, Qt::Key_Space);
+        QVERIFY(!g->autoplay());
+        // Esc leaves back to the song; the game pauses and the choice of game is remembered
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_COMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("art"));
+        QTRY_VERIFY(g->paused());
+        QCOMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("pinball"));
+        QVERIFY(click("stage_games"));                                 // the chip comes back to the last game
+        QCOMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("pinball"));
+        QTest::qWait(300);
+        QVERIFY(click("game_albumfall"));
+        QTRY_COMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("albumfall"));
+        QVERIFY(click("stage_art"));
+        m_app->setGameSetting(QStringLiteral("game"), QStringLiteral("albumfall"));
+    }
+
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
     void aConnectedControllerOpensNowPlayingWhenASongStarts()
     {
@@ -2332,74 +2400,6 @@ private slots:
         QCOMPARE(m_app->openProfile(profileId), QString());
         QCOMPARE(m_app->songs()->tracks().at(1).path, firstPath);
         shot("m8-songs-drag");
-    }
-
-    // Cover Pinball: the games chip opens a game picker; the table is made from the cover; flippers hold with keys and the
-    // controller; the song playing it keeps no score; Esc leaves
-    void coverPinballOpensFromTheGamesChipAndPlays()
-    {
-        auto *w = window();
-        w->setProperty("view", QStringLiteral("now playing"));
-        m_app->playSongs(0);
-        QTRY_VERIFY(m_app->player()->isPlaying());
-        QVERIFY(item("stage_games"));
-        QVERIFY(click("stage_games"));
-        QVERIFY(item("game_albumfall") && item("game_pinball"));       // the picker for the two games
-        QTRY_VERIFY(item("albumFall") && item("albumFall")->isVisible());
-        QVERIFY(click("game_pinball"));
-        QCOMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("pinball"));
-        QCOMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("pinball"));
-        QTRY_VERIFY(item("coverPinball") && item("coverPinball")->isVisible());
-        QTRY_VERIFY(!item("albumFall")->isVisible());
-        PinballGame *g = m_app->pinball();
-        QTRY_VERIFY(g->running());
-        QCOMPARE(g->state(), 0);                                       // the ball waits in the lane
-        QVERIFY(g->bumperCount() >= 5);
-        QVERIFY(item("pbTable") && item("pbTable")->isVisible());
-        // the controller only listens while a game is on screen
-        m_app->gamepad()->feedAction(QStringLiteral("start"), true);   // start pauses
-        QTRY_VERIFY(g->paused());
-        m_app->gamepad()->feedAction(QStringLiteral("start"), true);
-        QTRY_VERIFY(!g->paused());
-        // space launches; keys and controller buttons hold the flippers up and let them down again
-        QTest::keyClick(w, Qt::Key_Space);
-        QTRY_COMPARE(g->state(), 1);
-        const double rest = g->leftAngle();
-        QTest::keyPress(w, Qt::Key_Z);
-        QTRY_VERIFY(g->leftAngle() < rest - 0.5);
-        QTest::keyRelease(w, Qt::Key_Z);
-        QTRY_VERIFY(g->leftAngle() > rest - 0.05);
-        const double rrest = g->rightAngle();
-        m_app->gamepad()->feedAction(QStringLiteral("rb"), true);
-        QTRY_VERIFY(g->rightAngle() < rrest - 0.5);
-        m_app->gamepad()->feedAction(QStringLiteral("rb"), false);
-        QTRY_VERIFY(g->rightAngle() > rrest - 0.05);
-        shot("np-pinball");
-        // the song plays it: nothing is scored, however it ends
-        const int before = m_app->gameScores(QStringLiteral("pinball")).size();
-        QVERIFY(click("pbAutoplay"));
-        QVERIFY(g->autoplay() && !g->scored());
-        QVERIFY(item("pbOverlay"));
-        g->advance(60 * 120, 1.0 / 60);
-        QVERIFY(g->hits() > 0);
-        QCOMPARE(m_app->gameScores(QStringLiteral("pinball")).size(), before);
-        QVERIFY(click("pbAutoplay"));
-        QVERIFY(!g->autoplay());
-        // a click on a button must not take the keys away: Space is still the launch, not a second click on that button
-        QTest::keyClick(w, Qt::Key_Space);
-        QVERIFY(!g->autoplay());
-        // Esc leaves back to the song; the game pauses and the choice of game is remembered
-        QTest::keyClick(w, Qt::Key_Escape);
-        QTRY_COMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("art"));
-        QTRY_VERIFY(g->paused());
-        QCOMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("pinball"));
-        QVERIFY(click("stage_games"));                                 // the chip comes back to the last game
-        QCOMPARE(m_app->gameSettings().value("stage").toString(), QStringLiteral("pinball"));
-        QTest::qWait(300);
-        QVERIFY(click("game_albumfall"));
-        QTRY_COMPARE(m_app->gameSettings().value("game").toString(), QStringLiteral("albumfall"));
-        QVERIFY(click("stage_art"));
-        m_app->setGameSetting(QStringLiteral("game"), QStringLiteral("albumfall"));
     }
 
     // README renders of the visual music games, with the richer fixture library (see phoneMockupRenders):

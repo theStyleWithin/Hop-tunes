@@ -179,9 +179,9 @@ Rectangle {
                 background: Item {}
             }
             Label { visible: root.inGames; text: "game"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
-            Repeater { model: root.inGames ? [["albumfall", "album fall"], ["pinball", "cover pinball"]] : []
+            Repeater { model: [["albumfall", "album fall"], ["pinball", "cover pinball"]]     // (a constant model: items that come and go inside a layout crash Qt 6.4)
                        delegate: OptChip { required property var modelData; objectName: "game_" + modelData[0]; text: modelData[1]; on: root.stage === modelData[0]
-                                           onClicked: root.setGame(modelData[0]) } }
+                                           visible: root.inGames; onClicked: root.setGame(modelData[0]) } }
             Label { text: "visualizer"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
             Repeater { model: ["bars", "mirror", "rings"]
                        delegate: OptChip { required property string modelData; objectName: "vizStyle_" + modelData; text: modelData; on: root.gs.vizStyle === modelData
