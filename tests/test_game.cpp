@@ -5,10 +5,12 @@
 #include "game/FallBoard.h"
 #include "game/MusyNote.h"
 #include "game/PinTable.h"
+#include "game/PinballGame.h"
 #include "game/Gamepad.h"
 #include "game/SpectrumAnalyzer.h"
 
 #include <QPainter>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -595,6 +597,44 @@ private slots:
             if (!bot) QCOMPARE(g.state(), PinTable::Over);
             else QVERIFY2(g.score() > 1000, qPrintable(QString("bot score %1, balls %2").arg(g.score()).arg(g.ballsLeft())));
         }
+    }
+
+    void pinballGameKeepsHonestScoresAndItsOwnPulse()
+    {
+        // a game you play: the lane, a launch, and a finished game reports a score that counts
+        PinballGame g;
+        g.setPlaying(true);
+        QSignalSpy done(&g, &PinballGame::finished);
+        g.start(QString());
+        QVERIFY(g.running() && g.state() == 0 && g.scored());
+        for (int ball = 0; ball < 3; ++ball) {              // nobody touches a flipper: every ball drains
+            g.launch();
+            QCOMPARE(g.state(), 1);
+            for (int i = 0; i < 30 && g.state() == 1; ++i) g.advance(120, 1.0 / 60);   // (one call keeps its own clock running)
+        }
+        QCOMPARE(g.state(), 2);
+        QCOMPARE(done.size(), 1);
+        QVERIFY(done.first().at(2).toBool());               // scored
+        QVERIFY(g.pulse());                                  // no beat was ever heard: the table kept its own pulse
+        QVERIFY(g.beatFlash() >= 1);
+        // the song plays it: it launches and flips by itself, and nothing is scored
+        PinballGame a;
+        a.setPlaying(true);
+        QSignalSpy adone(&a, &PinballGame::finished);
+        a.setAutoplay(true);
+        a.start(QString());
+        QVERIFY(!a.scored());
+        a.flip(true, true);                                  // a person's input is ignored while it plays
+        a.advance(60 * 90, 1.0 / 60);
+        QVERIFY(a.hits() > 0 && a.score() > 0);
+        QVERIFY(a.autoplay() && !a.scored());
+        // switching it on in the middle of a game also stops that game from counting
+        PinballGame m;
+        m.setPlaying(true);
+        m.start(QString());
+        QVERIFY(m.scored());
+        m.setAutoplay(true);
+        QVERIFY(!m.scored());
     }
 };
 

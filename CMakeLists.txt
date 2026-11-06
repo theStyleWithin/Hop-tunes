@@ -59,6 +59,7 @@ add_library(hoptunes_core STATIC
     src/game/AlbumFall.h      src/game/AlbumFall.cpp
     src/game/MusyNoteGame.h   src/game/MusyNoteGame.cpp
     src/game/PinTable.h       src/game/PinTable.cpp
+    src/game/PinballGame.h    src/game/PinballGame.cpp
     src/game/Gamepad.h        src/game/Gamepad.cpp
     src/library/ProfileDb.h   src/library/ProfileDb.cpp
     src/library/ProfileArchive.h src/library/ProfileArchive.cpp

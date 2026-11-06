@@ -20,6 +20,7 @@
 #include "game/AlbumFall.h"
 #include "game/AnalysisGuard.h"
 #include "game/MusyNoteGame.h"
+#include "game/PinballGame.h"
 #include "game/AudioAnalyzer.h"
 #include "game/Gamepad.h"
 #include "playback/Player.h"
@@ -50,6 +51,7 @@ class App : public QObject {
     Q_PROPERTY(hop::AudioAnalyzer *audio READ audio CONSTANT)
     Q_PROPERTY(hop::AlbumFall *albumFall READ albumFall CONSTANT)
     Q_PROPERTY(hop::MusyNoteGame *musyNote READ musyNote CONSTANT)
+    Q_PROPERTY(hop::PinballGame *pinball READ pinball CONSTANT)
     Q_PROPERTY(hop::Gamepad *gamepad READ gamepad CONSTANT)
     Q_PROPERTY(QVariantMap gameSettings READ gameSettings NOTIFY gameSettingsChanged)
     // The visualizer and games listen to the music through an optional tap. True when the last run ended while it was on (a
@@ -173,6 +175,7 @@ public:
     AudioAnalyzer *audio() { return &m_audio; }
     AlbumFall *albumFall() { return &m_albumFall; }
     MusyNoteGame *musyNote() { return &m_musyNote; }
+    PinballGame *pinball() { return &m_pinball; }
     // A game that wants the whole screen: on Android turned sideways with the system bars hidden (restored when it ends).
     Q_INVOKABLE void setGameScreen(bool on);
     Gamepad *gamepad() { return &m_gamepad; }
@@ -553,6 +556,7 @@ private:
     AudioAnalyzer m_audio;
     AlbumFall m_albumFall;
     MusyNoteGame m_musyNote;
+    PinballGame m_pinball;
     AnalysisGuard m_analysisGuard{Paths::dataDir()};
     bool m_analysisSafeMode = false;
     void updateAnalysisAvailable();
