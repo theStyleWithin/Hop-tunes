@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+- **Meet Notesy, the Hop-tunes mascot.** The little note from Musy Note, winking, is now the app icon on the desktop (Linux, Windows) and on Android (adaptive, round and legacy icons).
+
 ## [1.7.5] - 2026-11-06
 
 ### Added
