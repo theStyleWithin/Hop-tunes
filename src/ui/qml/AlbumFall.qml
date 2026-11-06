@@ -122,9 +122,9 @@ FocusScope {
             }
             Flow {   // pause, and let the song play the game for you (nothing is scored while it does)
                 Layout.fillWidth: true; spacing: 8
-                PlainButton { objectName: "afPause"; text: root.game.paused ? "go on" : "pause"; enabled: !root.game.gameOver
+                PlainButton { focusPolicy: Qt.NoFocus; objectName: "afPause"; text: root.game.paused ? "go on" : "pause"; enabled: !root.game.gameOver
                               onClicked: root.act("pause") }
-                PlainButton { objectName: "afAutoplay"; text: root.game.autoplay ? "stop autoplay" : "let the song play"; primary: root.game.autoplay
+                PlainButton { focusPolicy: Qt.NoFocus; objectName: "afAutoplay"; text: root.game.autoplay ? "stop autoplay" : "let the song play"; primary: root.game.autoplay
                               onClicked: root.game.autoplay = !root.game.autoplay }
             }
             Label {
@@ -191,9 +191,9 @@ FocusScope {
                             text: root.game.gameOver ? "game over" : (root.needMusic ? "play a song to start" : "paused") }
                     Label { visible: root.game.gameOver; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(20) }
                             text: root.game.score + " points" + (!root.game.scored ? " (not counted: the song was playing)" : root.lastRank === 1 ? " — a new best!" : (root.lastRank > 0 ? " — #" + root.lastRank + " on your list" : "")) }
-                    PlainButton { visible: root.needMusic; Layout.alignment: Qt.AlignHCenter; text: "play"; primary: true
+                    PlainButton { focusPolicy: Qt.NoFocus; visible: root.needMusic; Layout.alignment: Qt.AlignHCenter; text: "play"; primary: true
                                   onClicked: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
-                    PlainButton { visible: root.game.gameOver; Layout.alignment: Qt.AlignHCenter; text: "play again"; primary: true; onClicked: root.newGame() }
+                    PlainButton { focusPolicy: Qt.NoFocus; visible: root.game.gameOver; Layout.alignment: Qt.AlignHCenter; text: "play again"; primary: true; onClicked: root.newGame() }
                     Label { visible: root.game.paused && !root.game.gameOver; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: Theme.muted
                             text: "press P (or start on a controller) to go on"; font { family: Theme.font; pixelSize: Theme.fs(15) } wrapMode: Text.WordWrap }
                 }

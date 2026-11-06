@@ -47,6 +47,7 @@ signals:
     void eventsChanged();
     void connectedChanged();
     void pressed(const QString &action);
+    void released(const QString &action);   // for games that hold a button (pinball flippers)
 
 private:
     void scan();

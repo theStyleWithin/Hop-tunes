@@ -3,6 +3,7 @@
 
 #include <QColor>
 #include <QImage>
+#include <QLineF>
 #include <QPointF>
 #include <QVector>
 #include <QtGlobal>
@@ -16,7 +17,7 @@ namespace hop {
 //
 // World: 10 units wide, 17 tall, y grows downward, gravity pulls toward +y. The plunger lane is the narrow strip on the right.
 //  * Each bumper pays 100; a hit within 0.12 s of a beat pays double; a bumper that is pulsing (a beat just landed) kicks harder.
-//  * Lighting every bumper at least once pays 1000 and starts the round again.
+//  * Lighting every bumper at least once pays 500 and starts the round again.
 //  * Three balls. A ball that drains takes one; the lane waits for the next launch.
 //  * The bass of the song nudges gravity a little (heavier on loud bass), never enough to make the table unplayable.
 class PinTable {
@@ -25,6 +26,7 @@ public:
     static constexpr double kBallR = 0.28;
     static constexpr double kLaneX = 9.15;                    // the lane lies between this and the right wall
     static constexpr int kBalls = 3;
+    static constexpr double kFlipLen = 1.6, kFlipR = 0.2, kFlipPy = 14.6, kLeftPx = 2.6, kRightPx = 6.55;   // the flippers (pivot and size)
     enum State { Ready, Playing, Over };
 
     struct Bumper {
@@ -62,6 +64,7 @@ public:
     QPointF ballVelocity() const { return m_v; }
     bool ballInLane() const { return m_p.x() > kLaneX && m_p.y() > 9.0; }
     const QVector<Bumper> &bumpers() const { return m_bumpers; }
+    QVector<QLineF> wallLines() const { QVector<QLineF> o; for (const Segment &g : m_walls) o.append(QLineF(g.a, g.b)); return o; }
     double flipperAngle(bool left) const { return left ? m_fl.angle : m_fr.angle; }
     double time() const { return m_time; }
     // for tests: put the ball somewhere with a speed, in play
