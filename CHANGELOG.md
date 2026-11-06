@@ -8,6 +8,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 - **Cover Pinball (desktop).** A pinball table made from the cover of the song that is playing: the bumpers stand where the cover is brightest and take its colours, the beat of the song kicks them (a hit on the beat pays double) and the bass changes how heavy the ball feels. Flippers on Z and / (or left and right, or a controller's LB and RB), space to launch, three balls, a best list per profile, and "let the song play" plays it for you without keeping a score.
 
 ### Changed
+- **Meet Notesy, the Hop-tunes mascot.** The little note from Musy Note, winking, is now the app icon on the desktop (Linux, Windows) and on Android (adaptive, round and legacy icons).
 - **Now playing: "album fall" became "games".** The chip opens the last game you played, and a small picker offers Album Fall and Cover Pinball.
 
 ### Fixed
