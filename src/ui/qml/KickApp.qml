@@ -11,10 +11,13 @@ FocusScope {
     objectName: "kickApp"
     readonly property var kick: hop.kick
     property bool allowed: hop.appNetAllowed("kick")
-    property string page: "browse"               // browse | watch | downloads | play
+    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist
     property bool disconnected: false
     property string watchTab: "live"             // live | past | clips (on the watch page)
     property string playId: ""                   // the downloaded video being played
+    property string playlistId: ""               // the playlist being looked at
+    property string playlistMessage: ""
+    property string deleteArmed: ""              // a playlist waiting for the second press of "delete"
     property string dlMessage: ""
     property int dlHeight: 720                   // download quality: up to this many lines of height (0 = the best there is)
     // what is already downloaded or on its way, by id (changes as downloads move)
@@ -77,6 +80,8 @@ FocusScope {
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
         if (page === "play") { page = "downloads"; playId = ""; return true }
+        if (page === "playlist") { page = "playlists"; playlistId = ""; return true }
+        if (page === "playlists") { page = "browse"; return true }
         if (page === "downloads") { page = "browse"; return true }
         if (page === "watch") { page = "browse"; kick.closeChannel(); watchTab = "live"; return true }
         return false
@@ -90,6 +95,37 @@ FocusScope {
         return true
     }
     readonly property bool searchActive: !!kick && allowed && !disconnected && page === "browse" && searchBox.activeFocus
+    // "add to playlist": a menu of the playlists that can hold this (channels, clips or past streams); a tick means it is already in
+    property var plChoices: []
+    property var plEntry: ({})
+    property string plKey: ""
+    function addMenu(kind, entry, key, at) {
+        plChoices = kick.playlists.filter(function (p) { return p.kind === kind })
+        plEntry = Object.assign({}, entry, { channel: entry.channel || kick.channel.slug || "" }); plKey = key
+        plMenu.popup(at)
+    }
+    function playlistById(id) {
+        const l = kick.playlists
+        for (let i = 0; i < l.length; i++) if (l[i].id === id) return l[i]
+        return null
+    }
+    Menu {
+        id: plMenu
+        objectName: "kickPlaylistMenu"
+        Repeater {
+            model: root.plChoices
+            delegate: MenuItem {
+                required property var modelData
+                objectName: "kickPlMenu_" + modelData.id
+                text: (kick.isInPlaylist(modelData.id, root.plKey) ? "\u2713 " : "") + modelData.name
+                onTriggered: {
+                    if (kick.isInPlaylist(modelData.id, root.plKey)) kick.removeFromPlaylist(modelData.id, root.plKey)
+                    else root.playlistMessage = kick.addToPlaylist(modelData.id, root.plEntry) ? "" : "that could not be added (it may already be there, or the list is full)"
+                }
+            }
+        }
+        MenuItem { visible: root.plChoices.length === 0; enabled: false; text: "no playlists of this kind yet: make one under playlists" }
+    }
     function showTab(t) {
         watchTab = t; dlMessage = ""
         if (t === "past") kick.loadPastStreams(); else if (t === "clips") kick.loadClips()
@@ -272,6 +308,8 @@ FocusScope {
                     background: Item {}
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
+                PlainButton { objectName: "kickPlaylistsButton"; text: "playlists" + (kick.playlists.length > 0 ? " (" + kick.playlists.length + ")" : ""); implicitHeight: 36
+                              onClicked: { root.playlistMessage = ""; root.page = "playlists" } }
                 PlainButton { objectName: "kickDownloadsButton"; visible: !!hop.downloads; implicitHeight: 36
                               text: "downloads" + (hop.downloads && hop.downloads.count > 0 ? " (" + hop.downloads.count + ")" : "")
                               onClicked: root.page = "downloads" }
@@ -417,6 +455,8 @@ FocusScope {
                     PlainButton { objectName: "kickFollowButton"; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 104 : -1
                                   text: kick.isFollowing(kick.channel.slug || "") ? "★ following" : "☆ follow"
                                   onClicked: kick.isFollowing(kick.channel.slug) ? kick.unfollow(kick.channel.slug) : kick.follow(kick.channel.slug) }
+                    PlainButton { objectName: "kickAddToPlaylist"; text: root.phone ? "+ list" : "+ playlist"; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 84 : -1
+                                  onClicked: root.addMenu("channels", ({ slug: kick.channel.slug }), kick.channel.slug || "", Qt.point(0, height)) }
                     PlainButton { objectName: "kickBlockButton"; text: "block"; danger: true; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 76 : -1
                                   onClicked: { const s = kick.channel.slug; root.lastBlocked = s; kick.block(s); undoTimer.restart(); root.goBack() } }
                 }
@@ -501,6 +541,11 @@ FocusScope {
                                     onClicked: root.download(row.modelData)
                                 }
                                 PlainButton {
+                                    objectName: "kickAddPl_" + row.modelData.id
+                                    text: "+ list"; implicitHeight: 36
+                                    onClicked: root.addMenu(row.modelData.kind === "clip" ? "clips" : "streams", row.modelData, row.modelData.id, Qt.point(0, height))
+                                }
+                                PlainButton {
                                     objectName: "kickPlayLocal_" + row.modelData.id
                                     visible: !!row.dl && row.dl.state === "done"
                                     text: "play"; primary: true; implicitHeight: 36
@@ -562,6 +607,155 @@ FocusScope {
                 Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                 Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
             }
+        }
+
+        // ---- playlists: favourite channels (and clips / past streams), kept on this device only ----
+        ColumnLayout {
+            objectName: "kickPlaylistsPage"
+            anchors.fill: parent; visible: root.page === "playlists"; spacing: 10
+            RowLayout {
+                spacing: 12; Layout.fillWidth: true
+                PlainButton { objectName: "kickPlaylistsBack"; text: root.phone ? "\u2039" : "\u2039 streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                Label { text: "playlists"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
+                Item { Layout.fillWidth: true }
+            }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                    text: "your own lists of favourite channels (or clips, or past streams). they stay on this device, in this profile, and nothing about them is sent anywhere." }
+            GridLayout {
+                columns: root.phone ? 1 : 3; columnSpacing: 10; rowSpacing: 8; Layout.fillWidth: true
+                TextField {
+                    id: newPlName
+                    objectName: "kickNewPlaylistName"
+                    Layout.fillWidth: true; implicitHeight: 40; selectByMouse: true; maximumLength: 60
+                    placeholderText: "name of a new playlist"
+                    font { family: Theme.font; pixelSize: Theme.fs(15) } color: Theme.text; placeholderTextColor: Theme.dim
+                    background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.border } }
+                    onAccepted: createPl.clicked()
+                }
+                RowLayout {
+                    spacing: 6
+                    property string kind: "channels"
+                    id: plKind
+                    Chip { objectName: "kickNewPlaylistKind_channels"; text: "channels"; on: plKind.kind === "channels"; onClicked: plKind.kind = "channels" }
+                    Chip { objectName: "kickNewPlaylistKind_clips"; text: "clips"; on: plKind.kind === "clips"; onClicked: plKind.kind = "clips" }
+                    Chip { objectName: "kickNewPlaylistKind_streams"; text: "past streams"; on: plKind.kind === "streams"; onClicked: plKind.kind = "streams" }
+                }
+                PlainButton {
+                    id: createPl
+                    objectName: "kickCreatePlaylist"; text: "create"; primary: true; implicitHeight: 40
+                    onClicked: {
+                        const id = kick.createPlaylist(newPlName.text, plKind.kind)
+                        root.playlistMessage = id === "" ? "give it a name (and there is room for 50 playlists)" : ""
+                        if (id !== "") newPlName.text = ""
+                    }
+                }
+            }
+            Label { objectName: "kickPlaylistMessage"; visible: root.playlistMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger; text: root.playlistMessage
+                    font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            Label { objectName: "kickPlaylistsEmpty"; visible: kick.playlists.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
+                    text: "no playlists yet. make one above, then use + playlist on a channel (or + list on a clip or past stream) to fill it." }
+            ListView {
+                id: plList
+                objectName: "kickPlaylistsList"
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 8
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                model: kick.playlists
+                delegate: Item {
+                    id: prow
+                    required property var modelData
+                    objectName: "kickPlaylistRow_" + modelData.id
+                    width: plList.width - 12; height: root.phone ? 110 : 64
+                    Rectangle { anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line } }
+                    GridLayout {
+                        anchors { fill: parent; margins: 8 }
+                        columns: root.phone ? 1 : 2; columnSpacing: 12; rowSpacing: 6
+                        ColumnLayout {
+                            spacing: 0; Layout.fillWidth: true; Layout.minimumWidth: 0
+                            Label { text: prow.modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                            Label { text: (prow.modelData.kind === "channels" ? "channels" : (prow.modelData.kind === "clips" ? "clips" : "past streams")) + " \u00b7 " + prow.modelData.count
+                                          + (prow.modelData.count === 1 ? " item" : " items")
+                                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            PlainButton { objectName: "kickPlaylistOpen_" + prow.modelData.id; text: "open"; primary: true; implicitHeight: 34
+                                          onClicked: { root.playlistId = prow.modelData.id; root.deleteArmed = ""; root.page = "playlist"; if (prow.modelData.kind === "channels") kick.refreshPlaylist(prow.modelData.id) } }
+                            PlainButton { objectName: "kickPlaylistDelete_" + prow.modelData.id; danger: true; implicitHeight: 34
+                                          text: root.deleteArmed === prow.modelData.id ? "really delete?" : "delete"
+                                          onClicked: { if (root.deleteArmed === prow.modelData.id) { const id = prow.modelData.id; root.deleteArmed = ""; kick.deletePlaylist(id) } else root.deleteArmed = prow.modelData.id } }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- one playlist ----
+        ColumnLayout {
+            id: plPage
+            objectName: "kickPlaylistPage"
+            readonly property var pl: root.page === "playlist" ? root.playlistById(root.playlistId) : null
+            anchors.fill: parent; visible: root.page === "playlist"; spacing: 10
+            RowLayout {
+                spacing: 12; Layout.fillWidth: true
+                PlainButton { objectName: "kickPlaylistBack"; text: root.phone ? "\u2039" : "\u2039 playlists"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                Label { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(22); weight: Font.Light }
+                        text: plPage.pl ? plPage.pl.name : "" }
+                PlainButton { objectName: "kickPlRefresh"; visible: !!plPage.pl && plPage.pl.kind === "channels" && plPage.pl.count > 0; text: root.phone ? "who\u2019s live" : "who\u2019s live now"; implicitHeight: 36
+                              Layout.minimumWidth: 0; onClicked: kick.refreshPlaylist(root.playlistId) }
+            }
+            Label { objectName: "kickPlEmpty"; visible: !!plPage.pl && plPage.pl.count === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
+                    text: plPage.pl && plPage.pl.kind === "channels" ? "empty. open a channel and use + playlist to add it here."
+                                                                      : "empty. use + list on a clip or past stream (on a channel's page) to add it here." }
+            ListView {
+                id: plItems
+                objectName: "kickPlaylistItems"
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 8
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                model: plPage.pl ? plPage.pl.items : []
+                delegate: Item {
+                    id: it
+                    required property var modelData
+                    readonly property bool isChannel: !!plPage.pl && plPage.pl.kind === "channels"
+                    readonly property string key: isChannel ? modelData.slug : modelData.id
+                    readonly property var dl: isChannel ? null : root.dlById[modelData.id]
+                    objectName: "kickPlItem_" + key
+                    width: plItems.width - 12; height: root.phone ? (isChannel ? 84 : 150) : 72
+                    Rectangle { anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line } }
+                    TapHandler { enabled: it.isChannel; onTapped: root.openChannel(it.key) }
+                    GridLayout {
+                        anchors { fill: parent; margins: 8 }
+                        columns: root.phone && !it.isChannel ? 1 : 2; columnSpacing: 12; rowSpacing: 6
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 12
+                            Pic { visible: it.isChannel; Layout.preferredWidth: 44; Layout.preferredHeight: 44; address: it.isChannel ? (it.modelData.avatar || "") : ""; round: true; maskColor: Theme.panel
+                                  backing: Qt.hsla((it.key.charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
+                            Pic { visible: !it.isChannel; Layout.preferredWidth: 96; Layout.preferredHeight: 54; address: it.isChannel ? "" : (it.modelData.thumb || ""); backing: Theme.artColors("kick" + it.key)[1] }
+                            ColumnLayout {
+                                spacing: 1; Layout.fillWidth: true; Layout.minimumWidth: 0
+                                Label { text: it.isChannel ? (it.modelData.name || it.key) : (it.modelData.title || "(untitled)"); color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                                Label { Layout.fillWidth: true; elide: Text.ElideRight; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                                        color: it.isChannel && it.modelData.live ? "#e5484d" : Theme.muted
+                                        text: it.isChannel ? (it.modelData.checked ? (it.modelData.live ? "\u25cf live \u00b7 " + kick.viewersText(it.modelData.viewers) + " watching" : "offline") : "press who\u2019s live now to check")
+                                                           : it.modelData.channel + " \u00b7 " + root.fmtDur(it.modelData.seconds) + (it.dl ? " \u00b7 " + root.dlState(it.dl) : "") }
+                            }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            PlainButton { objectName: "kickPlDownload_" + it.key; visible: !it.isChannel && (!it.dl || it.dl.state === "failed"); text: "download"; implicitHeight: 34
+                                          onClicked: { root.dlMessage = hop.downloads ? hop.downloads.enqueue({ id: it.modelData.id, kind: it.modelData.kind, title: it.modelData.title, channel: it.modelData.channel,
+                                                                                                           thumb: it.modelData.thumb, url: it.modelData.url, maxHeight: root.dlHeight, estimate: it.modelData.estimate, seconds: it.modelData.seconds }) : "" } }
+                            PlainButton { objectName: "kickPlPlay_" + it.key; visible: !it.isChannel && !!it.dl && it.dl.state === "done"; text: "play"; primary: true; implicitHeight: 34
+                                          onClicked: { root.playId = it.modelData.id; root.page = "play" } }
+                            PlainButton { objectName: "kickPlRemove_" + it.key; text: "remove"; danger: true; implicitHeight: 34
+                                          onClicked: kick.removeFromPlaylist(root.playlistId, it.key) }
+                        }
+                    }
+                }
+            }
+            Label { objectName: "kickPlDownloadMessage"; visible: root.dlMessage !== "" && !!plPage.pl && plPage.pl.kind !== "channels"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger; text: root.dlMessage
+                    font { family: Theme.font; pixelSize: Theme.fs(14) } }
         }
 
         // ---- downloads: what is kept on this device for offline viewing ----

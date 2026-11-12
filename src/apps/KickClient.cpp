@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "apps/KickClient.h"
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUrlQuery>
@@ -455,7 +456,18 @@ void KickClient::setChatMode(const QString &mode)
 QJsonObject KickClient::listsJson() const
 {
     return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
-                       {QStringLiteral("chatMode"), m_chatMode}};
+                       {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()}};
+}
+
+QJsonArray KickClient::playlistsJson() const
+{
+    QJsonArray arr;
+    for (const Playlist &p : m_playlists) {
+        QJsonArray items;
+        for (const QVariant &v : p.items) items.append(QJsonValue::fromVariant(v));
+        arr.append(QJsonObject{{QStringLiteral("id"), p.id}, {QStringLiteral("name"), p.name}, {QStringLiteral("kind"), p.kind}, {QStringLiteral("items"), items}});
+    }
+    return arr;
 }
 
 void KickClient::setListsJson(const QJsonObject &o)
@@ -464,6 +476,34 @@ void KickClient::setListsJson(const QJsonObject &o)
     for (const QJsonValue &v : o.value(QStringLiteral("following")).toArray()) { const QString s = normalize(v.toString()); if (!s.isEmpty() && !m_following.contains(s)) m_following.append(s); }
     for (const QJsonValue &v : o.value(QStringLiteral("blocked")).toArray()) { const QString s = normalize(v.toString()); if (!s.isEmpty() && !m_blocked.contains(s)) m_blocked.append(s); }
     for (const QString &s : m_blocked) m_following.removeAll(s);
+    // playlists: anything that is not well formed is simply left out
+    m_playlists.clear();
+    for (const QJsonValue &pv : o.value(QStringLiteral("playlists")).toArray()) {
+        if (m_playlists.size() >= kMaxPlaylists) break;
+        const QJsonObject po = pv.toObject();
+        Playlist p;
+        p.id = po.value(QStringLiteral("id")).toString().left(60);
+        p.name = po.value(QStringLiteral("name")).toString().trimmed().left(kMaxNameLength);
+        p.kind = po.value(QStringLiteral("kind")).toString();
+        if (p.id.isEmpty() || p.name.isEmpty() || (p.kind != QLatin1String("channels") && p.kind != QLatin1String("clips") && p.kind != QLatin1String("streams"))) continue;
+        bool dup = false;
+        for (const Playlist &q : m_playlists) if (q.id == p.id) dup = true;
+        if (dup) continue;
+        m_playlists.append(p);
+        const QString id = p.id;
+        for (const QJsonValue &iv : po.value(QStringLiteral("items")).toArray()) {
+            if (m_playlists.last().items.size() >= kMaxItems) break;
+            if (p.kind == QLatin1String("channels")) {
+                const QString slug = normalize(iv.toString());
+                if (!slug.isEmpty() && !isInPlaylist(id, slug)) m_playlists.last().items.append(slug);
+            } else if (iv.isObject()) {
+                QVariantMap m = iv.toObject().toVariantMap();
+                const QString itemId = m.value(QStringLiteral("id")).toString();
+                QString why;
+                if (!itemId.isEmpty() && !isInPlaylist(id, itemId) && AppNet::urlAllowed(kApp, QUrl(m.value(QStringLiteral("url")).toString()), &why)) m_playlists.last().items.append(m);
+            }
+        }
+    }
     const QString cm = o.value(QStringLiteral("chatMode")).toString();
     m_chatMode = cm == QLatin1String("pretend") || (cm == QLatin1String("kick") && m_signedIn) ? cm : QStringLiteral("off");
     emit chatModeChanged();
@@ -475,8 +515,13 @@ void KickClient::setListsJson(const QJsonObject &o)
 void KickClient::refreshFollowing()
 {
     if (!ready() || m_following.isEmpty()) return;
+    refreshChannels(m_following.mid(0, 40));
+}
+
+void KickClient::refreshChannels(const QStringList &todo)
+{
+    if (!ready() || todo.isEmpty()) return;
     const quint64 gen = m_channelGen;
-    const QStringList todo = m_following.mid(0, 40);
     auto next = std::make_shared<int>(0);
     auto step = std::make_shared<std::function<void()>>();
     *step = [this, todo, gen, next, step] {
@@ -487,7 +532,7 @@ void KickClient::refreshFollowing()
             end();
             if (gen != m_channelGen) return;
             QVariantMap ch;
-            if (r.error.isEmpty() && parseChannel(r.body, &ch) && m_following.contains(slug)) {
+            if (r.error.isEmpty() && parseChannel(r.body, &ch) && (m_following.contains(slug) || channelInPlaylists(slug))) {
                 m_status[slug] = QVariantMap{{QStringLiteral("live"), ch.value(QStringLiteral("live"))}, {QStringLiteral("viewers"), ch.value(QStringLiteral("viewers"))},
                                              {QStringLiteral("name"), ch.value(QStringLiteral("name"))}, {QStringLiteral("avatar"), ch.value(QStringLiteral("avatar"))},
                                              {QStringLiteral("checked"), true}};
@@ -497,6 +542,147 @@ void KickClient::refreshFollowing()
         });
     };
     for (int i = 0; i < 3; ++i) (*step)();       // three at a time
+}
+
+// ---- playlists ---------------------------------------------------------------------------------------------
+
+bool KickClient::channelInPlaylists(const QString &slug) const
+{
+    for (const Playlist &p : m_playlists)
+        if (p.kind == QLatin1String("channels"))
+            for (const QVariant &v : p.items) if (v.toString() == slug) return true;
+    return false;
+}
+
+QString KickClient::createPlaylist(const QString &nameIn, const QString &kind)
+{
+    const QString name = nameIn.trimmed().left(kMaxNameLength);
+    if (name.isEmpty() || m_playlists.size() >= kMaxPlaylists) return {};
+    if (kind != QLatin1String("channels") && kind != QLatin1String("clips") && kind != QLatin1String("streams")) return {};
+    Playlist p;
+    p.id = QStringLiteral("pl") + QString::number(QDateTime::currentMSecsSinceEpoch(), 36);
+    for (bool clash = true; clash;) {                         // (two made in the same millisecond, or after a delete: never the same id)
+        clash = false;
+        for (const Playlist &q : m_playlists) if (q.id == p.id) { p.id += QLatin1Char('x'); clash = true; break; }
+    }
+    p.name = name;
+    p.kind = kind;
+    m_playlists.append(p);
+    emit listsChanged();
+    emit listsEdited();
+    return p.id;
+}
+
+bool KickClient::renamePlaylist(const QString &id, const QString &nameIn)
+{
+    const QString name = nameIn.trimmed().left(kMaxNameLength);
+    if (name.isEmpty()) return false;
+    for (Playlist &p : m_playlists)
+        if (p.id == id) { p.name = name; emit listsChanged(); emit listsEdited(); return true; }
+    return false;
+}
+
+bool KickClient::deletePlaylist(const QString &id)
+{
+    for (int i = 0; i < m_playlists.size(); ++i)
+        if (m_playlists[i].id == id) { m_playlists.removeAt(i); emit listsChanged(); emit listsEdited(); return true; }
+    return false;
+}
+
+bool KickClient::addToPlaylist(const QString &id, const QVariantMap &item)
+{
+    for (Playlist &p : m_playlists) {
+        if (p.id != id) continue;
+        if (p.items.size() >= kMaxItems) return false;
+        if (p.kind == QLatin1String("channels")) {
+            const QString slug = normalize(item.value(QStringLiteral("slug")).toString());
+            if (slug.isEmpty() || isInPlaylist(id, slug)) return false;
+            p.items.append(slug);
+        } else {
+            const QString itemId = item.value(QStringLiteral("id")).toString();
+            const QString itemKind = item.value(QStringLiteral("kind")).toString();
+            if (itemId.isEmpty() || itemId.size() > 120 || isInPlaylist(id, itemId)) return false;
+            if ((p.kind == QLatin1String("clips")) != (itemKind == QLatin1String("clip"))) return false;       // a clip goes in a clips playlist, a stream in a streams one
+            if (p.kind == QLatin1String("streams") && itemKind != QLatin1String("stream")) return false;
+            QVariantMap m;
+            for (const char *k : {"id", "kind", "title", "channel", "url", "thumb"}) m[QString::fromLatin1(k)] = item.value(QString::fromLatin1(k)).toString().left(500);
+            m[QStringLiteral("seconds")] = item.value(QStringLiteral("seconds")).toDouble();
+            m[QStringLiteral("estimate")] = item.value(QStringLiteral("estimate")).toDouble();
+            QString why;
+            if (!AppNet::urlAllowed(kApp, QUrl(m.value(QStringLiteral("url")).toString()), &why)) return false;      // only addresses this app may use
+            p.items.append(m);
+        }
+        emit listsChanged();
+        emit listsEdited();
+        return true;
+    }
+    return false;
+}
+
+bool KickClient::removeFromPlaylist(const QString &id, const QString &key)
+{
+    for (Playlist &p : m_playlists) {
+        if (p.id != id) continue;
+        for (int i = 0; i < p.items.size(); ++i) {
+            const QVariant &v = p.items[i];
+            const QString k = v.typeId() == QMetaType::QString ? v.toString() : v.toMap().value(QStringLiteral("id")).toString();
+            if (k == key) { p.items.removeAt(i); emit listsChanged(); emit listsEdited(); return true; }
+        }
+    }
+    return false;
+}
+
+bool KickClient::isInPlaylist(const QString &id, const QString &keyIn) const
+{
+    for (const Playlist &p : m_playlists) {
+        if (p.id != id) continue;
+        const QString key = p.kind == QLatin1String("channels") ? normalize(keyIn) : keyIn;
+        for (const QVariant &v : p.items) {
+            const QString k = v.typeId() == QMetaType::QString ? v.toString() : v.toMap().value(QStringLiteral("id")).toString();
+            if (k == key) return true;
+        }
+    }
+    return false;
+}
+
+QVariantList KickClient::playlistsHolding(const QString &key) const
+{
+    QVariantList out;
+    for (const Playlist &p : m_playlists) if (isInPlaylist(p.id, key)) out << p.id;
+    return out;
+}
+
+QVariantList KickClient::playlists() const
+{
+    QVariantList out;
+    for (const Playlist &p : m_playlists) {
+        QVariantList items;
+        for (const QVariant &v : p.items) {
+            if (p.kind == QLatin1String("channels")) {
+                const QString slug = v.toString();
+                if (m_blocked.contains(slug)) continue;                       // a blocked streamer stays hidden everywhere
+                QVariantMap m = m_status.value(slug);
+                if (m.isEmpty()) m = QVariantMap{{QStringLiteral("live"), false}, {QStringLiteral("viewers"), 0}, {QStringLiteral("checked"), false}};
+                m[QStringLiteral("slug")] = slug;
+                if (!m.contains(QStringLiteral("name"))) m[QStringLiteral("name")] = slug;
+                items << m;
+            } else {
+                items << v;
+            }
+        }
+        out << QVariantMap{{QStringLiteral("id"), p.id}, {QStringLiteral("name"), p.name}, {QStringLiteral("kind"), p.kind},
+                           {QStringLiteral("count"), items.size()}, {QStringLiteral("items"), items}};
+    }
+    return out;
+}
+
+void KickClient::refreshPlaylist(const QString &id)
+{
+    QStringList slugs;
+    for (const Playlist &p : m_playlists)
+        if (p.id == id && p.kind == QLatin1String("channels"))
+            for (const QVariant &v : p.items) if (!m_blocked.contains(v.toString()) && slugs.size() < 40) slugs << v.toString();
+    refreshChannels(slugs);
 }
 
 // ---- a channel's finished streams and clips (for downloading) ----------------------------------------------

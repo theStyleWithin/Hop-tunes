@@ -1011,6 +1011,137 @@ private slots:
     }
 
 private slots:
+    // ---- playlists (kept on this computer, in the profile) ----
+    static QVariantMap clipItem(const QString &id = "clip_a", const QString &url = "https://clips.kick.com/clips/ab/clip_a/playlist.m3u8")
+    {
+        return {{"id", id}, {"kind", "clip"}, {"title", "a funny moment"}, {"channel", "alpha"}, {"url", url}, {"thumb", "https://clips.kick.com/x/thumbnail.webp"}, {"seconds", 30}};
+    }
+    static QVariantMap streamItem(const QString &id = "stream-1")
+    {
+        return {{"id", id}, {"kind", "stream"}, {"title", "last night"}, {"channel", "alpha"}, {"url", "https://stream.kick.com/a/master.m3u8"}, {"seconds", 7200}};
+    }
+private slots:
+    void playlistsHoldChannelsClipsAndStreamsWithTheirOwnRules()
+    {
+        fresh();
+        KickClient k(&net);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        QVERIFY(k.createPlaylist("", "channels").isEmpty());                         // a name is needed
+        QVERIFY(k.createPlaylist("x", "videos").isEmpty());                          // a known kind is needed
+        const QString favs = k.createPlaylist("  my favourites  " + QString(100, 'x'), "channels");
+        QVERIFY(!favs.isEmpty());
+        QCOMPARE(edited.count(), 1);                                                  // worth saving
+        QVariantMap pl = k.playlists().first().toMap();
+        QVERIFY(pl.value("name").toString().startsWith("my favourites"));
+        QCOMPARE(pl.value("name").toString().size(), int(KickClient::kMaxNameLength)); // long names are cut
+        QCOMPARE(pl.value("kind").toString(), QString("channels"));
+        // channels: names or links, normalised, never twice
+        QVERIFY(k.addToPlaylist(favs, {{"slug", "https://kick.com/NightOwl"}}));
+        QVERIFY(!k.addToPlaylist(favs, {{"slug", "nightowl"}}));
+        QVERIFY(!k.addToPlaylist(favs, {{"slug", "not a name!"}}));
+        QVERIFY(k.addToPlaylist(favs, {{"slug", "loudone"}}));
+        QVERIFY(k.isInPlaylist(favs, "NIGHTOWL"));
+        QCOMPARE(k.playlistsHolding("loudone").size(), 1);
+        QCOMPARE(k.playlists().first().toMap().value("count").toInt(), 2);
+        // a clip goes in a clips playlist, a stream in a streams one, and only addresses this app may use
+        const QString clips = k.createPlaylist("funny", "clips");
+        const QString streams = k.createPlaylist("long ones", "streams");
+        QVERIFY(k.addToPlaylist(clips, clipItem()));
+        QVERIFY(!k.addToPlaylist(clips, clipItem()));                                 // not twice
+        QVERIFY(!k.addToPlaylist(clips, streamItem()));                               // wrong kind
+        QVERIFY(!k.addToPlaylist(streams, clipItem("clip_b")));
+        QVERIFY(k.addToPlaylist(streams, streamItem()));
+        QVERIFY(!k.addToPlaylist(clips, clipItem("clip_c", "https://evil.example/c.m3u8")));
+        QVERIFY(!k.addToPlaylist(clips, clipItem("clip_d", "http://clips.kick.com/c.m3u8")));
+        QVERIFY(!k.addToPlaylist(favs, clipItem()));                                  // a channels playlist holds channels
+        QVERIFY(!k.addToPlaylist("nope", {{"slug", "x"}}));
+        // rename, remove, delete
+        QVERIFY(k.renamePlaylist(clips, "very funny"));
+        QVERIFY(!k.renamePlaylist(clips, "   "));
+        QVERIFY(!k.renamePlaylist("nope", "x"));
+        QVERIFY(k.removeFromPlaylist(favs, "loudone"));
+        QVERIFY(!k.removeFromPlaylist(favs, "loudone"));
+        QVERIFY(k.removeFromPlaylist(clips, "clip_a"));
+        QVERIFY(k.deletePlaylist(streams));
+        QVERIFY(!k.deletePlaylist(streams));
+        QCOMPARE(k.playlists().size(), 2);
+    }
+    void playlistsKeepWithinLimitsAndRespectBlocks()
+    {
+        fresh();
+        KickClient k(&net);
+        QString id;
+        for (int i = 0; i < KickClient::kMaxPlaylists; ++i) { id = k.createPlaylist(QString("p%1").arg(i), "channels"); QVERIFY(!id.isEmpty()); }
+        QVERIFY(k.createPlaylist("one too many", "channels").isEmpty());
+        QCOMPARE(k.playlists().size(), int(KickClient::kMaxPlaylists));
+        for (int i = 0; i < KickClient::kMaxItems; ++i) QVERIFY(k.addToPlaylist(id, {{"slug", QString("chan%1").arg(i)}}));
+        QVERIFY(!k.addToPlaylist(id, {{"slug", "onemore"}}));
+        // a blocked streamer stays hidden everywhere, and comes back when unblocked (the playlist keeps it)
+        KickClient b(&net);
+        const QString pl = b.createPlaylist("favs", "channels");
+        b.addToPlaylist(pl, {{"slug", "alpha"}}); b.addToPlaylist(pl, {{"slug", "bravo"}});
+        QCOMPARE(b.playlists().first().toMap().value("count").toInt(), 2);
+        b.block("alpha");
+        QCOMPARE(b.playlists().first().toMap().value("count").toInt(), 1);
+        QCOMPARE(b.playlists().first().toMap().value("items").toList().first().toMap().value("slug").toString(), QString("bravo"));
+        b.unblock("alpha");
+        QCOMPARE(b.playlists().first().toMap().value("count").toInt(), 2);
+    }
+    void playlistsSurviveSavingAndAreSafeAgainstJunk()
+    {
+        fresh();
+        KickClient k(&net);
+        const QString favs = k.createPlaylist("favs", "channels");
+        k.addToPlaylist(favs, {{"slug", "alpha"}}); k.addToPlaylist(favs, {{"slug", "bravo"}});
+        const QString clips = k.createPlaylist("clips", "clips");
+        k.addToPlaylist(clips, clipItem());
+        KickClient again(&net);
+        again.setListsJson(k.listsJson());
+        QCOMPARE(again.playlists().size(), 2);
+        QCOMPARE(again.playlists()[0].toMap().value("count").toInt(), 2);
+        QCOMPARE(again.playlists()[1].toMap().value("items").toList().first().toMap().value("title").toString(), QString("a funny moment"));
+        QVERIFY(again.isInPlaylist(favs, "bravo"));
+        // junk in the saved file: bad kinds, nameless, duplicate ids, other sites' addresses, wrong item shapes are all left out
+        QJsonArray bad;
+        bad.append(QJsonObject{{"id", "a"}, {"name", "ok"}, {"kind", "channels"}, {"items", QJsonArray{"x1", "x1", "not a name!", 5, QJsonObject{}}}});
+        bad.append(QJsonObject{{"id", "b"}, {"name", ""}, {"kind", "channels"}});
+        bad.append(QJsonObject{{"id", "c"}, {"name", "k"}, {"kind", "videos"}});
+        bad.append(QJsonObject{{"id", "a"}, {"name", "dup"}, {"kind", "channels"}});
+        bad.append(QJsonObject{{"id", "d"}, {"name", "clips"}, {"kind", "clips"}, {"items", QJsonArray{
+            QJsonObject{{"id", "ok"}, {"url", "https://clips.kick.com/a.m3u8"}}, QJsonObject{{"id", "evil"}, {"url", "https://evil.example/a.m3u8"}}, "string", QJsonObject{{"url", "https://clips.kick.com/z"}}}}});
+        bad.append("not even an object");
+        KickClient j(&net);
+        j.setListsJson(QJsonObject{{"playlists", bad}});
+        QCOMPARE(j.playlists().size(), 2);
+        QCOMPARE(j.playlists()[0].toMap().value("count").toInt(), 1);               // only "x1", once
+        QCOMPARE(j.playlists()[1].toMap().value("count").toInt(), 1);               // only the clip on Kick's own host
+        j.setListsJson(QJsonObject{{"playlists", "garbage"}});
+        QVERIFY(j.playlists().isEmpty());
+    }
+    void aChannelPlaylistShowsWhoIsLiveWhenAsked()
+    {
+        fresh();
+        ft->handler = [](const QUrl &u) -> NetReply {
+            if (u.path() == "/api/v2/channels/liveone") return ok(channelJson("liveone", true));
+            if (u.path() == "/api/v2/channels/quiet") return ok(channelJson("quiet", false));
+            NetReply e; e.status = 404; e.error = "the site answered 404"; return e;
+        };
+        KickClient k(&net);
+        k.open();
+        const QString id = k.createPlaylist("favs", "channels");
+        k.addToPlaylist(id, {{"slug", "liveone"}}); k.addToPlaylist(id, {{"slug", "quiet"}});
+        const int before = ft->asked.size();
+        QCOMPARE(k.playlists().first().toMap().value("items").toList().first().toMap().value("checked").toBool(), false);   // nothing is looked up by itself
+        QTest::qWait(50);
+        QCOMPARE(ft->asked.size(), before);
+        k.refreshPlaylist(id);
+        QTRY_VERIFY(k.playlists().first().toMap().value("items").toList().first().toMap().value("checked").toBool());
+        QTRY_VERIFY(k.playlists().first().toMap().value("items").toList().last().toMap().value("checked").toBool());
+        QCOMPARE(k.playlists().first().toMap().value("items").toList().first().toMap().value("live").toBool(), true);
+        QCOMPARE(k.playlists().first().toMap().value("items").toList().last().toMap().value("live").toBool(), false);
+    }
+
+private slots:
     // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
     void liveClipDownloadAgainstTheRealServers()
     {

@@ -190,6 +190,13 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
+### Playlists
+
+**playlists** on the streams page holds your own lists. Name one, choose what it holds (channels, clips or past streams) and press **create**. Then on a channel's page
+use **+ playlist** to put the channel in a channels list; on the clips and past streams tabs use **+ list** on a row. Open a playlist to go to a channel, to see who is live
+now (it only looks when you press **who's live now**), or to download and play the clips and streams in it. Playlists are saved with your profile on this device and are never sent anywhere
+(guests keep nothing). A streamer you blocked stays hidden in your playlists. Up to 50 playlists with up to 500 items each.
+
 ### Downloading past streams and clips
 
 Open a channel in Kick and use the tabs **live**, **past streams** and **clips**. Pick a quality (480p, 720p or best), then press **download** on

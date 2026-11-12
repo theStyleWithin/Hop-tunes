@@ -2526,6 +2526,103 @@ private slots:
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 
+    // Playlists: favourite channels (and clips, past streams) kept in the profile; "+ playlist" adds, open lists, remove and delete work.
+    void playlistsKeepFavouriteChannelsClipsAndStreamsOnThisDevice()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        OfflineDownloads *dl = m_app->downloads();
+        struct Restore { App *app; KickClient *k; ~Restore() { for (const QVariant &p : k->playlists()) k->deletePlaylist(p.toMap().value("id").toString()); app->downloads()->reload(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); k->clearBlocked(); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(click("kickPlaylistsButton"));
+        QTRY_VERIFY(item("kickPlaylistsPage") && item("kickPlaylistsPage")->isVisible());
+        QVERIFY(item("kickPlaylistsEmpty")->isVisible());
+        // a name is needed
+        QVERIFY(click("kickCreatePlaylist"));
+        QTRY_VERIFY(item("kickPlaylistMessage") && item("kickPlaylistMessage")->isVisible());
+        QCOMPARE(kick->playlists().size(), 0);
+        // a channel playlist
+        item("kickNewPlaylistName")->setProperty("text", QStringLiteral("favourites"));
+        QVERIFY(click("kickCreatePlaylist"));
+        QTRY_COMPARE(kick->playlists().size(), 1);
+        const QString favs = kick->playlists().first().toMap().value("id").toString();
+        QTRY_VERIFY(item("kickPlaylistRow_" + favs.toUtf8()) && item("kickPlaylistRow_" + favs.toUtf8())->isVisible());
+        QVERIFY(!item("kickPlaylistsEmpty")->isVisible());
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("playlists").toArray().size() == 1);   // saved with the profile
+        // add a channel from its page: the menu lists the channel playlists
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickAddToPlaylist") && item("kickAddToPlaylist")->isVisible());
+        QVERIFY(click("kickAddToPlaylist"));
+        QTRY_VERIFY(item("kickPlMenu_" + favs.toUtf8()));
+        QVERIFY(click("kickPlMenu_" + favs.toUtf8()));
+        QTRY_VERIFY(kick->isInPlaylist(favs, "alpha"));
+        // it shows in the playlist, with its live state only when asked for
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickPlaylistsButton"));
+        QTRY_VERIFY(item("kickPlaylistOpen_" + favs.toUtf8()));
+        QVERIFY(click("kickPlaylistOpen_" + favs.toUtf8()));
+        QTRY_VERIFY(item("kickPlaylistPage")->isVisible());
+        QTRY_VERIFY(item("kickPlItem_alpha") && item("kickPlItem_alpha")->isVisible());
+        QVERIFY(!item("kickPlEmpty")->isVisible());
+        shot("kick-playlist-channels");
+        QVERIFY(click("kickPlRemove_alpha"));
+        QTRY_VERIFY(!kick->isInPlaylist(favs, "alpha"));
+        QTRY_VERIFY(item("kickPlEmpty")->isVisible());
+        // a clips playlist: add a clip from a channel's clips tab, download it from the playlist, play it
+        QTest::keyClick(w, Qt::Key_Escape);                                            // to the playlists
+        QTRY_VERIFY(item("kickPlaylistsPage")->isVisible());
+        item("kickNewPlaylistName")->setProperty("text", QStringLiteral("funny"));
+        QVERIFY(click("kickNewPlaylistKind_clips"));
+        QVERIFY(click("kickCreatePlaylist"));
+        QTRY_COMPARE(kick->playlists().size(), 2);
+        const QString clips = kick->playlists().last().toMap().value("id").toString();
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickTab_clips") && item("kickTab_clips")->isVisible());
+        QVERIFY(click("kickTab_clips"));
+        QTRY_VERIFY(item("kickAddPl_clip_abc") && item("kickAddPl_clip_abc")->isVisible());
+        QVERIFY(click("kickAddPl_clip_abc"));
+        QTRY_VERIFY(item("kickPlMenu_" + clips.toUtf8()));
+        QVERIFY(item("kickPlMenu_" + favs.toUtf8()) == nullptr);                       // only playlists that can hold a clip
+        QVERIFY(click("kickPlMenu_" + clips.toUtf8()));
+        QTRY_VERIFY(kick->isInPlaylist(clips, "clip_abc"));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickPlaylistsButton"));
+        QTRY_VERIFY(item("kickPlaylistOpen_" + clips.toUtf8()));
+        QVERIFY(click("kickPlaylistOpen_" + clips.toUtf8()));
+        QTRY_VERIFY(item("kickPlItem_clip_abc") && item("kickPlItem_clip_abc")->isVisible());
+        QVERIFY(click("kickPlDownload_clip_abc"));
+        QTRY_COMPARE_WITH_TIMEOUT(dl->item("clip_abc").value("state").toString(), QString("done"), 8000);
+        QTRY_VERIFY(item("kickPlPlay_clip_abc") && item("kickPlPlay_clip_abc")->isVisible());
+        shot("kick-playlist-clips");
+        dl->remove("clip_abc");
+        // delete needs a second press
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickPlaylistsPage")->isVisible());
+        QVERIFY(click("kickPlaylistDelete_" + clips.toUtf8()));
+        QCOMPARE(kick->playlists().size(), 2);                                         // the first press only asks
+        QTRY_VERIFY(item("kickPlaylistDelete_" + clips.toUtf8())->property("text").toString().contains("really"));
+        QVERIFY(click("kickPlaylistDelete_" + clips.toUtf8()));
+        QTRY_COMPARE(kick->playlists().size(), 1);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
     // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played
     // from disk; deleting removes them.
     void pastStreamsAndClipsCanBeDownloadedListedAndPlayedFromDisk()

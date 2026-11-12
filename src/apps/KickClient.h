@@ -3,6 +3,7 @@
 
 #include "net/AppNet.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QRegularExpression>
@@ -22,6 +23,7 @@ class KickClient : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList streams READ streams NOTIFY streamsChanged)           // what the grid shows (blocked and 18+ already left out)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY categoriesChanged)  // {id, name, slug}
+    Q_PROPERTY(QVariantList playlists READ playlists NOTIFY listsChanged)          // {id, name, kind, count, items}: channels, clips or past streams
     Q_PROPERTY(QVariantList following READ following NOTIFY listsChanged)         // {slug, name, avatar, live, viewers, checked}
     Q_PROPERTY(QStringList blocked READ blocked NOTIFY listsChanged)
     Q_PROPERTY(QVariantList pastStreams READ pastStreams NOTIFY libraryChanged)
@@ -58,6 +60,7 @@ public:
     QVariantList streams() const { return m_streams; }
     QVariantList categories() const { return m_categories; }
     QVariantList following() const;
+    QVariantList playlists() const;
     QStringList blocked() const { return m_blocked; }
     QVariantMap channel() const { return m_channel; }
     QVariantList pastStreams() const { return m_past; }     // finished broadcasts of the open channel (when asked for)
@@ -100,9 +103,20 @@ public:
     Q_INVOKABLE bool isFollowing(const QString &slug) const { return m_following.contains(normalize(slug)); }
     Q_INVOKABLE bool block(const QString &slug);
     Q_INVOKABLE void unblock(const QString &slug);
+    // playlists, kept on this computer only (in the profile): "channels" holds channels, "clips" and "streams" hold clips / past streams
+    static constexpr int kMaxPlaylists = 50, kMaxItems = 500, kMaxNameLength = 60;
+    Q_INVOKABLE QString createPlaylist(const QString &name, const QString &kind);          // the new id, or "" (empty name, unknown kind, too many)
+    Q_INVOKABLE bool renamePlaylist(const QString &id, const QString &name);
+    Q_INVOKABLE bool deletePlaylist(const QString &id);
+    Q_INVOKABLE bool addToPlaylist(const QString &id, const QVariantMap &item);          // a channel: {slug}; a clip / past stream: {id, kind, title, channel, url, thumb, seconds}
+    Q_INVOKABLE bool removeFromPlaylist(const QString &id, const QString &key);          // key = the slug, or the clip / stream id
+    Q_INVOKABLE bool isInPlaylist(const QString &id, const QString &key) const;
+    Q_INVOKABLE QVariantList playlistsHolding(const QString &key) const;                 // ids of the playlists that have it (for "add to playlist" menus)
+    Q_INVOKABLE void refreshPlaylist(const QString &id);                                  // live dots for a channel playlist: one lookup each, only when asked
     Q_INVOKABLE bool isBlocked(const QString &slug) const { return m_blocked.contains(normalize(slug)); }
     Q_INVOKABLE void clearBlocked();
     QJsonObject listsJson() const;                 // saved with the profile
+    QJsonArray playlistsJson() const;
     void setListsJson(const QJsonObject &o);       // loaded with the profile
 
     // ---- the replies, as plain functions (unit-tested with fixtures) ----
@@ -157,6 +171,10 @@ private:
     quint64 m_libraryGen = 0;
     QVariantMap m_dev;           // the developer's stream when it is live (else empty)
     QStringList m_following, m_blocked;
+    struct Playlist { QString id, name, kind; QVariantList items; };
+    QList<Playlist> m_playlists;
+    bool channelInPlaylists(const QString &slug) const;
+    void refreshChannels(const QStringList &todo);
     QString m_chatMode = QStringLiteral("off");
     bool m_signedIn = false;
     QHash<QString, QVariantMap> m_status;   // slug -> {live, viewers, name, avatar, checked}
