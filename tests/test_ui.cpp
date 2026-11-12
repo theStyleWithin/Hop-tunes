@@ -23,6 +23,9 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
+#include <QTcpSocket>
+#include <QHostAddress>
+#include <QUrlQuery>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickItem>
@@ -84,7 +87,10 @@ public:
         asked << url;
         NetReply r; r.status = 200;
         if (failMode == 2 || (failMode == 1 && url.host() == "web.kick.com")) { r.status = 503; r.error = QStringLiteral("the site answered 503"); done(r); return; }
-        if (url.host() == "web.kick.com") r.body = list();
+        if (url.host() == "id.kick.com" && url.path() == "/oauth/token") r.body = "{\"access_token\":\"acc-ui\",\"refresh_token\":\"ref-ui\",\"expires_in\":3600}";
+        else if (url.host() == "api.kick.com" && url.path() == "/public/v1/users") r.body = "{\"data\":[{\"name\":\"UiTester\",\"user_id\":7}]}";
+        else if (url.host() == "id.kick.com" && url.path() == "/oauth/revoke") r.body = "{}";
+        else if (url.host() == "web.kick.com") r.body = list();
         else if (url.path() == "/api/search") {
             const QString w = QUrlQuery(url).queryItemValue("searched_word", QUrl::FullyDecoded).toLower();
             QJsonArray a;
@@ -2817,7 +2823,7 @@ private slots:
         QVERIFY(click("subTab_apps"));
         QVERIFY(click("appTile_kick"));
         QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
-        QVERIFY(item("kickSignIn") == nullptr);                                        // there is no sign-in any more
+        QVERIFY(!item("kickSignInPage")->isVisible() && !item("kickSignIn")->isVisible());   // the TV-code sign-in is gone; the official one lives on its own page
         QVERIFY(item("kickAccountButton") && item("kickAccountButton")->isVisible());
         QCOMPARE(item("kickAccountButton")->property("text").toString(), QString("add channels"));
         QVERIFY(click("kickAccountButton"));
@@ -2850,6 +2856,71 @@ private slots:
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
         kick->deletePlaylist(pl);
         for (const auto &p : kick->playlists()) kick->deletePlaylist(p.toMap().value("id").toString());
+    }
+
+    // Kick's official sign-in page: your own Kick app (client ID and secret), the redirect address to register, then sign in / sign out.
+    void theKickAccountPageSignsInWithYourOwnKickApp()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        kick->auth()->setPort(0);
+        struct Restore { App *app; KickClient *k; ~Restore() { k->cancelSignIn(); k->signOut(); k->setAppCredentials(QString(), QString()); k->auth()->clearAll(); k->auth()->setPort(KickAuth::kDefaultPort); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(u.host() != "id.kick.com" && u.host() != "api.kick.com", qPrintable(u.toString()));   // not signed in: the sign-in sites are never contacted
+        QVERIFY(item("kickSignInButton") && item("kickSignInButton")->isVisible());
+        QVERIFY(click("kickSignInButton"));
+        QTRY_VERIFY(item("kickSignInPage") && item("kickSignInPage")->isVisible());
+        QVERIFY(item("kickRedirectUrl")->property("text").toString().endsWith("/callback"));
+        QVERIFY(!item("kickSignIn")->property("enabled").toBool());                    // needs the person's own Kick app first
+        QVERIFY(!item("kickSaveApp")->property("enabled").toBool());
+        shot("kick-signin-setup");
+        item("kickClientId")->setProperty("text", QStringLiteral("my-client-id"));
+        item("kickClientSecret")->setProperty("text", QStringLiteral("my-secret"));
+        QTRY_VERIFY(item("kickSaveApp")->property("enabled").toBool());
+        QVERIFY(click("kickSaveApp"));
+        QTRY_VERIFY(kick->appConfigured());
+        QVERIFY(item("kickClientSecret")->property("text").toString().isEmpty());      // the secret is not left on the screen
+        QTRY_VERIFY(item("kickSignIn")->property("enabled").toBool());
+        // start it (without opening a browser here) and play the browser with a plain socket
+        kick->startSignIn();
+        QTRY_VERIFY(item("kickSignInUrl") && item("kickSignInUrl")->isVisible());
+        QVERIFY(item("kickSignInUrl")->property("text").toString().startsWith("https://id.kick.com/oauth/authorize?"));
+        shot("kick-signin-waiting");
+        const QUrl url(kick->signInUrl());
+        const QString state = QUrlQuery(url).queryItemValue("state", QUrl::FullyDecoded);
+        const quint16 port = quint16(QUrl(kick->redirectUrl()).port());
+        QTcpSocket sock;
+        QByteArray answer;
+        QObject::connect(&sock, &QTcpSocket::readyRead, &sock, [&] { answer += sock.readAll(); });
+        sock.connectToHost(QHostAddress::LocalHost, port);
+        QTRY_VERIFY(sock.state() == QAbstractSocket::ConnectedState);
+        sock.write("GET /callback?code=ui-code&state=" + QUrl::toPercentEncoding(state) + " HTTP/1.1\r\nHost: localhost\r\n\r\n");
+        QTRY_VERIFY(answer.contains("go back to Hop-tunes"));
+        QTRY_VERIFY(kick->signedIn());
+        QTRY_VERIFY(item("kickAccountName") && item("kickAccountName")->isVisible());
+        QTRY_VERIFY(item("kickAccountName")->property("text").toString().contains("UiTester"));
+        QVERIFY(!item("kickSignIn")->isVisible());
+        shot("kick-signin-signed-in");
+        // kept with the profile (this device only)
+        QTRY_VERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("access").toString() == QLatin1String("acc-ui"));
+        QVERIFY(click("kickSignOut"));
+        QTRY_VERIFY(!kick->signedIn());
+        QTRY_VERIFY(item("kickSignIn")->isVisible());
+        QVERIFY(kick->appConfigured());                                                // the app's ID and secret stay for the next sign-in
+        QTRY_VERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("access").toString().isEmpty());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 
     // Search follows the spelling as you type (after a short pause), closest names first; no need to press enter.
