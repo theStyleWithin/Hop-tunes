@@ -49,7 +49,7 @@ jobs:
       - name: Arch build tools and dependencies
         run: |
           for i in 1 2 3; do pacman -Syu --noconfirm --needed base-devel git namcap cmake ninja \
-            qt6-base qt6-declarative taglib sqlite glib2 gstreamer gst-plugins-base gst-plugins-good \
+            qt6-base qt6-declarative taglib sqlite libwebp glib2 gstreamer gst-plugins-base gst-plugins-good \
             hicolor-icon-theme && break; sleep 15; done
       - uses: actions/download-artifact@v4
         with: { name: release-kit, path: kit }

@@ -163,6 +163,9 @@ Apps are small programs that are part of Hop-tunes and open inside its window. T
 Kick is the first app. It browses the live streams on kick.com in a wide menu and plays the one you pick, inside Hop-tunes. Nothing plays
 until you click a stream, and no Kick account is needed.
 
+On an Android phone the app is the same (apps are switched on in **settings → apps settings** there too): one column of streams, the picture on top
+of the watch page and the chat below it. The Android app carries the internet permission for this; the video plays through Android's own player.
+
 - **Allowing it.** The first time you open Kick it asks, and lists exactly which sites it will contact (kick.com, web.kick.com,
   images.kick.com, stream.kick.com, files.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
   You can take the permission back any time in **settings → apps settings → kick**. It uses the internet only while the app is open, and the bar at

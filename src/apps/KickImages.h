@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "apps/WebpDecode.h"
 #include "net/AppNet.h"
 
 #include <QImage>
@@ -29,6 +30,7 @@ public:
                 if (!self) return;
                 if (!r.error.isEmpty()) { self->finish(QImage(), r.error); return; }
                 QImage img = QImage::fromData(r.body);
+                if (img.isNull()) img = decodeWebp(r.body);        // Kick's pictures are WebP: read them here when Qt has no plugin for it
                 if (img.isNull()) { self->finish(QImage(), QStringLiteral("the picture could not be read")); return; }
                 self->finish(img, QString());
             });

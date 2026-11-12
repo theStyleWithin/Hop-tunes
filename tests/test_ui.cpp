@@ -2332,6 +2332,61 @@ private slots:
         m_app->setAppsEnabled(false);
         QVERIFY(click("subTab_music"));
     }
+
+    // Kick on a phone held upright: one column of cards that fits the screen, touch-sized, and on the watch page the picture on top
+    // with the chat under it.
+    void kickAppFitsAPhone()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        const QSize before = w->size();
+        struct Restore {
+            QWindow *w; QSize size; App *app; KickClient *k;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); k->clearBlocked(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        w->setProperty("forceMobile", true);
+        w->resize(390, 844);
+        QTRY_COMPARE(w->width(), 390);
+        QTRY_VERIFY(item("pillTab_apps") != nullptr);
+        item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));
+        QTRY_VERIFY(item("appTile_kick") && item("appTile_kick")->isVisible());
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QQuickItem *app = item("kickApp");
+        // everything stays inside the width of the screen: search, the filters (wrapped), the cards
+        QTRY_VERIFY(item("kickSearch")->width() > 300);
+        for (const char *name : {"kickSearch", "kickSort", "kickLanguage", "kickMature", "kickRefresh", "kickCard_alpha"}) {
+            QQuickItem *it = item(name);
+            QVERIFY2(it && it->isVisible(), name);
+            const QPointF a = it->mapToItem(app, QPointF(0, 0)), b = it->mapToItem(app, QPointF(it->width(), 0));
+            QVERIFY2(a.x() >= -1 && b.x() <= app->width() + 1, name);
+        }
+        QTRY_VERIFY(item("kickCard_alpha")->width() > 280);                          // one wide card per row, not a sliver
+        QTRY_VERIFY(item("kickCard_bravo")->y() > item("kickCard_alpha")->y());      // the next one is under it
+        QVERIFY(item("kickCardMenu_alpha")->isVisible());                            // no hover on a touch screen: the menu is always there
+        shot("phone-kick-browse");
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QTRY_VERIFY(item("kickChannelState")->isVisible());
+        QVERIFY(click("kickChat_pretend"));
+        QTRY_VERIFY(item("kickPretendChat")->isVisible());
+        const QPointF stateTop = item("kickChannelState")->mapToItem(app, QPointF(0, 0));
+        const QPointF chatTop = item("kickPretendChat")->mapToItem(app, QPointF(0, 0));
+        QTRY_VERIFY(item("kickPretendChat")->mapToItem(app, QPointF(0, 0)).y() > item("kickChannelState")->mapToItem(app, QPointF(0, item("kickChannelState")->height())).y() - 1);
+        Q_UNUSED(stateTop); Q_UNUSED(chatTop);
+        shot("phone-kick-watch");
+        QTRY_VERIFY2(item("kickPretendChat")->width() > 280, qPrintable(QString::number(item("kickPretendChat")->width())));
+        QVERIFY(item("kickFollowButton")->mapToItem(app, QPointF(item("kickFollowButton")->width(), 0)).x() <= app->width() + 1);
+        QVERIFY(item("kickBlockButton")->mapToItem(app, QPointF(item("kickBlockButton")->width(), 0)).x() <= app->width() + 1);
+        QVERIFY(click("kickChat_off"));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+    }
 #endif
 
 #ifdef HOPTUNES_NET_APPS
