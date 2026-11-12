@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-11-12: Giving power back to the ordinary
+
 ### Added
 - **Kick, the first app (desktop).** Browse the live streams on kick.com in a wide menu (nothing plays until you pick one), watch one inside Hop-tunes, and keep a follow list and a block list that stay on this computer. It is off until you switch apps on in settings, and it asks before it uses the internet, listing exactly which sites it contacts. Everything it reaches goes through one gateway: secure connections only, only those sites, no cookies, no referrer, nothing kept after you close the app, and a bar that shows what is connected with a disconnect button. When the developer (gamehopper) is live, that stream takes the first card of the default feed, marked "developer" (your block and 18+ choices still win). No Kick account is needed, and Hop-tunes never follows or subscribes for you on Kick.
 

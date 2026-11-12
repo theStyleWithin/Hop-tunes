@@ -169,7 +169,7 @@ Item {
             underline: true
             Layout.fillWidth: true; Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 4
             namePrefix: "pillTab_"
-            items: [["music", "music"], ["videos", "videos"]].concat(hop.sectionKinds.map(function (k) { return [k, k] }))
+            items: [["music", "music"], ["videos", "videos"]].concat(hop.sectionKinds.map(function (k) { return [k, k] })).concat(hop.appsEnabled ? [["apps", "apps"]] : [])
             current: root.collectionTab
             onPicked: function (v) { root.collectionTab = v }
         }
@@ -389,7 +389,7 @@ Item {
             }
         }
         AppsView {
-            visible: root.collectionTab === "apps" && !root.phone && hop.appsEnabled
+            visible: root.collectionTab === "apps" && hop.appsEnabled
             onOpenApp: function (id) { appHost.open(id) }
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18

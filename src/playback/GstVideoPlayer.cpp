@@ -19,6 +19,7 @@ GstVideoPlayer::~GstVideoPlayer() = default;
 bool GstVideoPlayer::available() { return false; }
 void GstVideoPlayer::attachSurface(QQuickItem *) {}
 bool GstVideoPlayer::openSource(const QString &, qint64) { return false; }
+bool GstVideoPlayer::openStream(const QString &) { return false; }
 void GstVideoPlayer::play() {}
 void GstVideoPlayer::pause() {}
 void GstVideoPlayer::togglePause() {}

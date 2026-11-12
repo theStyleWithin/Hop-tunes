@@ -79,6 +79,14 @@ Item {
         background: Item {}
     }
 
+    Label {   // nothing to open here yet (the phone has no apps so far: Kick is for the desktop for now)
+        objectName: "appsEmpty"
+        visible: root.apps.length === 0
+        anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 8 }
+        wrapMode: Text.WordWrap; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(16) }
+        text: "there are no apps for this device yet. the first app, kick, is for the desktop for now."
+    }
+
     Flickable {
         anchors.fill: parent
         contentHeight: grid.height + 24

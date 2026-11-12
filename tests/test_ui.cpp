@@ -2180,14 +2180,25 @@ private slots:
         QTRY_VERIFY(host->property("active").toBool());
         w->setProperty("view", QStringLiteral("now playing"));                 // leaving the collection closes it
         QTRY_VERIFY(!host->property("active").toBool());
-        // phones: no apps tab yet
+        // phones: the apps pill comes after podcasts once apps are switched on (and not before)
         const QSize before = w->size();
+        m_app->setAppsEnabled(false);
         w->setProperty("view", QStringLiteral("collection"));
         w->setProperty("forceMobile", true);
         w->resize(412, 880);
         QTRY_COMPARE(w->width(), 412);
         QTRY_VERIFY(!item("subTab_apps")->isVisible());
-        QVERIFY(item("pillTab_apps") == nullptr);
+        QVERIFY(item("pillTab_apps") == nullptr);                               // off by default
+        m_app->setAppsEnabled(true);
+        QTRY_VERIFY(item("pillTab_apps") != nullptr);
+        QVERIFY(item("pillTab_podcasts") != nullptr);
+        QTRY_VERIFY(item("pillTab_apps")->x() > item("pillTab_podcasts")->x());   // after podcasts (once the row has laid itself out)
+        item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));   // (the pill row scrolls sideways: the pill itself can be off the edge)
+        QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
+        shot("phone-apps-tab");
+        if (!m_app->netAppsBuilt()) QVERIFY(item("appsEmpty")->isVisible());
+        m_app->setAppsEnabled(false);
+        QTRY_VERIFY(item("pillTab_apps") == nullptr);
         w->setProperty("forceMobile", false);
         w->resize(before);
         QTRY_COMPARE(w->size(), before);
