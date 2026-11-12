@@ -153,6 +153,33 @@ to that section, and a folder in one section is never read for another.
 
 Everything here is private to the profile and works offline. Hop-tunes only reads these folders.
 
+## Apps (off until you switch them on)
+
+Apps are small programs that are part of Hop-tunes and open inside its window. They are **off** until you turn them on: go to
+**settings → apps settings** and choose **show the apps tab**. A fresh Hop-tunes shows every other tab and stays exactly as quiet as before.
+
+### Kick
+
+Kick is the first app. It browses the live streams on kick.com in a wide menu and plays the one you pick, inside Hop-tunes. Nothing plays
+until you click a stream, and no Kick account is needed.
+
+- **Allowing it.** The first time you open Kick it asks, and lists exactly which sites it will contact (kick.com, web.kick.com,
+  images.kick.com, files.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
+  You can take the permission back any time in **settings → apps settings → kick**. It uses the internet only while the app is open, and the bar at
+  the bottom shows what is connected, with a **disconnect** button. Nothing is kept on disk and no cookies are stored.
+- **Browsing.** Search, pick a category, sort by most viewers or featured, choose a language. Adult (18+) streams are hidden unless you tick
+  **show 18+**. **show more** and **refresh** are buttons: Hop-tunes never loads more in the background.
+- **Following and blocking stay on this computer.** The **follow** button on a stream's page (or in a card's ⋯ menu) adds the channel to a
+  list in your profile; it is shown as a "following" row with live dots, checked only when you open the app or press refresh. **Block** hides
+  a streamer for good from every list and search; unblock them in **settings → apps settings**. Hop-tunes never follows, subscribes or
+  does anything on your behalf on Kick.
+- **Chat.** Beside the stream you choose **none** (the start) or **pretend**: a made-up chat where nobody is real (it says so). Kick's own
+  live chat is planned for people who choose to sign in to Kick; signing in is optional and never needed to watch.
+- **Good to know.** Kick's website addresses are not an official, promised interface and can change; if something stops working, Kick says
+  why in plain words. Pictures are WebP: on Linux they need Qt's image-format plugins (`qt6-imageformats` on Arch, `qt6-image-formats-plugins`
+  on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
+  a stream does not play there, the message under the picture says so.
+
 ## Playing music
 
 - **Double-click** a song (or press `Enter`) to play from there. **Play album** plays the

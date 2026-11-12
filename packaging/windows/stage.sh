@@ -31,6 +31,9 @@ done
 for p in qoffscreen; do
     [ -e "$STAGE/platforms/$p.dll" ] || { mkdir -p "$STAGE/platforms"; cp "$QT_ROOT/plugins/platforms/$p.dll" "$STAGE/platforms/" 2>/dev/null || true; }
 done
+# HTTPS for the Kick app (Schannel, and OpenSSL where Qt has it): windeployqt copies the tls plugins, this makes sure.
+mkdir -p "$STAGE/tls"
+for f in "$QT_ROOT"/plugins/tls/*.dll; do [ -e "$f" ] && cp -n "$f" "$STAGE/tls/" || true; done
 # JPEG, WebP, GIF... for the pictures section and album art.
 mkdir -p "$STAGE/imageformats"
 for f in "$QT_ROOT"/plugins/imageformats/q{jpeg,webp,gif,ico,tiff,svg}.dll; do [ -e "$f" ] && cp -n "$f" "$STAGE/imageformats/" || true; done

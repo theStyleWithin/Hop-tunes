@@ -135,6 +135,14 @@ Renders of the Android app's phone layout (it adapts to tablets, and has a side 
 
 > **[Download the Android app (`Hop-tunes-android.apk`)](https://github.com/theStyleWithin/Hop-tunes/releases/latest/download/Hop-tunes-android.apk)**: the newest one, for Android 7 and newer on 64-bit phones and tablets. Open the file to install it; Android may ask you to allow installs from this source.
 
+## Apps (new, off by default)
+
+Hop-tunes now has an **apps** tab: small programs built into Hop-tunes that open inside its window. It is off until you switch it on in
+**settings → apps settings**, so nothing changes for anyone who doesn't want it. The first app, **Kick**, browses and watches live streams
+from kick.com with a follow list and a block list that stay on your computer (no Kick account needed). It is the one part of Hop-tunes that
+uses the internet: it asks first, lists the exact sites it contacts, connects only while it is open, and every connection goes through one
+gateway (secure connections, only those sites, no cookies, nothing kept). Details in the [user guide](docs/user-guide.md#apps-off-until-you-switch-them-on).
+
 ## Building
 
 Hop-tunes is C++20 + Qt 6 (QML) + GStreamer + TagLib + SQLite.

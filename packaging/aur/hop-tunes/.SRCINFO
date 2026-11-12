@@ -11,6 +11,7 @@ pkgbase = hop-tunes
 	makedepends = ninja
 	depends = qt6-base
 	depends = qt6-declarative
+	depends = qt6-imageformats
 	depends = taglib
 	depends = sqlite
 	depends = glib2
