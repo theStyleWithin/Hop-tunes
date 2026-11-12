@@ -118,7 +118,7 @@ FocusScope {
     function goBack() {
         if (videoFullscreen) { videoFullscreen = false; return true }
         if (pending !== null) { pending = null; return true }
-        if (page === "account") { kick.cancelSignIn(); page = "browse"; return true }
+        if (page === "account") { page = "browse"; return true }
         if (page === "categories") { kick.searchCategories(""); page = "browse"; return true }
         if (page === "play") { page = "downloads"; playId = ""; return true }
         if (page === "playlist") { page = "playlists"; playlistId = ""; return true }
@@ -384,7 +384,7 @@ FocusScope {
                     background: Item {}
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
-                PlainButton { objectName: "kickAccountButton"; implicitHeight: 36; text: kick.signedIn ? "account (signed in)" : "account"; onClicked: root.page = "account" }
+                PlainButton { objectName: "kickAccountButton"; implicitHeight: 36; text: "add channels"; onClicked: root.page = "account" }
                 PlainButton { objectName: "kickPlaylistsButton"; text: "playlists" + (kick.playlists.length > 0 ? " (" + kick.playlists.length + ")" : ""); implicitHeight: 36
                               onClicked: { root.playlistMessage = ""; root.page = "playlists" } }
                 PlainButton { objectName: "kickDownloadsButton"; visible: !!hop.downloads; implicitHeight: 36
@@ -828,56 +828,51 @@ FocusScope {
             }
         }
 
-        // ---- account: optional. Watching never needs it; it only lets you import who you follow on Kick ----
+        // ---- add channels: paste names or kick.com links (no account, no sign-in, nothing is sent to Kick) ----
         ColumnLayout {
+            id: addPage
             objectName: "kickAccountPage"
             anchors.fill: parent; visible: root.page === "account"; spacing: 10
+            property string target: ""           // "" = the follow list, otherwise the id of a playlist of channels
             RowLayout {
                 spacing: 12; Layout.fillWidth: true
                 PlainButton { objectName: "kickAccountBack"; text: root.phone ? "\u2039" : "\u2039 streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
-                Label { text: "kick account"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
+                Label { text: "add channels"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
                 Item { Layout.fillWidth: true }
             }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
-                    text: "signing in is optional: you never need a kick account to watch, search, download or record. it only lets you import the channels you follow on kick into the follow list on this device. nothing is ever followed or changed on kick." }
+                    text: "paste channel names or kick.com links, one per line (or separated by spaces or commas), and they are added to your list on this device. there is no sign-in and nothing is sent to kick: this is only text you paste. tip: copy your followed channels from kick.com and paste them here." }
+            RowLayout {
+                Layout.fillWidth: true; spacing: 8
+                Label { text: "add to"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+                Chip { objectName: "kickImportTarget_follow"; text: "followed"; on: addPage.target === ""; onClicked: addPage.target = "" }
+                Repeater {
+                    model: kick.playlists.filter(p => p.kind === "channels")
+                    delegate: Chip { required property var modelData; objectName: "kickImportTarget_" + modelData.id; text: modelData.name; on: addPage.target === modelData.id
+                                     onClicked: addPage.target = modelData.id }
+                }
+            }
+            ScrollView {
+                Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 120
+                TextArea {
+                    id: importText
+                    objectName: "kickImportText"
+                    placeholderText: "gamehopper\nhttps://kick.com/some_channel\nanother_name"
+                    wrapMode: TextEdit.Wrap; selectByMouse: true
+                    color: Theme.text; placeholderTextColor: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(15) }
+                    background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } }
+                }
+            }
+            RowLayout {
+                spacing: 10
+                PlainButton { objectName: "kickImportAdd"; text: "add them"; primary: true; implicitHeight: 40; enabled: importText.text.trim() !== ""
+                              onClicked: { kick.importNames(importText.text, addPage.target); if (kick.importMessage.indexOf("added") === 0) importText.clear() } }
+                PlainButton { objectName: "kickImportClear"; text: "clear"; implicitHeight: 40; onClicked: importText.clear() }
+            }
+            Label { objectName: "kickImportMessage"; visible: kick.importMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; text: kick.importMessage
+                    font { family: Theme.font; pixelSize: Theme.fs(14) } }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
-                    text: "how it works: hop-tunes shows a 6-digit code and an address on kick.com; you open it in your own browser (signed in to kick) and approve it there. hop-tunes never sees your password. kick then gives hop-tunes a session token, which is kept only in this profile on this device (a guest keeps it only until the session ends) and is sent only to kick.com. sign out forgets it. this uses kick's unofficial TV sign-in, so it may stop working if kick changes it." }
-            // signed out
-            ColumnLayout {
-                visible: !kick.signedIn; Layout.fillWidth: true; spacing: 8
-                PlainButton { objectName: "kickSignIn"; visible: kick.signInState === ""; text: "sign in with a code"; primary: true; implicitHeight: 40; onClicked: kick.startSignIn() }
-                ColumnLayout {
-                    visible: kick.signInState === "waiting"; Layout.fillWidth: true; spacing: 6
-                    Label { text: "your code"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 1 } }
-                    Label { objectName: "kickSignInCode"; text: kick.signInCode; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(40); weight: Font.Light; letterSpacing: 6 } }
-                    Label { text: "open this address in your browser, signed in to kick, and approve:"; color: Theme.text2; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(13) } }
-                    TextEdit { objectName: "kickSignInUrl"; text: kick.signInUrl; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere; Layout.fillWidth: true
-                               color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(13) } }
-                    RowLayout {
-                        spacing: 10
-                        PlainButton { objectName: "kickOpenSignIn"; text: "open it"; implicitHeight: 38; onClicked: Qt.openUrlExternally(kick.signInUrl) }
-                        PlainButton { objectName: "kickCancelSignIn"; text: "cancel"; implicitHeight: 38; onClicked: kick.cancelSignIn() }
-                    }
-                }
-                Label { objectName: "kickSignInMessage"; visible: kick.signInMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap
-                        color: kick.signInState === "error" ? Theme.danger : Theme.muted; text: kick.signInMessage; font { family: Theme.font; pixelSize: Theme.fs(14) } }
-                PlainButton { objectName: "kickSignInAgain"; visible: kick.signInState === "error"; text: "try again"; implicitHeight: 38; onClicked: { kick.cancelSignIn(); kick.startSignIn() } }
-            }
-            // signed in
-            ColumnLayout {
-                visible: kick.signedIn; Layout.fillWidth: true; spacing: 8
-                Label { objectName: "kickAccountName"; text: "signed in as " + kick.accountName; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) } }
-                RowLayout {
-                    spacing: 10
-                    PlainButton { objectName: "kickImportFollows"; text: kick.importing ? "reading…" : "import my follows"; primary: true; implicitHeight: 40; enabled: !kick.importing; onClicked: kick.importFollows() }
-                    PlainButton { objectName: "kickSignOut"; text: "sign out"; danger: true; implicitHeight: 40; onClicked: kick.signOut() }
-                }
-                Label { objectName: "kickImportMessage"; visible: kick.importMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; text: kick.importMessage
-                        font { family: Theme.font; pixelSize: Theme.fs(14) } }
-                Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
-                        text: "imported channels go into your follow list on this device and stay there even after you sign out. a streamer you blocked is not imported." }
-            }
-            Item { Layout.fillHeight: true }
+                    text: "a streamer you blocked is not added. channels already in the list are not doubled." }
         }
 
         // ---- playlists: favourite channels (and clips / past streams), kept on this device only ----

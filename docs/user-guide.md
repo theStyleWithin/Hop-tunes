@@ -181,7 +181,7 @@ of the watch page and the chat below it. The Android app carries the internet pe
   a streamer for good from every list and search; unblock them in **settings → apps settings**. Hop-tunes never follows, subscribes or
   does anything on your behalf on Kick.
 - **Chat.** Beside the stream you choose **none** (the start) or **pretend**: a made-up chat where nobody is real (it says so). Kick's own
-  live chat is planned for people who choose to sign in to Kick; signing in is optional and never needed to watch.
+  live chat is not built.
 - **Good to know.** Kick's website addresses are not an official, promised interface and can change; if something stops working, Kick says
   why in plain words. Pictures are WebP: on Linux they need Qt's image-format plugins (`qt6-imageformats` on Arch, `qt6-image-formats-plugins`
   on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
@@ -190,13 +190,12 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
-### Signing in to Kick (optional) and importing your follows
+### Adding many channels at once
 
-Nothing in the Kick app needs an account. If you want your Kick follows in Hop-tunes' own follow list, open **account** on the streams page and press **sign in with a code**:
-Hop-tunes shows a 6-digit code and an address on kick.com. Open the address in your browser (signed in to Kick) and approve it; Hop-tunes never sees your password. Then press
-**import my follows**: the channels you follow on Kick are added to your follow list on this device (channels you blocked here are skipped, and nothing is followed or changed on
-Kick). The session token Kick gives Hop-tunes is kept only in your profile on this device (a guest keeps it until the session ends) and is sent only to kick.com. **sign out**
-forgets it; the imported follows stay. This uses Kick's unofficial TV sign-in, so it may stop working if Kick changes it.
+There is no sign-in. To bring your favourite channels in, press **add channels** on the streams page, paste channel names or kick.com links (one per line, or separated by
+spaces or commas) and press **add them**. They go into your follow list on this device, or into one of your playlists of channels (pick it under **add to**). A streamer you
+blocked is skipped, channels already in the list are not doubled, and words that are not channel names are counted and left out. This is only text you paste: nothing is sent
+to Kick, and nothing is followed or changed on Kick. Tip: open the channels you follow on kick.com, copy the page and paste it here.
 
 ### Opening a stream, full screen and the pop-out window (phone)
 

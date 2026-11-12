@@ -45,6 +45,10 @@ public:
     void abortAll() override { ++aborted; }
 };
 
+template <class T> constexpr bool HasMethod = requires(T t) { t.method; };      // (a request that can name a method, carry a body or add headers)
+template <class T> constexpr bool HasBody = requires(T t) { t.body; };
+template <class T> constexpr bool HasHeaders = requires(T t) { t.headers; };
+
 NetReply ok(const QByteArray &json) { NetReply r; r.status = 200; r.body = json; return r; }
 
 QString firstSlug(const KickClient &k) { const QVariantList l = k.streams(); return l.isEmpty() ? QString() : l.first().toMap().value("slug").toString(); }
@@ -432,12 +436,11 @@ private slots:
         QVERIFY(k2.streams().isEmpty());
     }
 
-    void chatIsNoneOrPretendUnlessSignedIn()
+    void chatIsNoneOrPretend()
     {
         KickClient k(&net);
         QCOMPARE(k.chatMode(), QString("off"));                                    // the start: no chat
-        QVERIFY(!k.signedIn());
-        k.setChatMode("kick");                                                     // Kick's own chat needs a sign-in the person chose
+        k.setChatMode("kick");                                                     // Kick's own chat is not built: it stays none
         QCOMPARE(k.chatMode(), QString("off"));
         k.setChatMode("whatever");
         QCOMPARE(k.chatMode(), QString("off"));
@@ -449,7 +452,7 @@ private slots:
         KickClient other(&net);
         other.setListsJson(QJsonObject{{"chatMode", "pretend"}});
         QCOMPARE(other.chatMode(), QString("pretend"));
-        other.setListsJson(QJsonObject{{"chatMode", "kick"}});                     // a saved "kick" without a sign-in falls back to none
+        other.setListsJson(QJsonObject{{"chatMode", "kick"}});                     // a saved "kick" falls back to none
         QCOMPARE(other.chatMode(), QString("off"));
         other.setListsJson(QJsonObject{{"chatMode", 5}});
         QCOMPARE(other.chatMode(), QString("off"));
@@ -1281,182 +1284,85 @@ private slots:
     }
 
 private slots:
-    // ---- optional sign-in (TV link) and importing the follow list ----
-    static QByteArray headerOf(const NetLimits &l, const char *name)
+    // ---- adding many channels at once from pasted text (no sign-in, nothing is sent) ----
+    void appsCanOnlyAskNeverSendABodyOrACredential()
     {
-        for (const auto &h : l.headers) if (h.first.compare(name, Qt::CaseInsensitive) == 0) return h.second;
-        return {};
+        // the gateway has no way to POST, to add headers or to carry a token: an app can only GET from its declared sites
+        static_assert(!HasMethod<NetLimits>, "no request method");
+        static_assert(!HasBody<NetLimits>, "no request body");
+        static_assert(!HasHeaders<NetLimits>, "no custom headers");
+        QVERIFY(!AppNet::hostsFor("kick").contains("id.kick.com"));                  // and no sign-in site is on the list
     }
-private slots:
-    void accountRequestsAreOnlyForTheFewSignInAddresses()
+
+    void pastedNamesAndLinksJoinTheFollowListWithoutAskingKick()
     {
-        QString why;
-        QVERIFY(AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/tv/link/authenticate/abc-123"), &why));
-        QVERIFY(AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/v1/user"), &why));
-        QVERIFY(AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/v2/channels/followed?cursor=2"), &why));
-        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/v2/channels/alpha"), &why));       // an ordinary address: no body, no headers
-        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("https://web.kick.com/api/v1/user"), &why));             // only kick.com itself
-        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("https://evil.example/api/v1/user"), &why));
-        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("http://kick.com/api/v1/user"), &why));
-        QVERIFY(!AppNet::accountUrlAllowed("someapp", QUrl("https://kick.com/api/v1/user"), &why));
-        // through the gateway: refused before anything is sent
         fresh();
-        auto tryIt = [&](const QUrl &u, NetLimits l) { QString err; bool got = false; net.get("kick", u, [&](NetReply r) { err = r.error; got = true; }, l); for (int i = 0; i < 300 && !got; ++i) QTest::qWait(10); return got ? err : QStringLiteral("no answer"); };
-        NetLimits post; post.method = "POST"; post.body = "{}";
-        QVERIFY(!tryIt(QUrl("https://kick.com/api/v2/channels/alpha"), post).isEmpty());                          // a POST to an ordinary address
-        QCOMPARE(ft->asked.size(), 0);
-        NetLimits cookie; cookie.headers.append(qMakePair(QByteArray("Cookie"), QByteArray("a=b")));
-        QVERIFY(!tryIt(QUrl("https://kick.com/api/v1/user"), cookie).isEmpty());                                 // a header that is not on the list
-        NetLimits crlf; crlf.headers.append(qMakePair(QByteArray("Authorization"), QByteArray("Bearer x\r\nX-Evil: 1")));
-        QVERIFY(!tryIt(QUrl("https://kick.com/api/v1/user"), crlf).isEmpty());
-        NetLimits put; put.method = "PUT";
-        QVERIFY(!tryIt(QUrl("https://kick.com/api/v1/user"), put).isEmpty());
-        QCOMPARE(ft->asked.size(), 0);
-        NetLimits good; good.headers.append(qMakePair(QByteArray("Authorization"), QByteArray("Bearer x")));
+        KickClient k(&net);
         ft->handler = [](const QUrl &) { return ok("{}"); };
-        QVERIFY(tryIt(QUrl("https://kick.com/api/v1/user"), good).isEmpty());
-        QCOMPARE(ft->asked.size(), 1);
-        // a redirect is never followed for an account request (the token would travel with it)
-        ft->handler = [](const QUrl &) { NetReply r; r.status = 302; r.location = QUrl("https://web.kick.com/elsewhere"); return r; };
-        QVERIFY(tryIt(QUrl("https://kick.com/api/v1/user"), good).contains("redirect"));
-        QCOMPARE(ft->asked.size(), 2);
+        k.open();
+        QTest::qWait(20);
+        const int asked = ft->asked.size();
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        const QVariantMap r = k.importNames("alpha, Bravo\nhttps://kick.com/Charlie_1?x=1  kick.com/delta-4 \n  alpha  ");
+        QCOMPARE(r.value("added").toInt(), 4);
+        QCOMPARE(r.value("already").toInt(), 1);                                       // "alpha" twice in one paste
+        QVERIFY(k.isFollowing("alpha") && k.isFollowing("bravo") && k.isFollowing("charlie_1") && k.isFollowing("delta-4"));
+        QVERIFY(k.importMessage().startsWith("added 4"));
+        QCOMPARE(edited.size(), 1);                                                    // worth saving
+        QCOMPARE(ft->asked.size(), asked);                                             // nothing was sent
+        // again: nothing new, nothing doubled, nothing saved
+        const QVariantMap again = k.importNames("alpha bravo");
+        QCOMPARE(again.value("added").toInt(), 0);
+        QCOMPARE(again.value("already").toInt(), 2);
+        QCOMPARE(edited.size(), 1);
+        // a blocked streamer stays blocked, and words that are not names are said so
+        QVERIFY(k.block("echo"));
+        const QVariantMap mixed = k.importNames("echo foxtrot !!! this-is-way-too-long-to-be-a-kick-channel-name hello?");
+        QCOMPARE(mixed.value("added").toInt(), 1);
+        QCOMPARE(mixed.value("blocked").toInt(), 1);
+        QCOMPARE(mixed.value("skipped").toInt(), 3);
+        QVERIFY(k.isFollowing("foxtrot") && !k.isFollowing("echo"));
+        QVERIFY(k.importMessage().contains("blocked") && k.importMessage().contains("not channel names"));
+        // an empty paste says what to do
+        k.importNames("   ");
+        QVERIFY(k.importMessage().contains("paste some channel names"));
+        // one paste is at most 500 words
+        QStringList many; for (int i = 0; i < 700; ++i) many << QString("name%1").arg(i);
+        const QVariantMap big = k.importNames(many.join(' '));
+        QCOMPARE(big.value("added").toInt(), 500);
+        QCOMPARE(big.value("skipped").toInt(), 200);
     }
-    void signingInWithACodeIsOptionalAndTheTokenStaysInTheProfile()
+
+    void pastedChannelsCanGoIntoAChannelPlaylistInstead()
     {
         fresh();
-        int polls = 0;
-        QStringList urls;
-        QString uuid;
-        ft->handler = [&](const QUrl &u) -> NetReply {
-            urls << u.toString();
-            if (u.path().startsWith("/api/tv/link/authenticate/")) {
-                uuid = u.path().section('/', -1);
-                if (++polls < 3) { NetReply w; w.status = 404; w.error = "the site answered 404"; return w; }       // not approved yet
-                return ok("{\"token\":\"tok-SECRET-123\"}");
-            }
-            if (u.path() == "/api/v1/user") return ok("{\"username\":\"GamerOne\"}");
-            return ok("{}");
-        };
         KickClient k(&net);
-        k.setSignInPollMs(10);
-        QSignalSpy edited(&k, &KickClient::listsEdited);
         k.open();
-        QVERIFY(!k.signedIn());
-        QVERIFY(k.signInState().isEmpty());                                              // nothing asks to sign in by itself
-        k.startSignIn();
-        QCOMPARE(k.signInState(), QString("waiting"));
-        QVERIFY(QRegularExpression("^\\d{6}$").match(k.signInCode()).hasMatch());
-        QVERIFY(k.signInUrl().startsWith("https://kick.com/tv/login?uuid="));
-        QVERIFY(k.signInUrl().contains("code=" + k.signInCode()));
-        QTRY_VERIFY_WITH_TIMEOUT(k.signedIn(), 5000);
-        QCOMPARE(polls, 3);
-        QCOMPARE(k.signInState(), QString());
-        QTRY_COMPARE(k.accountName(), QString("GamerOne"));
-        QVERIFY(uuid.size() >= 32 && k.signInUrl().isEmpty());                          // the code is used up
-        // how it asked: a POST with the code, the page's own Origin / Referer, and no token yet
-        int pollIndex = -1;
-        for (int i = 0; i < ft->asked.size(); ++i) if (ft->asked[i].path().startsWith("/api/tv/link/authenticate/")) { pollIndex = i; break; }
-        QVERIFY(pollIndex >= 0);
-        const NetLimits poll = ft->limitsAsked[pollIndex];
-        QCOMPARE(poll.method, QByteArray("POST"));
-        QVERIFY(poll.body.contains("\"key\""));
-        QCOMPARE(headerOf(poll, "Origin"), QByteArray("https://kick.com"));
-        QVERIFY(headerOf(poll, "Authorization").isEmpty());
-        QCOMPARE(headerOf(ft->limitsAsked.last(), "Authorization"), QByteArray("Bearer tok-SECRET-123"));    // the identity lookup carries it
-        for (const QString &u : urls) QVERIFY2(!u.contains("SECRET"), qPrintable(u));                          // never in an address
-        // saved with the profile and restored; sign out forgets it
-        QVERIFY(edited.count() >= 1);
+        const QString pl = k.createPlaylist("favourites", "channels");
+        const QString clips = k.createPlaylist("funny", "clips");
+        QVERIFY(!pl.isEmpty() && !clips.isEmpty());
+        const QVariantMap r = k.importNames("alpha bravo alpha", pl);
+        QCOMPARE(r.value("added").toInt(), 2);
+        QCOMPARE(r.value("already").toInt(), 1);
+        QVERIFY(k.isInPlaylist(pl, "alpha") && k.isInPlaylist(pl, "bravo"));
+        QVERIFY(!k.isFollowing("alpha"));                                              // the follow list was not touched
+        // only a playlist of channels takes channels; a wrong or unknown one adds nothing
+        QCOMPARE(k.importNames("zulu", clips).value("added").toInt(), 0);
+        QVERIFY(k.importMessage().contains("playlist of channels"));
+        QCOMPARE(k.importNames("zulu", "nope").value("added").toInt(), 0);
+        QVERIFY(!k.isInPlaylist(clips, "zulu"));
+    }
+
+    void anOldSavedSignInIsNeitherReadNorKept()
+    {
+        fresh();
+        KickClient k(&net);
+        // an earlier version kept a sign-in token in the profile: it is ignored, and the next save leaves it out
+        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "tok-OLD-SECRET"}, {"name", "me"}}}, {"following", QJsonArray{"keep_me"}}});
+        QVERIFY(k.isFollowing("keep_me"));
         const QJsonObject saved = k.listsJson();
-        QCOMPARE(saved.value("account").toObject().value("token").toString(), QString("tok-SECRET-123"));
-        KickClient again(&net);
-        again.setListsJson(saved);
-        QVERIFY(again.signedIn());
-        QCOMPARE(again.accountName(), QString("GamerOne"));
-        k.signOut();
-        QVERIFY(!k.signedIn());
-        QVERIFY(k.listsJson().value("account").toObject().isEmpty());
-        KickClient guest(&net);
-        guest.setListsJson(QJsonObject{});                                              // a guest or a profile that never signed in
-        QVERIFY(!guest.signedIn());
-        guest.setListsJson(QJsonObject{{"account", QJsonObject{{"token", QString(5000, 'x')}}}});   // junk
-        QVERIFY(!guest.signedIn());
-    }
-    void aSignInThatIsCancelledOrNeverApprovedStopsAsking()
-    {
-        fresh();
-        ft->handler = [](const QUrl &) { NetReply w; w.status = 404; w.error = "the site answered 404"; return w; };
-        KickClient k(&net);
-        k.setSignInPollMs(10);
-        k.open();
-        k.startSignIn();
-        QTRY_VERIFY_WITH_TIMEOUT(ft->asked.size() >= 3, 3000);
-        k.cancelSignIn();
-        QVERIFY(k.signInState().isEmpty() && k.signInCode().isEmpty());
-        const int n = ft->asked.size();
-        QTest::qWait(100);
-        QVERIFY(ft->asked.size() <= n + 1);                                              // (one already on the way may still come back, then nothing)
-        QVERIFY(!k.signedIn());
-        // errors that are not "not approved yet" end it with a plain message
-        ft->handler = [](const QUrl &) { NetReply w; w.status = 500; w.error = "the site answered 500"; return w; };
-        k.startSignIn();
-        QTRY_COMPARE_WITH_TIMEOUT(k.signInState(), QString("error"), 3000);
-        QVERIFY(k.signInMessage().contains("500"));
-        // signed in already, or the app closed: nothing starts
-        k.close();
-        k.startSignIn();
-        QVERIFY(k.signInState() == "error" || k.signInState().isEmpty());
-    }
-    void followsAreImportedOnceIntoTheLocalListAndStayThere()
-    {
-        fresh();
-        QList<QUrl> urls;
-        ft->handler = [&urls](const QUrl &u) -> NetReply {
-            urls << u;
-            if (u.path() == "/api/v2/channels/followed") {
-                if (u.query().isEmpty()) return ok("{\"channels\":[{\"channel_slug\":\"a\"},{\"slug\":\"b\"},{\"user\":{\"username\":\"c\"}},{\"channel_slug\":\"not a name!\"}],\"nextCursor\":\"2\"}");
-                return ok("{\"channels\":[{\"channel_slug\":\"d\"},{\"channel_slug\":\"a\"}],\"nextCursor\":\"\"}");
-            }
-            return ok("{}");
-        };
-        KickClient k(&net);
-        k.open();
-        QTest::qWait(50);
-        urls.clear();
-        k.importFollows();                                                                // not signed in: nothing is asked
-        QTest::qWait(50);
-        QCOMPARE(urls.size(), 0);
-        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "tok-1"}, {"name", "me"}}}, {"following", QJsonArray{"a"}}, {"blocked", QJsonArray{"b"}}});
-        QVERIFY(k.signedIn());
-        QSignalSpy edited(&k, &KickClient::listsEdited);
-        k.importFollows();
-        QTRY_VERIFY_WITH_TIMEOUT(!k.importing() && !k.importMessage().startsWith("reading"), 5000);
-        QCOMPARE(urls.size(), 2);                                                         // two pages
-        int followedRequests = 0;
-        for (int i = 0; i < ft->asked.size(); ++i)
-            if (ft->asked[i].path() == "/api/v2/channels/followed") { ++followedRequests; QCOMPARE(headerOf(ft->limitsAsked[i], "Authorization"), QByteArray("Bearer tok-1")); }
-        QCOMPARE(followedRequests, 2);
-        QStringList following;
-        for (const QVariant &v : k.following()) following << v.toMap().value("slug").toString();
-        following.sort();
-        QCOMPARE(following, (QStringList{"a", "c", "d"}));                               // a was already there; b is blocked and stays out; the bad name is dropped
-        QVERIFY(k.isBlocked("b") && !k.isFollowing("b"));
-        QVERIFY(k.importMessage().contains("imported 2") && k.importMessage().contains("blocked"));
-        QVERIFY(edited.count() >= 1);
-        QVERIFY(k.listsJson().value("following").toArray().contains("c"));               // kept locally, saved with the profile
-        // signing out keeps the imported list (it is yours now) but forgets the token
-        k.signOut();
-        QVERIFY(k.isFollowing("c") && !k.signedIn());
-        // an expired sign-in is said plainly and signs out
-        ft->handler = [](const QUrl &) { NetReply e; e.status = 401; e.error = "the site answered 401"; return e; };
-        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "old"}}}});
-        k.importFollows();
-        QTRY_VERIFY_WITH_TIMEOUT(!k.importing() && k.importMessage().contains("expired"), 5000);
-        QVERIFY(!k.signedIn());
-        // an answer of an unknown shape is said plainly
-        ft->handler = [](const QUrl &) { return ok("{\"oops\":true}"); };
-        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "t"}}}});
-        k.importFollows();
-        QTRY_VERIFY_WITH_TIMEOUT(!k.importing() && k.importMessage().contains("not in a form"), 5000);
+        QVERIFY(!saved.contains("account"));
+        QVERIFY(!QJsonDocument(saved).toJson().contains("tok-OLD-SECRET"));
     }
 
 private slots:

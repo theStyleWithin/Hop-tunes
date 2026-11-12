@@ -61,14 +61,7 @@ class KickClient : public QObject {
     // What the chat beside the stream is: "off" (the start), "pretend" (Hop-tunes' made-up chat, nobody in it is real) or "kick" (Kick's own
     // live chat). Kick's chat is only for someone who chose to sign in to Kick; without that the choice is no chat or the pretend one.
     Q_PROPERTY(QString chatMode READ chatMode WRITE setChatMode NOTIFY chatModeChanged)
-    Q_PROPERTY(bool signedIn READ signedIn NOTIFY signedInChanged)
-    Q_PROPERTY(QString accountName READ accountName NOTIFY signedInChanged)
-    Q_PROPERTY(QString signInState READ signInState NOTIFY signInChanged)           // "" | "waiting" | "error"
-    Q_PROPERTY(QString signInCode READ signInCode NOTIFY signInChanged)             // the 6 digits to confirm on kick.com
-    Q_PROPERTY(QString signInUrl READ signInUrl NOTIFY signInChanged)               // the kick.com page to open (in the browser) to approve
-    Q_PROPERTY(QString signInMessage READ signInMessage NOTIFY signInChanged)
-    Q_PROPERTY(QString importMessage READ importMessage NOTIFY signInChanged)
-    Q_PROPERTY(bool importing READ importing NOTIFY signInChanged)
+    Q_PROPERTY(QString importMessage READ importMessage NOTIFY importChanged)       // what the last paste-import did
 public:
     static constexpr const char *kApp = "kick";
     static constexpr int kPageSize = 36;
@@ -124,15 +117,7 @@ public:
     static QString healthFrom(const QList<int> &lastOutcomes);
     QString chatMode() const { return m_chatMode; }
     void setChatMode(const QString &mode);
-    bool signedIn() const { return m_signedIn; }      // optional: nothing needs it to watch. Signing in only lets you import your follow list.
-    QString accountName() const { return m_accountName; }
-    QString signInState() const { return m_signInState; }
-    QString signInCode() const { return m_signInCode; }
-    QString signInUrl() const { return m_signInUrl; }
-    QString signInMessage() const { return m_signInMessage; }
     QString importMessage() const { return m_importMessage; }
-    bool importing() const { return m_importing; }
-    void setSignInPollMs(int ms) { m_signInPollMs = ms; }   // tests
 
     // the app opens: the gateway opens and the first list is asked for. close() drops everything still on the way.
     Q_INVOKABLE void open();
@@ -148,10 +133,8 @@ public:
     // Optional sign-in, the way Kick's TV-link page works: Hop-tunes shows a 6-digit code and an address on kick.com; you approve it there
     // (signed in to Kick in your own browser) and Hop-tunes is given a session token, kept only in this profile. Nothing needs it to
     // watch; it only lets you import your follow list into the local follow list. Unofficial: Kick can change it.
-    Q_INVOKABLE void startSignIn();
-    Q_INVOKABLE void cancelSignIn();
-    Q_INVOKABLE void signOut();                    // forgets the token (the local follow list stays)
-    Q_INVOKABLE void importFollows();              // reads who you follow on Kick once, and adds them to the local follow list
+    // adds many channels at once from pasted names or kick.com links: to the follow list, or to a playlist of channels (its id). Nothing is sent to Kick.
+    Q_INVOKABLE QVariantMap importNames(const QString &text, const QString &playlistId = QString());
     Q_INVOKABLE void refreshFollowing();           // one lookup per followed channel, only when asked
 
     // the two lists kept on this computer only
@@ -214,8 +197,7 @@ signals:
     void contactedChanged();
     void openChanged();
     void chatModeChanged();
-    void signedInChanged();
-    void signInChanged();
+    void importChanged();
 
 private:
     void requestList(bool more);
@@ -272,15 +254,7 @@ private:
     bool channelInPlaylists(const QString &slug) const;
     void refreshChannels(const QStringList &todo);
     QString m_chatMode = QStringLiteral("off");
-    bool m_signedIn = false;
-    QString m_token, m_accountName, m_signInState, m_signInCode, m_signInUrl, m_signInUuid, m_signInMessage, m_importMessage;
-    bool m_importing = false;
-    int m_signInPollMs = 3000, m_signInPolls = 0, m_signInFailures = 0;
-    quint64 m_signInGen = 0;
-    void pollSignIn(quint64 gen);
-    void finishSignIn(const QString &token);
-    void importPage(quint64 gen, QString cursor, int page, QStringList slugs);
-    void setSignInState(const QString &state, const QString &message);
+    QString m_importMessage;
     QHash<QString, QVariantMap> m_status;   // slug -> {live, viewers, name, avatar, checked}
     int m_followChecks = 0;
 };
