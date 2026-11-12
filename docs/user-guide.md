@@ -184,6 +184,14 @@ until you click a stream, and no Kick account is needed.
   on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
   a stream does not play there, the message under the picture says so.
 
+### Kick offline storage
+
+In **settings → apps settings → kick offline storage** you choose how much room Kick may use for things kept offline (downloaded past streams, clips and
+recordings: these arrive in later versions). Type a number, pick MB or GB and press **set limit**; you can change it whenever you like. The meter shows how
+much is used. When the limit is reached, or the drive is nearly full (Hop-tunes always leaves 1 GB free), new downloads pause and nothing is deleted:
+raise the limit or remove something yourself. **choose a drive or folder** keeps it somewhere else, for example a bigger drive: what is already stored is
+moved over, and if that drive is unplugged later Hop-tunes just says it is not available until it is back. It is saved with your profile (guests keep nothing).
+
 ## Playing music
 
 - **Double-click** a song (or press `Enter`) to play from there. **Play album** plays the
