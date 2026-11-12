@@ -36,6 +36,7 @@ Item {
     }
     readonly property bool appSearchable: appHost.canSearch
     readonly property bool appSearching: appHost.searching
+    readonly property bool appTheatre: appHost.theatre
     function appSearch() { return appHost.search() }
     onVisibleChanged: if (!visible) appHost.close()
     // switching apps off in settings takes the tab away (and an app that is open with it)
