@@ -167,7 +167,7 @@ On an Android phone the app is the same (apps are switched on in **settings → 
 of the watch page and the chat below it. The Android app carries the internet permission for this; the video plays through Android's own player.
 
 - **Allowing it.** The first time you open Kick it asks, and lists exactly which sites it will contact (kick.com, web.kick.com,
-  images.kick.com, stream.kick.com, files.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
+  images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
   You can take the permission back any time in **settings → apps settings → kick**. It uses the internet only while the app is open, and the bar at
   the bottom shows what is connected, with a **disconnect** button. Nothing is kept on disk and no cookies are stored.
 - **Browsing.** Search, pick a category, sort by most viewers or featured, choose a language. Adult (18+) streams are hidden unless you tick
@@ -186,6 +186,15 @@ of the watch page and the chat below it. The Android app carries the internet pe
   why in plain words. Pictures are WebP: on Linux they need Qt's image-format plugins (`qt6-imageformats` on Arch, `qt6-image-formats-plugins`
   on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
   a stream does not play there, the message under the picture says so.
+
+### Downloading past streams and clips
+
+Open a channel in Kick and use the tabs **live**, **past streams** and **clips**. Pick a quality (480p, 720p or best), then press **download** on
+a finished stream or a clip; the list shows about how big it will be first (a long stream at 720p is several GB). Downloads are kept inside Hop-tunes' own
+offline folder (see below), not as loose video files, and count against your offline storage limit. The **downloads** button on the streams page opens the
+list of what you have: **play** it from your device, **pause**, **resume** or **delete** it. Downloads only run while the Kick app is open: leaving the app
+pauses them and opening it again carries on. If the limit is reached or the drive is nearly full a download stops and says why; nothing is deleted. Only
+finished streams can be downloaded; recording a live stream comes later. These are personal copies for watching offline: please respect the streamer's and Kick's rules.
 
 ### Kick offline storage
 

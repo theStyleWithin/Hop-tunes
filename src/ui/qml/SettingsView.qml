@@ -548,7 +548,7 @@ Item {
         Label {
             visible: hop.netAppsBuilt && hop.appsEnabled
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
-            text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
+            text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
         ColumnLayout {   // the kick lists

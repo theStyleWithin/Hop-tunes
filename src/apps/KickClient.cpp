@@ -355,6 +355,9 @@ void KickClient::openChannel(const QString &slugOrLink)
     if (slug.isEmpty()) { setError(QStringLiteral("that is not a kick channel name or link")); return; }
     if (!ready()) return;
     const quint64 gen = ++m_channelGen;
+    ++m_libraryGen;
+    m_past.clear(); m_clips.clear(); m_libraryState.clear();
+    emit libraryChanged();
     m_channel = QVariantMap{{QStringLiteral("slug"), slug}, {QStringLiteral("name"), slug}, {QStringLiteral("loading"), true}};
     emit channelChanged();
     setError(QString());
@@ -378,6 +381,9 @@ void KickClient::openChannel(const QString &slugOrLink)
 void KickClient::closeChannel()
 {
     ++m_channelGen;
+    ++m_libraryGen;
+    m_past.clear(); m_clips.clear(); m_libraryState.clear();
+    emit libraryChanged();
     m_channel.clear();
     emit channelChanged();
 }
@@ -491,6 +497,101 @@ void KickClient::refreshFollowing()
         });
     };
     for (int i = 0; i < 3; ++i) (*step)();       // three at a time
+}
+
+// ---- a channel's finished streams and clips (for downloading) ----------------------------------------------
+
+bool KickClient::parsePastStreams(const QByteArray &json, QVariantList *out)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(json);
+    if (!doc.isArray()) return false;
+    out->clear();
+    for (const QJsonValue &v : doc.array()) {
+        const QJsonObject o = v.toObject();
+        if (o.value(QStringLiteral("is_live")).toBool()) continue;
+        const QString source = o.value(QStringLiteral("source")).toString();
+        const QString id = QString::number(o.value(QStringLiteral("id")).toVariant().toLongLong());
+        if (id == QLatin1String("0") || source.isEmpty()) continue;
+        const double seconds = o.value(QStringLiteral("duration")).toDouble() / 1000.0;        // Kick gives milliseconds here
+        if (seconds <= 0) continue;
+        QVariantMap m;
+        m[QStringLiteral("id")] = QStringLiteral("stream-") + id;
+        m[QStringLiteral("kind")] = QStringLiteral("stream");
+        m[QStringLiteral("title")] = o.value(QStringLiteral("session_title")).toString();
+        m[QStringLiteral("url")] = source;
+        m[QStringLiteral("thumb")] = o.value(QStringLiteral("thumbnail")).toObject().value(QStringLiteral("src")).toString();
+        m[QStringLiteral("seconds")] = seconds;
+        m[QStringLiteral("date")] = o.value(QStringLiteral("start_time")).toString();
+        m[QStringLiteral("viewers")] = o.value(QStringLiteral("viewer_count")).toInt();
+        m[QStringLiteral("mature")] = o.value(QStringLiteral("is_mature")).toBool();
+        m[QStringLiteral("estimate")] = double(seconds * 3484773.0 / 8.0);                       // ~ the 720p60 rate Kick uses: shown as "about"
+        out->append(m);
+    }
+    return true;
+}
+
+bool KickClient::parseClips(const QByteArray &json, QVariantList *out)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(json);
+    if (!doc.isObject() || !doc.object().value(QStringLiteral("clips")).isArray()) return false;
+    out->clear();
+    for (const QJsonValue &v : doc.object().value(QStringLiteral("clips")).toArray()) {
+        const QJsonObject o = v.toObject();
+        const QString id = o.value(QStringLiteral("id")).toString();
+        const QString url = o.value(QStringLiteral("clip_url")).toString();
+        if (id.isEmpty() || url.isEmpty()) continue;
+        QVariantMap m;
+        m[QStringLiteral("id")] = id;
+        m[QStringLiteral("kind")] = QStringLiteral("clip");
+        m[QStringLiteral("title")] = o.value(QStringLiteral("title")).toString();
+        m[QStringLiteral("url")] = url;
+        m[QStringLiteral("thumb")] = o.value(QStringLiteral("thumbnail_url")).toString();
+        m[QStringLiteral("seconds")] = o.value(QStringLiteral("duration")).toDouble();
+        m[QStringLiteral("date")] = o.value(QStringLiteral("created_at")).toString();
+        m[QStringLiteral("viewers")] = o.value(QStringLiteral("views")).toInt();
+        m[QStringLiteral("mature")] = o.value(QStringLiteral("is_mature")).toBool();
+        m[QStringLiteral("estimate")] = double(o.value(QStringLiteral("duration")).toDouble() * 1.5e6 / 8.0);
+        out->append(m);
+    }
+    return true;
+}
+
+void KickClient::loadPastStreams()
+{
+    const QString slug = m_channel.value(QStringLiteral("slug")).toString();
+    if (slug.isEmpty() || !ready()) return;
+    const quint64 gen = ++m_libraryGen;
+    m_libraryState = QStringLiteral("loading");
+    emit libraryChanged();
+    begin();
+    m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + slug + QStringLiteral("/videos")), [this, gen](NetReply r) {
+        end();
+        if (gen != m_libraryGen) return;
+        QVariantList l;
+        if (!r.error.isEmpty()) { m_libraryState = r.error; }
+        else if (!parsePastStreams(r.body, &l)) { m_libraryState = QStringLiteral("kick answered, but not in a form this version understands"); }
+        else { m_past = l; m_libraryState = l.isEmpty() ? QStringLiteral("no finished streams are kept for this channel") : QString(); }
+        emit libraryChanged();
+    });
+}
+
+void KickClient::loadClips()
+{
+    const QString slug = m_channel.value(QStringLiteral("slug")).toString();
+    if (slug.isEmpty() || !ready()) return;
+    const quint64 gen = ++m_libraryGen;
+    m_libraryState = QStringLiteral("loading");
+    emit libraryChanged();
+    begin();
+    m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + slug + QStringLiteral("/clips")), [this, gen](NetReply r) {
+        end();
+        if (gen != m_libraryGen) return;
+        QVariantList l;
+        if (!r.error.isEmpty()) { m_libraryState = r.error; }
+        else if (!parseClips(r.body, &l)) { m_libraryState = QStringLiteral("kick answered, but not in a form this version understands"); }
+        else { m_clips = l; m_libraryState = l.isEmpty() ? QStringLiteral("this channel has no clips") : QString(); }
+        emit libraryChanged();
+    });
 }
 
 } // namespace hop

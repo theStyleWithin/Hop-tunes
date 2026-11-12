@@ -33,6 +33,8 @@ struct NetReply {
 struct NetLimits {
     qint64 maxBody = 8 * 1024 * 1024;
     int timeoutMs = 15000;
+    qint64 rangeStart = -1;      // with rangeLength: ask only for this slice of the file (HTTP Range)
+    qint64 rangeLength = -1;
 };
 
 class NetTransport : public QObject {

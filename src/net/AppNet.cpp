@@ -40,6 +40,8 @@ public:
         req.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
         req.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
         req.setTransferTimeout(limits.timeoutMs);
+        if (limits.rangeStart >= 0 && limits.rangeLength > 0)
+            req.setRawHeader("Range", "bytes=" + QByteArray::number(limits.rangeStart) + "-" + QByteArray::number(limits.rangeStart + limits.rangeLength - 1));
         QNetworkReply *rep = m_nam.get(req);
         m_live.insert(rep);
         QObject::connect(rep, &QNetworkReply::readyRead, rep, [rep, limits] {

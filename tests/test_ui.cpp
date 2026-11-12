@@ -82,6 +82,26 @@ public:
         asked << url;
         NetReply r; r.status = 200;
         if (url.host() == "web.kick.com") r.body = list();
+        else if (url.path().endsWith("/videos")) {
+            QJsonArray a;
+            a.append(QJsonObject{{"id", 1}, {"is_live", true}, {"session_title", "live now"}, {"source", "https://stream.kick.com/x/master.m3u8"}, {"duration", 0}});
+            a.append(QJsonObject{{"id", 77}, {"is_live", false}, {"session_title", "last night's stream"}, {"duration", 7200000},
+                                 {"source", "https://stream.kick.com/v77/master.m3u8"}, {"start_time", "2026-11-11 20:00:00"}, {"viewer_count", 1200},
+                                 {"thumbnail", QJsonObject{{"src", "https://images.kick.com/video_thumbnails/v77/720.webp"}}}});
+            r.body = QJsonDocument(a).toJson();
+        }
+        else if (url.path().endsWith("/clips")) {
+            r.body = QJsonDocument(QJsonObject{{"clips", QJsonArray{QJsonObject{{"id", "clip_abc"}, {"title", "a funny moment"}, {"duration", 30},
+                {"clip_url", "https://clips.kick.com/clips/ab/clip_abc/playlist.m3u8"}, {"thumbnail_url", "https://clips.kick.com/clips/ab/clip_abc/thumbnail.webp"},
+                {"views", 5000}, {"created_at", "2026-11-01T10:00:00Z"}}}}}).toJson();
+        }
+        else if (url.path().endsWith("/master.m3u8"))
+            r.body = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1500000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p60/playlist.m3u8\n";
+        else if (url.path().endsWith("/720p60/playlist.m3u8"))
+            r.body = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\n0.ts\n#EXTINF:10,\n1.ts\n#EXT-X-ENDLIST\n";
+        else if (url.path().endsWith("/clip_abc/playlist.m3u8"))
+            r.body = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXTINF:30,\nclip.ts\n#EXT-X-ENDLIST\n";
+        else if (url.path().endsWith(".ts")) r.body = QByteArray(5000, 'v');
         else if (url.host() == "images.kick.com" || url.host() == "files.kick.com" || url.host() == "stream.kick.com") r.body = pngBytes();
         else if (url.path().startsWith("/api/v2/channels/")) r.body = channel(url.path().section('/', -1));
         else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"}]}";
@@ -2429,6 +2449,73 @@ private slots:
         off->setLimitMB(OfflineStore::kDefaultLimitMB);
         m_app->setAppsEnabled(false);
         w->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played
+    // from disk; deleting removes them.
+    void pastStreamsAndClipsCanBeDownloadedListedAndPlayedFromDisk()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        OfflineDownloads *dl = m_app->downloads();
+        struct Restore { App *app; KickClient *k; ~Restore() { app->downloads()->reload(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); k->clearBlocked(); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(item("kickDownloadsButton") && item("kickDownloadsButton")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickTab_past") && item("kickTab_past")->isVisible());
+        // the live tab is the start; the lists are only fetched when asked
+        QVERIFY(item("kickLibrary") && !item("kickLibrary")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(!u.path().endsWith("/videos") && !u.path().endsWith("/clips"), qPrintable(u.toString()));
+        QVERIFY(click("kickTab_past"));
+        QTRY_VERIFY(item("kickLib_stream-77") && item("kickLib_stream-77")->isVisible());
+        QVERIFY(item("kickLib_stream-1") == nullptr);                                  // the live one is the channel page, not a download
+        QVERIFY(item("kickDownload_stream-77")->isVisible());
+        QVERIFY(item("kickPretendChat") == nullptr || !item("kickPretendChat")->isVisible());
+        shot("kick-past-streams");
+        QVERIFY(click("kickDownload_stream-77"));
+        QTRY_VERIFY(dl->has("stream-77"));
+        QTRY_COMPARE_WITH_TIMEOUT(dl->item("stream-77").value("state").toString(), QString("done"), 8000);
+        QCOMPARE(dl->item("stream-77").value("doneParts").toInt(), 2);
+        QVERIFY(QFileInfo::exists(dl->videoPath("stream-77")));
+        QTRY_VERIFY(item("kickPlayLocal_stream-77") && item("kickPlayLocal_stream-77")->isVisible());
+        QVERIFY(!item("kickDownload_stream-77")->isVisible());
+        // clips
+        QVERIFY(click("kickTab_clips"));
+        QTRY_VERIFY(item("kickLib_clip_abc") && item("kickLib_clip_abc")->isVisible());
+        QVERIFY(click("kickDownload_clip_abc"));
+        QTRY_COMPARE_WITH_TIMEOUT(dl->item("clip_abc").value("state").toString(), QString("done"), 8000);
+        // the downloads page lists both, with their state, and plays from disk
+        QTest::keyClick(w, Qt::Key_Escape);                                            // back to the streams
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickDownloadsButton"));
+        QTRY_VERIFY(item("kickDownloads") && item("kickDownloads")->isVisible());
+        QTRY_VERIFY(item("kickDl_stream-77") && item("kickDl_clip_abc"));
+        QVERIFY(item("kickDlState_stream-77")->property("text").toString().startsWith("ready"));
+        QVERIFY(item("kickDownloadsSummary")->property("text").toString().contains("of your"));
+        shot("kick-downloads");
+        QVERIFY(click("kickDlPlay_clip_abc"));
+        QTRY_VERIFY(item("kickLocalPlay") && item("kickLocalPlay")->isVisible());
+        QTRY_VERIFY(item("kickLocalPlayer") != nullptr);
+        QTest::keyClick(w, Qt::Key_Escape);                                            // back to the downloads
+        QTRY_VERIFY(item("kickDownloads")->isVisible());
+        // deleting removes the files
+        const QString videoPath = dl->videoPath("stream-77");
+        QVERIFY(click("kickDlDelete_stream-77"));
+        QTRY_VERIFY(!dl->has("stream-77"));
+        QVERIFY(!QFileInfo::exists(videoPath));
+        QVERIFY(dl->has("clip_abc"));
+        dl->remove("clip_abc");
+        QTRY_VERIFY(item("kickDownloadsEmpty") && item("kickDownloadsEmpty")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
     }
 #endif
 

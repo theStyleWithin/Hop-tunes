@@ -58,8 +58,6 @@ HlsMedia parseHlsMedia(const QString &text, const QUrl &base)
     if (ls.isEmpty() || ls.first() != QLatin1String("#EXTM3U")) { m.unsupported = QStringLiteral("not a playlist"); return m; }
     double dur = 0;
     qint64 rangeLen = -1, rangeOff = -1, nextOff = 0;
-    bool allSameFile = true, contiguous = true;
-    QUrl firstFile;
     for (const QString &l : ls) {
         if (l.startsWith(QLatin1String("#EXT-X-KEY"))) {
             if (attr(l, QStringLiteral("METHOD")) != QLatin1String("NONE")) { m.unsupported = QStringLiteral("this video is encrypted, which Hop-tunes does not download"); return m; }
@@ -78,28 +76,25 @@ HlsMedia parseHlsMedia(const QString &text, const QUrl &base)
             HlsPart p;
             p.url = base.resolved(QUrl(l));
             p.seconds = dur;
-            p.bytes = rangeLen;
-            if (rangeLen >= 0) {
-                if (rangeOff != nextOff) contiguous = false;
-                nextOff = rangeOff + rangeLen;
+            if (rangeLen >= 0) { p.bytes = rangeLen; p.rangeStart = rangeOff; nextOff = rangeOff + rangeLen; }
+            if (p.url.isValid()) {
+                m.seconds += dur;
+                // a slice that starts where the one before it ended, in the same file, joins it: one request instead of many
+                if (!m.parts.isEmpty() && p.rangeStart >= 0) {
+                    HlsPart &prev = m.parts.last();
+                    if (prev.url == p.url && prev.rangeStart >= 0 && prev.rangeStart + prev.bytes == p.rangeStart && prev.bytes + p.bytes <= kHlsMaxJoinedPart) {
+                        prev.bytes += p.bytes;
+                        prev.seconds += p.seconds;
+                        dur = 0; rangeLen = -1; rangeOff = -1;
+                        continue;
+                    }
+                }
+                m.parts << p;
             }
-            if (m.parts.isEmpty()) firstFile = p.url; else if (p.url != firstFile) allSameFile = false;
-            if (p.url.isValid()) { m.parts << p; m.seconds += dur; }
             dur = 0; rangeLen = -1; rangeOff = -1;
         }
     }
     if (m.parts.isEmpty() && m.unsupported.isEmpty()) m.unsupported = QStringLiteral("the playlist has no video in it");
-    // one file cut into byte ranges (a clip): the whole file is every range in order, so fetch it once
-    if (m.parts.size() > 1 && allSameFile && contiguous && m.parts.first().bytes >= 0) {
-        HlsPart whole;
-        whole.url = firstFile;
-        whole.seconds = m.seconds;
-        for (const HlsPart &p : m.parts) whole.bytes += p.bytes;
-        whole.bytes += 1;                                                    // (bytes started at -1)
-        m.parts = {whole};
-    } else if (m.parts.size() == 1 && m.parts.first().bytes >= 0) {
-        // a single range may be a slice of a bigger file: keep it as it is only when it starts at the beginning
-    }
     return m;
 }
 

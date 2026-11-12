@@ -11,14 +11,49 @@ FocusScope {
     objectName: "kickApp"
     readonly property var kick: hop.kick
     property bool allowed: hop.appNetAllowed("kick")
-    property string page: "browse"               // browse | watch
+    property string page: "browse"               // browse | watch | downloads | play
     property bool disconnected: false
-    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
+    property string watchTab: "live"             // live | past | clips (on the watch page)
+    property string playId: ""                   // the downloaded video being played
+    property string dlMessage: ""
+    property int dlHeight: 720                   // download quality: up to this many lines of height (0 = the best there is)
+    // what is already downloaded or on its way, by id (changes as downloads move)
+    readonly property var dlById: {
+        const m = ({}); const l = hop.downloads ? hop.downloads.items : []
+        for (let i = 0; i < l.length; i++) m[l[i].id] = l[i]
+        return m
+    }
+    function fmtDur(s) {
+        s = Math.round(s)
+        if (s >= 3600) return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m"
+        if (s >= 60) return Math.floor(s / 60) + "m " + (s % 60) + "s"
+        return s + " s"
+    }
+    function fmtBytes(n) {
+        if (n >= 1073741824) return (n / 1073741824).toFixed(1) + " GB"
+        if (n >= 1048576) return Math.round(n / 1048576) + " MB"
+        return Math.max(1, Math.round(n / 1024)) + " KB"
+    }
+    function dlState(it) {
+        if (!it) return ""
+        const pc = Math.round((it.progress || 0) * 100)
+        switch (it.state) {
+        case "done": return "ready \u00b7 " + fmtBytes(it.bytes)
+        case "running": return "downloading " + pc + "% \u00b7 " + fmtBytes(it.bytes)
+        case "queued": return "waiting its turn"
+        case "paused": return "paused at " + pc + "%"
+        default: return it.error || it.state
+        }
+    }
+    function download(entry) {
+        root.dlMessage = hop.downloads.enqueue({ id: entry.id, kind: entry.kind, title: entry.title, channel: kick.channel.slug || "", thumb: entry.thumb,
+                                                 url: entry.url, maxHeight: root.dlHeight, estimate: entry.estimate, seconds: entry.seconds })
+    }    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
     property string lastBlocked: ""
     signal leave()
 
     readonly property var hosts: [["kick.com", "finds the channel and its live stream"], ["web.kick.com", "the list of live streams"],
-                                  ["images.kick.com", "the stream pictures"], ["stream.kick.com", "the developer\u2019s live picture"], ["files.kick.com", "profile pictures and emotes"],
+                                  ["images.kick.com", "the stream pictures"], ["stream.kick.com", "the developer\u2019s live picture"], ["files.kick.com", "profile pictures and emotes"], ["clips.kick.com", "clips, only when you download one"],
                                   ["live-video.net", "the video itself"]]
 
     Connections { target: hop; function onAppNetChanged() { root.allowed = hop.appNetAllowed("kick") } }
@@ -27,10 +62,16 @@ FocusScope {
 
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
-        if (page === "watch") { page = "browse"; kick.closeChannel(); return true }
+        if (page === "play") { page = "downloads"; playId = ""; return true }
+        if (page === "downloads") { page = "browse"; return true }
+        if (page === "watch") { page = "browse"; kick.closeChannel(); watchTab = "live"; return true }
         return false
     }
-    function openChannel(slug) { kick.openChannel(slug); page = "watch" }
+    function openChannel(slug) { kick.openChannel(slug); watchTab = "live"; dlMessage = ""; page = "watch" }
+    function showTab(t) {
+        watchTab = t; dlMessage = ""
+        if (t === "past") kick.loadPastStreams(); else if (t === "clips") kick.loadClips()
+    }
     function pic(url) { return url && url !== "" ? "image://kick/" + encodeURIComponent(url) : "" }
 
     component Pic: Item {
@@ -209,6 +250,9 @@ FocusScope {
                     background: Item {}
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
+                PlainButton { objectName: "kickDownloadsButton"; visible: !!hop.downloads; implicitHeight: 36
+                              text: "downloads" + (hop.downloads && hop.downloads.count > 0 ? " (" + hop.downloads.count + ")" : "")
+                              onClicked: root.page = "downloads" }
                 }
             }
             RowLayout {   // following: kept on this computer only
@@ -354,12 +398,90 @@ FocusScope {
                     PlainButton { objectName: "kickBlockButton"; text: "block"; danger: true; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 76 : -1
                                   onClicked: { const s = kick.channel.slug; root.lastBlocked = s; kick.block(s); undoTimer.restart(); root.goBack() } }
                 }
+                RowLayout {   // what to look at: the live stream, finished streams (to download), clips
+                    spacing: 8; Layout.fillWidth: true
+                    visible: !!hop.downloads && kick.channel.notFound !== true
+                    Chip { objectName: "kickTab_live"; text: "live"; on: root.watchTab === "live"; onClicked: root.showTab("live") }
+                    Chip { objectName: "kickTab_past"; text: "past streams"; on: root.watchTab === "past"; onClicked: root.showTab("past") }
+                    Chip { objectName: "kickTab_clips"; text: "clips"; on: root.watchTab === "clips"; onClicked: root.showTab("clips") }
+                    Item { Layout.fillWidth: true }
+                }
+                ColumnLayout {   // finished streams and clips: pick one to download for offline viewing
+                    id: library
+                    objectName: "kickLibrary"
+                    visible: root.watchTab !== "live"
+                    Layout.fillWidth: true; Layout.fillHeight: !root.phone
+                    Layout.preferredHeight: root.phone ? 420 : -1
+                    spacing: 8
+                    RowLayout {
+                        spacing: 8
+                        Label { text: "quality"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+                        Chip { objectName: "kickQuality_480"; text: "480p"; on: root.dlHeight === 480; onClicked: root.dlHeight = 480 }
+                        Chip { objectName: "kickQuality_720"; text: "720p"; on: root.dlHeight === 720; onClicked: root.dlHeight = 720 }
+                        Chip { objectName: "kickQuality_best"; text: "best"; on: root.dlHeight === 0; onClicked: root.dlHeight = 0 }
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                                text: hop.offline ? hop.offline.summary : "" }
+                    }
+                    Label { objectName: "kickLibraryState"; visible: kick.libraryState !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                            color: kick.libraryState === "loading" ? Theme.muted : Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) }
+                            text: kick.libraryState === "loading" ? "loading…" : kick.libraryState }
+                    Label { objectName: "kickDownloadMessage"; visible: root.dlMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger
+                            text: root.dlMessage; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    ListView {
+                        id: libList
+                        objectName: "kickLibraryList"
+                        Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 10
+                        boundsBehavior: Flickable.StopAtBounds
+                        ScrollBar.vertical: ScrollBar {}
+                        model: root.watchTab === "past" ? kick.pastStreams : (root.watchTab === "clips" ? kick.clips : [])
+                        delegate: Item {
+                            id: row
+                            required property var modelData
+                            readonly property var dl: root.dlById[modelData.id]
+                            objectName: "kickLib_" + modelData.id
+                            width: libList.width - 12; height: root.phone ? 150 : 84
+                            Rectangle { anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line } }
+                            GridLayout {
+                                anchors { fill: parent; margins: 8 }
+                                columns: root.phone ? 1 : 3; columnSpacing: 12; rowSpacing: 6
+                                RowLayout {
+                                    Layout.fillWidth: true; spacing: 12
+                                    Pic { Layout.preferredWidth: 107; Layout.preferredHeight: 60; Layout.alignment: Qt.AlignTop; address: row.modelData.thumb
+                                          backing: Theme.artColors("kick" + row.modelData.id)[1] }
+                                    ColumnLayout {
+                                        spacing: 2; Layout.fillWidth: true; Layout.minimumWidth: 0
+                                        Label { text: row.modelData.title !== "" ? row.modelData.title : "(untitled)"; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                                        Label { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                                                text: root.fmtDur(row.modelData.seconds) + " \u00b7 " + String(row.modelData.date).substring(0, 10)
+                                                      + (row.modelData.viewers > 0 ? " \u00b7 " + kick.viewersText(row.modelData.viewers) + (root.watchTab === "clips" ? " views" : " watched") : "") }
+                                        Label { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                                                text: row.dl ? root.dlState(row.dl) : "about " + root.fmtBytes(row.modelData.estimate * (root.dlHeight === 480 ? 0.45 : (root.dlHeight === 0 ? 1.9 : 1))) + " to download" }
+                                    }
+                                }
+                                PlainButton {
+                                    objectName: "kickDownload_" + row.modelData.id
+                                    visible: !row.dl || row.dl.state === "failed"
+                                    text: "download"; implicitHeight: 36
+                                    onClicked: root.download(row.modelData)
+                                }
+                                PlainButton {
+                                    objectName: "kickPlayLocal_" + row.modelData.id
+                                    visible: !!row.dl && row.dl.state === "done"
+                                    text: "play"; primary: true; implicitHeight: 36
+                                    onClicked: { root.playId = row.modelData.id; root.page = "play" }
+                                }
+                                Label { visible: !!row.dl && row.dl.state !== "done" && row.dl.state !== "failed"; text: "in your downloads"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                            }
+                        }
+                    }
+                }
                 Item {
+                    visible: root.watchTab === "live"
                     Layout.fillWidth: true; Layout.fillHeight: !root.phone
                     Layout.preferredHeight: root.phone ? width * 9 / 16 : -1
                     KickPlayer {
                         anchors.fill: parent
-                        url: root.page === "watch" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
+                        url: root.page === "watch" && root.watchTab === "live" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
                     }
                     Rectangle {
                         anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line }
@@ -377,6 +499,7 @@ FocusScope {
                 }
             }
             ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
+                visible: root.watchTab === "live"
                 Layout.preferredWidth: root.phone ? -1 : 360; Layout.fillWidth: root.phone; Layout.fillHeight: true; spacing: 8
                 RowLayout {
                     spacing: 8
@@ -402,6 +525,90 @@ FocusScope {
                 }
                 Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                 Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
+            }
+        }
+
+        // ---- downloads: what is kept on this device for offline viewing ----
+        ColumnLayout {
+            id: dlPage
+            objectName: "kickDownloads"
+            anchors.fill: parent; visible: root.page === "downloads"; spacing: 10
+            RowLayout {
+                spacing: 12; Layout.fillWidth: true
+                PlainButton { objectName: "kickDownloadsBack"; text: root.phone ? "‹" : "‹ streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                Label { text: "downloads"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
+                Item { Layout.fillWidth: true }
+            }
+            Label { objectName: "kickDownloadsSummary"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                    text: (hop.offline ? hop.offline.summary + " " : "") + "kept inside hop-tunes on this device (change the limit or the drive in settings)." }
+            Label { objectName: "kickDownloadsEmpty"; visible: !hop.downloads || hop.downloads.count === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted
+                    font { family: Theme.font; pixelSize: Theme.fs(15) }
+                    text: "nothing downloaded yet. open a channel, choose past streams or clips and press download. downloads only run while the kick app is open." }
+            ListView {
+                id: dlList
+                objectName: "kickDownloadsList"
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 10
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                model: hop.downloads ? hop.downloads.items : []
+                delegate: Item {
+                    id: drow
+                    required property var modelData
+                    objectName: "kickDl_" + modelData.id
+                    width: dlList.width - 12; height: root.phone ? 168 : 96
+                    Rectangle { anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line } }
+                    GridLayout {
+                        anchors { fill: parent; margins: 8 }
+                        columns: root.phone ? 1 : 2; columnSpacing: 12; rowSpacing: 6
+                        RowLayout {
+                            Layout.fillWidth: true; spacing: 12
+                            Rectangle {
+                                Layout.preferredWidth: 107; Layout.preferredHeight: 60; Layout.alignment: Qt.AlignTop; color: Theme.artColors("kick" + drow.modelData.id)[1]
+                                Image { anchors.fill: parent; fillMode: Image.PreserveAspectCrop; asynchronous: true; cache: false
+                                        source: drow.modelData.thumb !== "" ? "file://" + drow.modelData.thumb : "" }
+                            }
+                            ColumnLayout {
+                                spacing: 2; Layout.fillWidth: true; Layout.minimumWidth: 0
+                                Label { text: drow.modelData.title !== "" ? drow.modelData.title : "(untitled)"; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                                Label { text: drow.modelData.channel + " \u00b7 " + (drow.modelData.kind === "clip" ? "clip" : "past stream") + " \u00b7 " + root.fmtDur(drow.modelData.seconds)
+                                               + (drow.modelData.quality !== "" ? " \u00b7 " + drow.modelData.quality : "")
+                                        color: Theme.muted; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                                Label { objectName: "kickDlState_" + drow.modelData.id; text: root.dlState(drow.modelData); elide: Text.ElideRight; Layout.fillWidth: true
+                                        color: drow.modelData.state === "failed" || drow.modelData.state === "limit" ? Theme.danger : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                                Rectangle { visible: drow.modelData.state !== "done"; Layout.fillWidth: true; height: 4; color: Theme.line
+                                            Rectangle { width: parent.width * (drow.modelData.progress || 0); height: parent.height; color: Theme.accent } }
+                            }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            PlainButton { objectName: "kickDlPlay_" + drow.modelData.id; visible: drow.modelData.doneParts > 0; text: "play"; primary: true; implicitHeight: 34
+                                          enabled: drow.modelData.state === "done"; onClicked: { root.playId = drow.modelData.id; root.page = "play" } }
+                            PlainButton { objectName: "kickDlPause_" + drow.modelData.id; visible: drow.modelData.state === "running" || drow.modelData.state === "queued"; text: "pause"; implicitHeight: 34
+                                          onClicked: hop.downloads.pause(drow.modelData.id) }
+                            PlainButton { objectName: "kickDlResume_" + drow.modelData.id; visible: ["paused", "waiting", "limit", "failed"].indexOf(drow.modelData.state) >= 0; text: "resume"; implicitHeight: 34
+                                          onClicked: hop.downloads.resume(drow.modelData.id) }
+                            PlainButton { objectName: "kickDlDelete_" + drow.modelData.id; text: "delete"; danger: true; implicitHeight: 34
+                                          onClicked: hop.downloads.remove(drow.modelData.id) }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- playing a download from disk: nothing is fetched ----
+        ColumnLayout {
+            objectName: "kickLocalPlay"
+            anchors.fill: parent; visible: root.page === "play"; spacing: 10
+            RowLayout {
+                spacing: 12; Layout.fillWidth: true
+                PlainButton { objectName: "kickLocalBack"; text: root.phone ? "‹" : "‹ downloads"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                Label { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(18) }
+                        text: root.dlById[root.playId] ? root.dlById[root.playId].title : "" }
+            }
+            KickPlayer {
+                objectName: "kickLocalPlayer"
+                Layout.fillWidth: true; Layout.fillHeight: true
+                file: root.page === "play" && hop.downloads ? hop.downloads.videoPath(root.playId) : ""
             }
         }
 

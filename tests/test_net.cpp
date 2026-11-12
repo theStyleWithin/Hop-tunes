@@ -8,6 +8,7 @@
 #include "net/AppNet.h"
 
 #include <QDirIterator>
+#include <QNetworkProxyFactory>
 #include <QTemporaryDir>
 #include <QFile>
 #include <QJsonArray>
@@ -28,8 +29,12 @@ public:
     QList<QByteArray> agents;
     int aborted = 0;
     int delayMs = 0;
-    void get(const QUrl &url, const QByteArray &ua, const QByteArray &, NetLimits, Done done) override
+    NetLimits lastLimits;
+    QList<NetLimits> limitsAsked;
+    void get(const QUrl &url, const QByteArray &ua, const QByteArray &, NetLimits limits, Done done) override
     {
+        lastLimits = limits;
+        limitsAsked << limits;
         asked << url;
         agents << ua;
         NetReply r = handler ? handler(url) : NetReply{};
@@ -638,8 +643,21 @@ private slots:
         QVERIFY(c.finished && c.unsupported.isEmpty());
         QCOMPARE(c.parts.size(), 1);
         QCOMPARE(c.parts[0].url, QUrl("https://clips.kick.com/clips/ed/clip_1/2701.ts"));
-        QCOMPARE(c.parts[0].bytes, qint64(1750));
+        QCOMPARE(c.parts[0].bytes, qint64(1750));                              // three slices that follow each other: one request
+        QCOMPARE(c.parts[0].rangeStart, qint64(0));
         QVERIFY(qAbs(c.seconds - 5.0) < 0.001);
+        // what real clips look like: many files, slices not in file order. Each stays its own slice, in the playlist's order (never a whole file)
+        const QString real = "#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-BYTERANGE:2099020@8449660\n#EXTINF:2.000,\n10585.ts\n"
+            "#EXT-X-BYTERANGE:2108232@0\n#EXTINF:2.000,\n10586.ts\n#EXT-X-BYTERANGE:1952380@3151256\n#EXTINF:2.000,\n10586.ts\n"
+            "#EXT-X-BYTERANGE:2024008@5103636\n#EXTINF:2.000,\n10586.ts\n#EXT-X-ENDLIST\n";
+        const auto rm = parseHlsMedia(real, QUrl("https://clips.kick.com/clips/e9/clip_x/playlist.m3u8"));
+        QCOMPARE(rm.parts.size(), 3);                                          // (the last two slices follow each other in 10586.ts, so they are one request)
+        QCOMPARE(rm.parts[0].rangeStart, qint64(8449660));
+        QCOMPARE(rm.parts[0].bytes, qint64(2099020));
+        QCOMPARE(rm.parts[1].url, QUrl("https://clips.kick.com/clips/e9/clip_x/10586.ts"));
+        QCOMPARE(rm.parts[1].rangeStart, qint64(0));
+        QCOMPARE(rm.parts[2].rangeStart, qint64(3151256));
+        QCOMPARE(rm.parts[2].bytes, qint64(1952380 + 2024008));
 
         // encrypted or fragmented-mp4 videos are refused plainly, and junk is not a playlist
         QVERIFY(parseHlsMedia("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:2,\na.ts\n#EXT-X-ENDLIST\n", base).unsupported.contains("encrypted"));
@@ -814,6 +832,49 @@ private slots:
         big.dl->setEnabled(false);
         QVERIFY(big.dl->enqueue(streamInfo("s9")).contains("guests"));
     }
+    void aClipOfSlicesIsFetchedAsSlicesNotWholeFiles()
+    {
+        Rig r; rig(r);
+        auto fileByte = [](int f, qint64 i) { return char((i * 7 + f) % 251); };
+        auto slice = [&](int f, qint64 start, qint64 len) { QByteArray b; for (qint64 i = 0; i < len; ++i) b.append(fileByte(f, start + i)); return b; };
+        bool shortAnswers = false;
+        auto inner = ft->handler;
+        ft->handler = [&, inner](const QUrl &u) -> NetReply {
+            const QString path = u.path();
+            if (path.endsWith("/clip_x/playlist.m3u8"))
+                return ok("#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-BYTERANGE:3000@7000\n#EXTINF:2,\na.ts\n#EXT-X-BYTERANGE:2500@0\n#EXTINF:2,\nb.ts\n"
+                          "#EXT-X-BYTERANGE:1000@4000\n#EXTINF:2,\nb.ts\n#EXT-X-BYTERANGE:500\n#EXTINF:1,\nb.ts\n#EXT-X-ENDLIST\n");
+            if (path.endsWith("/clip_x/a.ts") || path.endsWith("/clip_x/b.ts")) {
+                const int f = path.endsWith("a.ts") ? 1 : 2;
+                const NetLimits &l = ft->lastLimits;
+                if (l.rangeStart < 0) return ok(slice(f, 0, 12000));                      // a whole file: far more than the clip wants
+                NetReply s = ok(slice(f, l.rangeStart, shortAnswers ? l.rangeLength - 1 : l.rangeLength)); s.status = 206; return s;
+            }
+            return inner(u);
+        };
+        const QVariantMap info{{"id", "clip_x"}, {"kind", "clip"}, {"title", "c"}, {"channel", "alpha"}, {"url", "https://clips.kick.com/clips/ab/clip_x/playlist.m3u8"}};
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(info), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        // 3000 of a.ts from 7000, then b.ts 0..2500, then b.ts 4000..5000 and 5000..5500 as one slice (4000..5500)
+        const QByteArray expect = slice(1, 7000, 3000) + slice(2, 0, 2500) + slice(2, 4000, 1500);
+        QCOMPARE(readAll(r.dl->videoPath("clip_x")), expect);
+        int sliceRequests = 0, wholeFileRequests = 0;
+        for (int i = 0; i < ft->asked.size(); ++i) {
+            if (!ft->asked[i].path().endsWith(".ts")) continue;
+            if (ft->limitsAsked[i].rangeStart >= 0) ++sliceRequests; else ++wholeFileRequests;
+        }
+        QCOMPARE(sliceRequests, 3);                                                     // three slices
+        QCOMPARE(wholeFileRequests, 0);                                                 // and no whole file anywhere
+        // a slice that comes back the wrong size is not trusted: retried, then a plain failure, and nothing wrong is written
+        shortAnswers = true;
+        r.dl->remove("clip_x");
+        QCOMPARE(r.dl->enqueue(info), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(r.dl->item("clip_x").value("state").toString(), QString("failed"), 5000);
+        QVERIFY(r.dl->item("clip_x").value("error").toString().contains("wrong size"));
+        QVERIFY(readAll(r.dl->videoPath("clip_x")).isEmpty());
+    }
+
     void deletingADownloadRemovesItsFilesAndOnlyThose()
     {
         Rig r; rig(r, 3);
@@ -829,6 +890,41 @@ private slots:
         QVERIFY(QFileInfo::exists(mine));                                               // a neighbour is never touched
         r.store.refresh();
         QVERIFY(r.store.usedBytes() <= 1);
+    }
+    // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
+    void liveClipDownloadAgainstTheRealServers()
+    {
+        const QString slug = qEnvironmentVariable("HOPTUNES_LIVE_KICK");
+        if (slug.isEmpty()) QSKIP("set HOPTUNES_LIVE_KICK=<channel> to try the real servers");
+        QNetworkProxyFactory::setUseSystemConfiguration(true);
+        AppNet realNet;                                                    // the real transport
+        realNet.setAllowed("kick", true);
+        realNet.open("kick");
+        KickClient k(&realNet);
+        k.open();
+        k.openChannel(slug);
+        QTRY_VERIFY_WITH_TIMEOUT(!k.channel().value("loading").toBool(), 20000);
+        k.loadClips();
+        QTRY_VERIFY_WITH_TIMEOUT(!k.clips().isEmpty(), 20000);
+        const QVariantMap clip = k.clips().first().toMap();
+        QTemporaryDir tmp;
+        OfflineStore store;
+        store.setDefaultBase(tmp.filePath("offline"));
+        store.setProfileId("live");
+        OfflineDownloads dl(&realNet, &store);
+        QSignalSpy finished(&dl, &OfflineDownloads::finished);
+        QVariantMap info = clip;
+        info["channel"] = slug;
+        QCOMPARE(dl.enqueue(info), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(finished.count() == 1 || dl.item(clip.value("id").toString()).value("state").toString() == "failed", 120000);
+        const QVariantMap it = dl.item(clip.value("id").toString());
+        qInfo() << "live clip:" << it.value("state") << it.value("error") << it.value("bytes") << clip.value("title");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        const QByteArray data = readAll(dl.videoPath(clip.value("id").toString()));
+        QVERIFY(data.size() > 10000);
+        QCOMPARE(uchar(data[0]), uchar(0x47));                             // an MPEG-TS packet starts with the sync byte
+        QCOMPARE(uchar(data[188]), uchar(0x47));
+        QFile::copy(dl.videoPath(clip.value("id").toString()), qEnvironmentVariable("HOPTUNES_LIVE_OUT", tmp.filePath("clip-copy.ts")));
     }
 };
 

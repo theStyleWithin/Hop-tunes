@@ -24,6 +24,12 @@ class KickClient : public QObject {
     Q_PROPERTY(QVariantList categories READ categories NOTIFY categoriesChanged)  // {id, name, slug}
     Q_PROPERTY(QVariantList following READ following NOTIFY listsChanged)         // {slug, name, avatar, live, viewers, checked}
     Q_PROPERTY(QStringList blocked READ blocked NOTIFY listsChanged)
+    Q_PROPERTY(QVariantList pastStreams READ pastStreams NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList clips READ clips NOTIFY libraryChanged)
+    Q_PROPERTY(QString libraryState READ libraryState NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList pastStreams READ pastStreams NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList clips READ clips NOTIFY libraryChanged)
+    Q_PROPERTY(QString libraryState READ libraryState NOTIFY libraryChanged)
     Q_PROPERTY(QVariantMap channel READ channel NOTIFY channelChanged)            // the channel being watched / looked at
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
@@ -54,6 +60,9 @@ public:
     QVariantList following() const;
     QStringList blocked() const { return m_blocked; }
     QVariantMap channel() const { return m_channel; }
+    QVariantList pastStreams() const { return m_past; }     // finished broadcasts of the open channel (when asked for)
+    QVariantList clips() const { return m_clips; }
+    QString libraryState() const { return m_libraryState; } // "" | "loading" | a plain sentence when it could not be loaded
     bool loading() const { return m_pending > 0; }
     QString error() const { return m_error; }
     bool hasMore() const { return !m_next.isEmpty(); }
@@ -80,6 +89,8 @@ public:
     Q_INVOKABLE void search(const QString &text);  // "" goes back to the live list
     Q_INVOKABLE void openChannel(const QString &slugOrLink);   // fills `channel` (title, viewers, stream address, chat room)
     Q_INVOKABLE void closeChannel();
+    Q_INVOKABLE void loadPastStreams();            // the open channel's finished broadcasts (only when asked)
+    Q_INVOKABLE void loadClips();                  // and its clips
     Q_INVOKABLE bool streamAllowed(const QString &url) const;   // the Qt Multimedia player (Android) asks before it opens a stream
     Q_INVOKABLE void refreshFollowing();           // one lookup per followed channel, only when asked
 
@@ -100,7 +111,9 @@ public:
     static bool parseCategories(const QByteArray &json, QVariantList *out);
     static bool parseSearch(const QByteArray &json, QVariantList *channels);
     static bool parseChannel(const QByteArray &json, QVariantMap *out);
-    static QString viewersText(int n);             // 12400 -> "12.4k"
+    static bool parsePastStreams(const QByteArray &json, QVariantList *out);   // finished ones only (the live one is the channel page)
+    static bool parseClips(const QByteArray &json, QVariantList *out);
+    Q_INVOKABLE static QString viewersText(int n);             // 12400 -> "12.4k"
 
 signals:
     void streamsChanged();
@@ -108,6 +121,7 @@ signals:
     void listsChanged();      // the lists or what is known about them changed (also: live dots)
     void listsEdited();       // the person followed, unfollowed, blocked or unblocked someone: worth saving
     void channelChanged();
+    void libraryChanged();
     void loadingChanged();
     void errorChanged();
     void filtersChanged();
@@ -138,6 +152,9 @@ private:
     int m_categoryId = 0, m_emptyPages = 0;
     bool m_showMature = false;
     QVariantMap m_channel;
+    QVariantList m_past, m_clips;
+    QString m_libraryState;
+    quint64 m_libraryGen = 0;
     QVariantMap m_dev;           // the developer's stream when it is live (else empty)
     QStringList m_following, m_blocked;
     QString m_chatMode = QStringLiteral("off");

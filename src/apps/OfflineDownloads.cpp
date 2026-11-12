@@ -71,7 +71,7 @@ void OfflineDownloads::save(const Item &it) const
 {
     QDir().mkpath(dirOf(it.id));
     QJsonArray parts;
-    for (const HlsPart &p : it.parts) parts.append(QJsonObject{{"u", p.url.toString()}, {"s", p.seconds}, {"b", double(p.bytes)}});
+    for (const HlsPart &p : it.parts) parts.append(QJsonObject{{"u", p.url.toString()}, {"s", p.seconds}, {"b", double(p.bytes)}, {"r", double(p.rangeStart)}});
     QJsonObject o{{"id", it.id}, {"kind", it.kind}, {"title", it.title}, {"channel", it.channel}, {"thumb", it.thumb}, {"url", it.url},
                   {"quality", it.quality}, {"maxHeight", it.maxHeight}, {"done", it.done}, {"bytes", double(it.bytes)},
                   {"estimate", double(it.estimate)}, {"seconds", it.seconds}, {"userPaused", it.userPaused}, {"state", it.state},
@@ -106,6 +106,7 @@ bool OfflineDownloads::loadItem(const QString &id)
         part.url = QUrl(p.value("u").toString());
         part.seconds = p.value("s").toDouble();
         part.bytes = qint64(p.value("b").toDouble(-1));
+        part.rangeStart = qint64(p.value("r").toDouble(-1));
         it.parts << part;
     }
     const QString st = o.value("state").toString();
@@ -295,9 +296,12 @@ void OfflineDownloads::fetchPart(const QString &id, int attempt)
     NetLimits lim;
     lim.maxBody = kMaxPart;
     lim.timeoutMs = kPartTimeoutMs;
-    m_net->get(kApp, part.url, [self, id, gen, attempt](NetReply r) {
+    lim.rangeStart = part.rangeStart;
+    lim.rangeLength = part.bytes;
+    m_net->get(kApp, part.url, [self, id, gen, attempt, expect = part.rangeStart >= 0 ? part.bytes : qint64(-1)](NetReply r) {
         if (!self || self->m_gen != gen || !self->m_items.contains(id) || self->m_running != id) return;
         Item &it = self->m_items[id];
+        if (r.error.isEmpty() && expect >= 0 && r.body.size() != expect) r.error = QStringLiteral("a piece of the video arrived the wrong size");
         if (!r.error.isEmpty() || r.body.isEmpty()) {
             if (attempt + 1 < kRetries) {
                 QTimer::singleShot(self->m_retryMs, self, [self, id, attempt] { if (self) self->fetchPart(id, attempt + 1); });
