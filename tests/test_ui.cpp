@@ -2833,9 +2833,11 @@ private slots:
         m_app->leaveProfile();
         m_app->openGuest();
         QTRY_VERIFY(m_app->profileReady());
+        QTRY_VERIFY(m_app->artists()->count() > 0);              // the guest's library fills in a moment after it opens: select only once it is there
         m_app->selectArtist(0);
+        QTRY_VERIFY(m_app->artistAlbums()->rowCount() > 0);
         m_app->selectAlbum(0);
-        QCOMPARE(m_app->selectedAlbumTitle(), QStringLiteral("unknown album"));
+        QTRY_COMPARE(m_app->selectedAlbumTitle(), QStringLiteral("unknown album"));
         QCOMPARE(m_app->setAlbumArt(ref, QUrl::fromLocalFile(m_home.filePath(QStringLiteral("cover.jpg")))), QStringLiteral("no profile open"));
         QCOMPARE(m_app->setAlbumTitle(ref, QStringLiteral("Guest Edit")), QStringLiteral("no profile open"));
 
