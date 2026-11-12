@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.thestylewithin.hoptunes;
 
+import android.app.PictureInPictureParams;
+import android.content.res.Configuration;
 import android.hardware.input.InputManager;
+import android.os.Build;
+import android.util.Rational;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -37,6 +41,60 @@ public class HopActivity extends QtActivity {
 
     // the analog axes seen as pressed (edge detection), so a trigger or the d-pad hat makes one press, not a stream
     private boolean mLeft, mRight, mUp, mDown, mLt, mRt;
+
+    // ---- picture in picture: a stream's video pops out into a small window over the home screen and other apps ----
+    // The system owns that window (the person drags it where they like and can pinch it a little bigger or smaller); the app only
+    // says "a stream is playing, it may pop out" (setPip) and is told when it has (nativePip), so it can show only the picture.
+    private static volatile boolean sPipAllowed = false;
+    private static int sPipW = 16, sPipH = 9;
+    private static native void nativePip(boolean inPip);                       // App::setInPictureInPicture
+
+    // called from C++: a stream is (or is no longer) playing and may pop out; w:h is the picture's shape
+    public static void setPip(boolean allowed, int w, int h) {
+        sPipAllowed = allowed;
+        if (w > 0 && h > 0) { sPipW = w; sPipH = h; }
+        final HopActivity a = sInstance;
+        if (a == null) return;
+        a.runOnUiThread(new Runnable() { @Override public void run() { a.applyPipParams(); } });
+    }
+
+    // called from C++: pop out now (the "pop out" button); false when this Android cannot
+    public static boolean enterPipNow() {
+        final HopActivity a = sInstance;
+        if (a == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !sPipAllowed) return false;
+        a.runOnUiThread(new Runnable() { @Override public void run() { a.enterPip(); } });
+        return true;
+    }
+
+    public static boolean pipSupported() { return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O; }
+
+    private PictureInPictureParams pipParams() {
+        PictureInPictureParams.Builder b = new PictureInPictureParams.Builder().setAspectRatio(new Rational(sPipW, sPipH));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) b.setAutoEnterEnabled(sPipAllowed);   // Android 12+: the home gesture pops it out smoothly
+        return b.build();
+    }
+
+    private void applyPipParams() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
+        try { setPictureInPictureParams(pipParams()); } catch (Throwable ignored) { }
+    }
+
+    private void enterPip() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !sPipAllowed) return;
+        try { enterPictureInPictureMode(pipParams()); } catch (Throwable ignored) { }
+    }
+
+    @Override
+    protected void onUserLeaveHint() {      // the home button or an app switch: pop the stream out instead of letting it go
+        super.onUserLeaveHint();
+        if (sPipAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) enterPip();
+    }
+
+    @Override
+    public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        try { nativePip(isInPictureInPictureMode); } catch (Throwable ignored) { }
+    }
 
     private static native void nativeAction(String action, boolean down);   // Gamepad::fromJava
     private static native void nativeRaw(String text);                      // for the diagnostics page

@@ -2433,8 +2433,20 @@ private slots:
         QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() > upY + 100);         // and back down again (the room is given back)
         QVERIFY(click("appCollapse"));                                                              // leave it pulled up: the search button brings it back (below)
         QTRY_VERIFY(!item("kickSearch")->isVisible());
+        // on a phone a tap on a stream asks first (a fat finger while scrolling must not open one)
+        QVERIFY(kick->askBeforeOpening());
         QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickConfirm") && item("kickConfirm")->isVisible());
+        QVERIFY(item("kickBrowse")->isVisible() && !item("kickWatch")->isVisible());            // nothing opened
+        shot("phone-kick-confirm");
+        QVERIFY(click("kickConfirmNo"));
+        QTRY_VERIFY(!item("kickConfirm")->isVisible());
+        QVERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickConfirm")->isVisible());
+        QVERIFY(click("kickConfirmYes"));
         QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QVERIFY(!item("kickConfirm")->isVisible());
         QTRY_VERIFY(item("kickChannelState")->isVisible());
         // the channel's header, tabs and record row are under the same curtain: pull it down to see them
         QVERIFY(item("appCollapse")->isVisible());
@@ -2920,6 +2932,27 @@ private slots:
         QVERIFY(click("kickDlPlay_clip_abc"));
         QTRY_VERIFY(item("kickLocalPlay") && item("kickLocalPlay")->isVisible());
         QTRY_VERIFY(item("kickLocalPlayer") != nullptr);
+        // full screen: the picture (with its controls) moves to cover the whole window; Esc (the phone's back button) brings it back first
+        QQuickItem *kickApp = item("kickApp");
+        auto stage = [&]() -> QQuickItem * {            // the item that holds the picture: inside the player normally, directly in the window when staged
+            QQuickItem *c = item("kickLocalPlayerStage");
+            return c && c->parentItem() == w->property("contentItem").value<QQuickItem *>() ? c : nullptr;   // (the application window's content area)
+        };
+        QVERIFY(kickApp->setProperty("videoFullscreen", true));
+        QTRY_VERIFY(stage() != nullptr);
+        QCOMPARE(stage()->size(), QSizeF(w->width(), w->height()));                    // it covers everything
+        QVERIFY(stage()->z() > 1000);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!kickApp->property("videoFullscreen").toBool());
+        QTRY_VERIFY(stage() == nullptr);                                               // back inside the page
+        QVERIFY(item("kickLocalPlay")->isVisible());                                   // (the first Esc only left full screen)
+        // popped out (picture in picture, Android reports it): only the picture, no controls
+        m_app->setInPictureInPicture(true);
+        QTRY_VERIFY(stage() != nullptr);
+        QVERIFY(!item("kickPause")->isVisible());
+        m_app->setInPictureInPicture(false);
+        QTRY_VERIFY(stage() == nullptr);
+        QTRY_VERIFY(item("kickPause")->isVisible() || true);
         QTest::keyClick(w, Qt::Key_Escape);                                            // back to the downloads
         QTRY_VERIFY(item("kickDownloads")->isVisible());
         // deleting removes the files

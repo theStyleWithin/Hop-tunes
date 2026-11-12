@@ -549,7 +549,7 @@ QJsonObject KickClient::listsJson() const
 {
     return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
                        {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()},
-                       {QStringLiteral("englishOnly"), m_englishOnly}, {QStringLiteral("pinnedCategories"), pinnedJson()},
+                       {QStringLiteral("englishOnly"), m_englishOnly}, {QStringLiteral("askBeforeOpening"), m_askBeforeOpening}, {QStringLiteral("pinnedCategories"), pinnedJson()},
                        {QStringLiteral("account"), m_signedIn ? QJsonObject{{QStringLiteral("token"), m_token}, {QStringLiteral("name"), m_accountName}} : QJsonObject{}}};
 }
 
@@ -634,6 +634,7 @@ void KickClient::setListsJson(const QJsonObject &o)
         emit categoryResultsChanged();
     }
     m_englishOnly = o.value(QStringLiteral("englishOnly")).toBool(false);
+    m_askBeforeOpening = o.value(QStringLiteral("askBeforeOpening")).toBool(true);
     emit filtersChanged();
     const QString cm = o.value(QStringLiteral("chatMode")).toString();
     m_chatMode = cm == QLatin1String("pretend") || (cm == QLatin1String("kick") && m_signedIn) ? cm : QStringLiteral("off");

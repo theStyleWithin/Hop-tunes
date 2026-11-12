@@ -42,6 +42,7 @@ class KickClient : public QObject {
     Q_PROPERTY(bool hasMore READ hasMore NOTIFY streamsChanged)
     Q_PROPERTY(QString sort READ sort WRITE setSort NOTIFY filtersChanged)        // "viewers" | "featured"
     Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY filtersChanged)   // "" (all) or a code like "en"; "en" whenever english only is on
+    Q_PROPERTY(bool askBeforeOpening READ askBeforeOpening WRITE setAskBeforeOpening NOTIFY filtersChanged)   // phones: tapping a stream asks first (fat fingers while scrolling); kept in the profile
     Q_PROPERTY(bool englishOnly READ englishOnly WRITE setEnglishOnly NOTIFY filtersChanged)   // kept in the profile: only English streams, whatever else is chosen
     Q_PROPERTY(int categoryId READ categoryId WRITE setCategoryId NOTIFY filtersChanged) // 0 = all
     Q_PROPERTY(bool showMature READ showMature WRITE setShowMature NOTIFY filtersChanged)
@@ -89,6 +90,8 @@ public:
     void setSort(const QString &s);
     QString language() const { return m_englishOnly ? QStringLiteral("en") : m_language; }
     bool englishOnly() const { return m_englishOnly; }
+    bool askBeforeOpening() const { return m_askBeforeOpening; }
+    void setAskBeforeOpening(bool on) { if (on == m_askBeforeOpening) return; m_askBeforeOpening = on; emit filtersChanged(); emit listsEdited(); }
     void setEnglishOnly(bool on);
     void setLanguage(const QString &l);
     int categoryId() const { return m_categoryId; }
@@ -214,6 +217,7 @@ private:
     QString m_next, m_sort = QStringLiteral("viewers"), m_language, m_query;
     int m_categoryId = 0, m_emptyPages = 0;
     bool m_englishOnly = false;
+    bool m_askBeforeOpening = true;
     bool m_showMature = false;
     QVariantMap m_channel;
     QVariantList m_past, m_clips;

@@ -16,23 +16,41 @@ FocusScope {
     // Android: switching to another app pauses the phone's video player and the stream's address (it carries a time-limited token) goes stale,
     // which showed "Demuxing failed" on coming back. So the stream is let go while the app is away and asked for again (with a fresh address) on return.
     property bool inBackground: false
+    property bool videoFullscreen: false          // the picture fills the whole window (Esc / the back button / its own button leave it)
+    // the small pop-out window (picture in picture, Android): allowed while a stream or a download is playing
+    readonly property bool canPopOut: (livePlayer.started && livePlayer.error === "") || (localPlayer.started && localPlayer.error === "")
+    onCanPopOutChanged: hop.setPictureInPictureAllowed(canPopOut, 16, 9)
     function setBackground(away) {
         if (inBackground === away) return
         inBackground = away
         if (!away && page === "watch" && kick && (kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug)
     }
     Connections {
+        target: hop
+        function onInPictureInPictureChanged() {
+            if (hop.inPictureInPicture) return
+            const s = Qt.application.state                                        // the small window was closed or expanded
+            root.setBackground(Qt.platform.os === "android" && (s === Qt.ApplicationSuspended || s === Qt.ApplicationHidden))
+        }
+    }
+    Connections {
         target: Qt.application
         function onStateChanged() {
             if (Qt.platform.os !== "android") return          // on a computer a stream keeps playing when the window loses focus
             const s = Qt.application.state
-            root.setBackground(s === Qt.ApplicationSuspended || s === Qt.ApplicationHidden)
+            root.setBackground((s === Qt.ApplicationSuspended || s === Qt.ApplicationHidden) && !hop.inPictureInPicture)    // popped out: the stream keeps playing
         }
     }
     property bool collapsed: false               // the menu above the streams (search, filters, categories) is pulled up out of the way
     readonly property bool collapsible: !!kick && allowed && !disconnected && (page === "browse" || page === "watch")
     function toggleCollapse() { collapsed = !collapsed }
     property string watchTab: "live"             // live | past | clips (on the watch page)
+    // phones: a tap on a stream asks first, so a fat finger while scrolling does not open one (settings can turn that off)
+    property var pending: null
+    function cardTapped(m) {
+        if (phone && kick.askBeforeOpening) pending = m
+        else openChannel(m.slug)
+    }
     property string playId: ""                   // the downloaded video being played
     property string playlistId: ""               // the playlist being looked at
     property string playlistMessage: ""
@@ -94,10 +112,13 @@ FocusScope {
 
     Connections { target: hop; function onAppNetChanged() { root.allowed = hop.appNetAllowed("kick") } }
     Component.onCompleted: if (kick && allowed) kick.open()
-    Component.onDestruction: if (kick) kick.close()
+    Component.onDestruction: { hop.setPictureInPictureAllowed(false, 16, 9); if (kick) kick.close() }
+    onPageChanged: if (page !== "watch" && page !== "play") videoFullscreen = false
 
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
+        if (videoFullscreen) { videoFullscreen = false; return true }
+        if (pending !== null) { pending = null; return true }
         if (page === "account") { kick.cancelSignIn(); page = "browse"; return true }
         if (page === "categories") { kick.searchCategories(""); page = "browse"; return true }
         if (page === "play") { page = "downloads"; playId = ""; return true }
@@ -457,7 +478,7 @@ FocusScope {
                                 Pill { visible: modelData.viewersText !== ""; anchors { left: parent.left; bottom: parent.bottom; margins: 8 } text: modelData.viewersText + " watching"; color: "#fff"
                                        font.bold: false; font.letterSpacing: 0; background: Rectangle { color: Qt.rgba(0, 0, 0, 0.6); radius: 3 } }
                             }
-                            MouseArea { id: hit; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.openChannel(modelData.slug) }
+                            MouseArea { id: hit; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.cardTapped(modelData) }
                             Rectangle {   // the card's menu
                                 objectName: "kickCardMenu_" + modelData.slug
                                 anchors { right: still.right; top: still.top; margins: 8 }
@@ -664,7 +685,10 @@ FocusScope {
                     Layout.fillWidth: true; Layout.fillHeight: !root.phone
                     Layout.preferredHeight: root.phone ? width * 9 / 16 : -1
                     KickPlayer {
+                        id: livePlayer
                         anchors.fill: parent
+                        fullscreen: root.videoFullscreen
+                        onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
                         url: root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
                         onRetryRequested: { if ((kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug) }
                     }
@@ -1068,12 +1092,35 @@ FocusScope {
                         text: root.dlById[root.playId] ? root.dlById[root.playId].title : "" }
             }
             KickPlayer {
+                id: localPlayer
                 objectName: "kickLocalPlayer"
                 Layout.fillWidth: true; Layout.fillHeight: true
+                fullscreen: root.videoFullscreen
+                onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
                 file: root.page === "play" && hop.downloads ? hop.downloads.videoPath(root.playId) : ""
             }
         }
 
+        Rectangle {   // "watch this stream?" (phones)
+            objectName: "kickConfirm"
+            visible: root.pending !== null && root.page === "browse"
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 6 }
+            height: confirmRow.implicitHeight + 24; radius: 12; color: Theme.panel; border { width: 1; color: Theme.border }
+            RowLayout {
+                id: confirmRow
+                anchors { fill: parent; margins: 12 } spacing: 12
+                Pic { Layout.preferredWidth: 44; Layout.preferredHeight: 44; address: root.pending ? (root.pending.avatar || "") : ""; round: true; maskColor: Theme.panel
+                      backing: Qt.hsla((((root.pending && root.pending.slug) ? root.pending.slug : "a").charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
+                ColumnLayout {
+                    spacing: 0; Layout.fillWidth: true; Layout.minimumWidth: 0
+                    Label { text: root.pending ? "watch " + (root.pending.name || root.pending.slug) + "?" : ""; color: Theme.strong; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(17) } }
+                    Label { text: root.pending ? (root.pending.title || "") : ""; color: Theme.muted; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                }
+                PlainButton { objectName: "kickConfirmNo"; text: "no"; implicitHeight: 40; Layout.preferredWidth: 64; Layout.minimumWidth: 0; onClicked: root.pending = null }
+                PlainButton { objectName: "kickConfirmYes"; text: "watch"; primary: true; implicitHeight: 40; Layout.preferredWidth: 96; Layout.minimumWidth: 0
+                              onClicked: { const s = root.pending ? root.pending.slug : ""; root.pending = null; if (s !== "") root.openChannel(s) } }
+            }
+        }
         Rectangle {   // "blocked <name>: undo"
             objectName: "kickUndo"
             visible: undoTimer.running

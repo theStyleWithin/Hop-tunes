@@ -194,6 +194,15 @@ public:
     PinballGame *pinball() { return &m_pinball; }
     // A game that wants the whole screen: on Android turned sideways with the system bars hidden (restored when it ends).
     Q_INVOKABLE void setGameScreen(bool on);
+    // Android: a stream's picture can pop out into a small window over the home screen (picture in picture) and fill the screen
+    Q_PROPERTY(bool inPictureInPicture READ inPictureInPicture NOTIFY inPictureInPictureChanged)
+    bool inPictureInPicture() const { return m_inPip; }
+    Q_INVOKABLE bool pictureInPictureSupported() const;
+    Q_INVOKABLE void setPictureInPictureAllowed(bool on, int w = 16, int h = 9);   // a stream is playing and may pop out (the home gesture does it)
+    Q_INVOKABLE bool enterPictureInPicture();                                      // pop it out now
+    Q_INVOKABLE void setImmersive(bool on);                                        // hide the phone's status and navigation bars (a full-screen picture)
+    void setInPictureInPicture(bool on);
+    void registerPictureInPicture();                                               // Android: connects the activity's "popped out" report to this object
     Gamepad *gamepad() { return &m_gamepad; }
     QVariantMap gameSettings() const;
     bool analysisSafeMode() const { return m_analysisSafeMode; }
@@ -543,6 +552,7 @@ signals:
     void videoViewStyleChanged();
     void appsEnabledChanged();
     void appHintsChanged();
+    void inPictureInPictureChanged();
     void appNetChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
@@ -593,6 +603,7 @@ private:
     QString m_videoViewStyle = QStringLiteral("window");
     bool m_appsEnabled = false;
     bool m_appHints = true;
+    bool m_inPip = false;
     QSet<QString> m_netAllowed;
 #ifdef HOPTUNES_NET_APPS
     AppNet m_appNet;

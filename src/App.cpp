@@ -8,6 +8,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #ifdef Q_OS_ANDROID
+#include <QJniEnvironment>
 #include <QJniObject>
 #include <QCoreApplication>
 #include <QtCore/private/qandroidextras_p.h>
@@ -1049,6 +1050,76 @@ QString App::unmerge(const QString &from, const QString &albumRef)
     if (!had) return QStringLiteral("nothing to split back");
     artistsChanged();
     return {};
+}
+
+bool App::pictureInPictureSupported() const
+{
+#ifdef Q_OS_ANDROID
+    return QJniObject::callStaticMethod<jboolean>("io/github/thestylewithin/hoptunes/HopActivity", "pipSupported", "()Z");
+#else
+    return false;
+#endif
+}
+
+void App::setPictureInPictureAllowed(bool on, int w, int h)
+{
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>("io/github/thestylewithin/hoptunes/HopActivity", "setPip", "(ZII)V", jboolean(on), jint(w), jint(h));
+#else
+    Q_UNUSED(on); Q_UNUSED(w); Q_UNUSED(h);
+#endif
+}
+
+bool App::enterPictureInPicture()
+{
+#ifdef Q_OS_ANDROID
+    return QJniObject::callStaticMethod<jboolean>("io/github/thestylewithin/hoptunes/HopActivity", "enterPipNow", "()Z");
+#else
+    return false;
+#endif
+}
+
+#ifdef Q_OS_ANDROID
+namespace {
+App *g_pipApp = nullptr;
+void jniPip(JNIEnv *, jclass, jboolean inPip)
+{
+    if (App *a = g_pipApp) QMetaObject::invokeMethod(a, [a, inPip] { a->setInPictureInPicture(inPip); }, Qt::QueuedConnection);
+}
+}
+#endif
+
+void App::registerPictureInPicture()
+{
+#ifdef Q_OS_ANDROID
+    g_pipApp = this;
+    QJniEnvironment env;
+    const JNINativeMethod methods[] = {{"nativePip", "(Z)V", reinterpret_cast<void *>(jniPip)}};
+    env.registerNativeMethods("io/github/thestylewithin/hoptunes/HopActivity", methods, 1);
+#endif
+}
+
+void App::setInPictureInPicture(bool on)
+{
+    if (on == m_inPip) return;
+    m_inPip = on;
+    emit inPictureInPictureChanged();
+}
+
+void App::setImmersive(bool on)
+{
+#ifdef Q_OS_ANDROID
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread([on] {
+        const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+        if (!activity.isValid()) return;
+        const QJniObject window = activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+        const QJniObject view = window.callObjectMethod("getDecorView", "()Landroid/view/View;");
+        const jint flags = on ? (0x1000 | 0x2 | 0x4 | 0x100 | 0x200 | 0x400) : 0;      // immersive sticky, no navigation bar, no status bar, laid out under them
+        view.callMethod<void>("setSystemUiVisibility", "(I)V", flags);
+    });
+#else
+    Q_UNUSED(on);
+#endif
 }
 
 void App::setGameScreen(bool on)

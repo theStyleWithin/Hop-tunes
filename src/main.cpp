@@ -173,6 +173,7 @@ int main(int argc, char *argv[])
     hop::App hopApp;
 #ifdef Q_OS_ANDROID
     hopApp.gamepad()->registerAndroid();   // game controllers: the activity reports them to this object
+    hopApp.registerPictureInPicture();     // a stream popped out into a small window (picture in picture)
 #endif
     if (!hopApp.init()) return 1;
 

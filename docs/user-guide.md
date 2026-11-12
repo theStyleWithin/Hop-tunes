@@ -198,6 +198,14 @@ Hop-tunes shows a 6-digit code and an address on kick.com. Open the address in y
 Kick). The session token Kick gives Hop-tunes is kept only in your profile on this device (a guest keeps it until the session ends) and is sent only to kick.com. **sign out**
 forgets it; the imported follows stay. This uses Kick's unofficial TV sign-in, so it may stop working if Kick changes it.
 
+### Opening a stream, full screen and the pop-out window (phone)
+
+Tapping a stream on a phone asks **watch this stream?** first, so a slip of the finger while you scroll does not open one (settings → apps settings → **opening a stream** can turn the question off).
+On the picture, the **full screen** button makes it fill the phone (the status and navigation bars hide), in portrait or landscape: turn the phone, or press **rotate** if your phone's own rotation is
+off; the back button leaves full screen. The **pop out** button (or leaving Hop-tunes with the home button or gesture while a stream or download is playing) turns the picture into a small window that floats over your
+home screen and other apps (Android's picture in picture): drag it anywhere, pinch to resize it a little, tap it to return to Hop-tunes. Android decides how small or large that window can be, and it only appears while something
+is playing. It needs Android 8 or newer.
+
 ### On a phone: more room
 
 Press the mini player at the bottom and slide it to the right to push it away; tap the little tab at the right edge to bring it back. The round arrow at the top right of the Kick app pulls

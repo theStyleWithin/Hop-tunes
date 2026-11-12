@@ -569,6 +569,24 @@ Item {
             text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
+        SRow {   // phones: ask before opening a stream that was tapped
+            objectName: "kickAskRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact
+            spacing: 16
+            Label { text: "opening a stream"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "kickAskChoice"
+                options: [["kickAskYes", "ask first"], ["kickAskNo", "open right away"]]
+                value: hop.kick && hop.kick.askBeforeOpening ? "kickAskYes" : "kickAskNo"
+                onPicked: function (v) { hop.kick.askBeforeOpening = (v === "kickAskYes") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "on a phone, tapping a stream in the kick app asks \u201cwatch this stream?\u201d first, so a slip of the finger while you scroll does not open one."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         SRow {   // only English streams, always (also on the streams page)
             objectName: "kickEnglishRow"
             visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
