@@ -190,6 +190,14 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
+### Signing in to Kick (optional) and importing your follows
+
+Nothing in the Kick app needs an account. If you want your Kick follows in Hop-tunes' own follow list, open **account** on the streams page and press **sign in with a code**:
+Hop-tunes shows a 6-digit code and an address on kick.com. Open the address in your browser (signed in to Kick) and approve it; Hop-tunes never sees your password. Then press
+**import my follows**: the channels you follow on Kick are added to your follow list on this device (channels you blocked here are skipped, and nothing is followed or changed on
+Kick). The session token Kick gives Hop-tunes is kept only in your profile on this device (a guest keeps it until the session ends) and is sent only to kick.com. **sign out**
+forgets it; the imported follows stay. This uses Kick's unofficial TV sign-in, so it may stop working if Kick changes it.
+
 ### English only
 
 The **english only** switch next to the filters on the streams page (also in settings → apps settings → **kick language**) keeps the list to English streams. It is

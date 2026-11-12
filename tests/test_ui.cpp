@@ -52,6 +52,7 @@ public:
     QList<QUrl> asked;
     int aborted = 0;
     int livePolls = 0;
+    int signInPolls = 0;
     static QByteArray pngBytes()
     {
         QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(90, 60, 160));
@@ -83,6 +84,12 @@ public:
         asked << url;
         NetReply r; r.status = 200;
         if (url.host() == "web.kick.com") r.body = list();
+        else if (url.path().startsWith("/api/tv/link/authenticate/")) {
+            if (++signInPolls < 2) { r.status = 404; r.error = "the site answered 404"; r.body.clear(); }
+            else r.body = "{\"token\":\"tok-ui\"}";
+        }
+        else if (url.path() == "/api/v1/user") r.body = "{\"username\":\"UiTester\"}";
+        else if (url.path() == "/api/v2/channels/followed") r.body = "{\"channels\":[{\"channel_slug\":\"zulu\"},{\"channel_slug\":\"yankee\"}],\"nextCursor\":\"\"}";
         else if (url.path().endsWith("/videos")) {
             QJsonArray a;
             a.append(QJsonObject{{"id", 1}, {"is_live", true}, {"session_title", "live now"}, {"source", "https://stream.kick.com/x/master.m3u8"}, {"duration", 0}});
@@ -2658,6 +2665,55 @@ private slots:
         QVERIFY(click("choice_kickEngOnly"));
         QTRY_VERIFY(kick->englishOnly());
         w->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // The optional account page: sign in with a code, import who you follow into the local list, sign out. Never needed to watch.
+    void signingInIsOptionalAndImportsFollowsIntoTheLocalList()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        kick->setSignInPollMs(400);
+        struct Restore { App *app; KickClient *k; ~Restore() { k->signOut(); k->unfollow("zulu"); k->unfollow("yankee"); k->setSignInPollMs(3000); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        // nothing about signing in is asked for until the account page is opened and the button is pressed
+        for (const QUrl &u : ft->asked) QVERIFY2(!u.path().contains("/tv/link") && u.path() != "/api/v1/user", qPrintable(u.toString()));
+        QVERIFY(item("kickAccountButton") && item("kickAccountButton")->isVisible());
+        QVERIFY(click("kickAccountButton"));
+        QTRY_VERIFY(item("kickAccountPage") && item("kickAccountPage")->isVisible());
+        QVERIFY(item("kickSignIn")->isVisible() && !item("kickImportFollows")->isVisible());
+        shot("kick-account-signed-out");
+        QVERIFY(click("kickSignIn"));
+        QTRY_VERIFY(item("kickSignInCode") && item("kickSignInCode")->isVisible());
+        QVERIFY(QRegularExpression("^\\d{6}$").match(item("kickSignInCode")->property("text").toString()).hasMatch());
+        QVERIFY(item("kickSignInUrl")->property("text").toString().startsWith("https://kick.com/tv/login?uuid="));
+        shot("kick-account-code");
+        QTRY_VERIFY_WITH_TIMEOUT(kick->signedIn(), 5000);
+        QTRY_VERIFY(item("kickAccountName") && item("kickAccountName")->isVisible());
+        QTRY_VERIFY(item("kickAccountName")->property("text").toString().contains("UiTester"));
+        QVERIFY(!item("kickSignIn")->isVisible());
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("token").toString() == QLatin1String("tok-ui"));
+        QVERIFY(click("kickImportFollows"));
+        QTRY_VERIFY_WITH_TIMEOUT(item("kickImportMessage")->isVisible() && item("kickImportMessage")->property("text").toString().contains("imported 2"), 5000);
+        QVERIFY(kick->isFollowing("zulu") && kick->isFollowing("yankee"));
+        shot("kick-account-imported");
+        QVERIFY(click("kickSignOut"));
+        QTRY_VERIFY(!kick->signedIn());
+        QVERIFY(item("kickSignIn")->isVisible());
+        QVERIFY(kick->isFollowing("zulu"));                                            // the imported list is yours and stays
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().isEmpty());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 
     // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played

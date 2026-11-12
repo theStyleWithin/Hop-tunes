@@ -2,6 +2,9 @@
 #include "apps/KickClient.h"
 
 #include <QDateTime>
+#include <QRandomGenerator>
+#include <QTimer>
+#include <QUuid>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUrlQuery>
@@ -472,7 +475,8 @@ QJsonObject KickClient::listsJson() const
 {
     return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
                        {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()},
-                       {QStringLiteral("englishOnly"), m_englishOnly}};
+                       {QStringLiteral("englishOnly"), m_englishOnly},
+                       {QStringLiteral("account"), m_signedIn ? QJsonObject{{QStringLiteral("token"), m_token}, {QStringLiteral("name"), m_accountName}} : QJsonObject{}}};
 }
 
 QJsonArray KickClient::playlistsJson() const
@@ -519,6 +523,17 @@ void KickClient::setListsJson(const QJsonObject &o)
                 if (!itemId.isEmpty() && !isInPlaylist(id, itemId) && AppNet::urlAllowed(kApp, QUrl(m.value(QStringLiteral("url")).toString()), &why)) m_playlists.last().items.append(m);
             }
         }
+    }
+    ++m_signInGen;                                                // a sign-in in progress belongs to the profile it started in
+    m_signInState.clear(); m_signInCode.clear(); m_signInUrl.clear(); m_importMessage.clear(); m_importing = false;
+    {
+        const QJsonObject acc = o.value(QStringLiteral("account")).toObject();
+        const QString token = acc.value(QStringLiteral("token")).toString();
+        m_signedIn = !token.isEmpty() && token.size() < 4000;
+        m_token = m_signedIn ? token : QString();
+        m_accountName = m_signedIn ? acc.value(QStringLiteral("name")).toString().left(60) : QString();
+        emit signedInChanged();
+        emit signInChanged();
     }
     m_englishOnly = o.value(QStringLiteral("englishOnly")).toBool(false);
     emit filtersChanged();
@@ -796,6 +811,170 @@ void KickClient::loadClips()
         else { m_clips = l; m_libraryState = l.isEmpty() ? QStringLiteral("this channel has no clips") : QString(); }
         emit libraryChanged();
     });
+}
+
+// ---- optional sign-in (Kick's TV-link page) and importing the follow list -------------------------------------
+
+namespace {
+NetLimits accountLimits(const QByteArray &method, const QByteArray &body, const QString &token = QString())
+{
+    auto h = [](const char *k, const QByteArray &v) { return qMakePair(QByteArray(k), v); };
+    NetLimits l;
+    l.method = method;
+    l.body = body;
+    l.headers.append(h("Accept", "application/json"));
+    if (!body.isEmpty()) l.headers.append(h("Content-Type", "application/json"));
+    l.headers.append(h("Origin", "https://kick.com"));             // what kick.com's own pages send; only ever with these three addresses
+    l.headers.append(h("Referer", "https://kick.com/tv/login"));
+    if (!token.isEmpty()) l.headers.append(h("Authorization", "Bearer " + token.toUtf8()));
+    return l;
+}
+} // namespace
+
+void KickClient::setSignInState(const QString &state, const QString &message)
+{
+    m_signInState = state;
+    m_signInMessage = message;
+    emit signInChanged();
+}
+
+void KickClient::startSignIn()
+{
+    if (m_signedIn || !ready()) return;
+    const quint64 gen = ++m_signInGen;
+    m_signInUuid = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_signInCode = QStringLiteral("%1").arg(QRandomGenerator::system()->bounded(1000000), 6, 10, QLatin1Char('0'));
+    m_signInUrl = QStringLiteral("https://kick.com/tv/login?uuid=") + m_signInUuid + QStringLiteral("&code=") + m_signInCode;
+    m_signInPolls = 0;
+    m_signInFailures = 0;
+    setSignInState(QStringLiteral("waiting"), QStringLiteral("waiting for you to approve it on kick.com…"));
+    QTimer::singleShot(m_signInPollMs, this, [this, gen] { pollSignIn(gen); });
+}
+
+void KickClient::cancelSignIn()
+{
+    ++m_signInGen;
+    m_signInCode.clear(); m_signInUrl.clear(); m_signInUuid.clear();
+    setSignInState(QString(), QString());
+}
+
+void KickClient::pollSignIn(quint64 gen)
+{
+    if (gen != m_signInGen || !m_open) return;
+    if (++m_signInPolls > 200) {                                   // about ten minutes
+        m_signInCode.clear(); m_signInUrl.clear();
+        setSignInState(QStringLiteral("error"), QStringLiteral("the code was not approved in time: start again"));
+        return;
+    }
+    const QByteArray body = QJsonDocument(QJsonObject{{QStringLiteral("key"), m_signInCode}}).toJson(QJsonDocument::Compact);
+    m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/tv/link/authenticate/") + m_signInUuid), [this, gen](NetReply r) {
+        if (gen != m_signInGen) return;
+        if (r.status == 200 && r.error.isEmpty()) {
+            const QJsonObject o = QJsonDocument::fromJson(r.body).object();
+            QString token = o.value(QStringLiteral("token")).toString();
+            if (token.isEmpty()) token = o.value(QStringLiteral("data")).toObject().value(QStringLiteral("token")).toString();
+            if (token.isEmpty()) { setSignInState(QStringLiteral("error"), QStringLiteral("kick answered, but not with a sign-in this version understands")); return; }
+            finishSignIn(token);
+            return;
+        }
+        // 403 / 404 / 422 = not approved yet; a few network errors in a row are tolerated, then it says so
+        const bool waiting = r.status == 403 || r.status == 404 || r.status == 422;
+        if (waiting) m_signInFailures = 0;
+        else if (++m_signInFailures >= 5) { setSignInState(QStringLiteral("error"), r.error.isEmpty() ? QStringLiteral("kick did not answer as expected") : r.error); return; }
+        QTimer::singleShot(m_signInPollMs, this, [this, gen] { pollSignIn(gen); });
+    }, accountLimits("POST", body));
+}
+
+void KickClient::finishSignIn(const QString &token)
+{
+    const quint64 gen = m_signInGen;
+    m_token = token;
+    m_signedIn = true;
+    m_accountName = QStringLiteral("your kick account");
+    m_signInCode.clear(); m_signInUrl.clear(); m_signInUuid.clear();
+    emit signedInChanged();
+    setSignInState(QString(), QString());
+    emit listsEdited();                                            // the token is saved with the profile
+    // who it is, for the screen (not needed for anything else)
+    m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/v1/user")), [this, gen](NetReply r) {
+        if (gen != m_signInGen || !m_signedIn || !r.error.isEmpty()) return;
+        const QJsonObject o = QJsonDocument::fromJson(r.body).object();
+        QString name = o.value(QStringLiteral("username")).toString();
+        if (name.isEmpty()) name = o.value(QStringLiteral("user")).toObject().value(QStringLiteral("username")).toString();
+        if (name.isEmpty()) return;
+        m_accountName = name.left(60);
+        emit signedInChanged();
+        emit listsEdited();
+    }, accountLimits("GET", QByteArray(), token));
+}
+
+void KickClient::signOut()
+{
+    ++m_signInGen;
+    m_token.clear(); m_accountName.clear(); m_signInCode.clear(); m_signInUrl.clear(); m_signInUuid.clear(); m_importMessage.clear();
+    m_importing = false;
+    const bool was = m_signedIn;
+    m_signedIn = false;
+    if (m_chatMode == QLatin1String("kick")) { m_chatMode = QStringLiteral("off"); emit chatModeChanged(); }
+    setSignInState(QString(), QString());
+    if (was) { emit signedInChanged(); emit listsEdited(); }
+}
+
+void KickClient::importFollows()
+{
+    if (!m_signedIn || m_token.isEmpty() || m_importing || !ready()) return;
+    m_importing = true;
+    m_importMessage = QStringLiteral("reading your follow list from kick.com…");
+    emit signInChanged();
+    importPage(m_signInGen, QString(), 0, {});
+}
+
+void KickClient::importPage(quint64 gen, QString cursor, int page, QStringList slugs)
+{
+    QUrl url(QStringLiteral("https://kick.com/api/v2/channels/followed"));
+    if (!cursor.isEmpty()) url.setQuery(QStringLiteral("cursor=") + QString::fromLatin1(QUrl::toPercentEncoding(cursor)));
+    m_net->get(kApp, url, [this, gen, cursor, page, slugs](NetReply r) mutable {
+        if (gen != m_signInGen || !m_importing) return;
+        auto stop = [this](const QString &msg) { m_importing = false; m_importMessage = msg; emit signInChanged(); };
+        if (r.status == 401 || r.status == 403) {
+            m_token.clear(); m_signedIn = false; m_accountName.clear();
+            emit signedInChanged(); emit listsEdited();
+            stop(QStringLiteral("your sign-in has expired: sign in again")); return;
+        }
+        if (!r.error.isEmpty()) { stop(QStringLiteral("could not read your follow list: ") + r.error); return; }
+        const QJsonObject o = QJsonDocument::fromJson(r.body).object();
+        QJsonArray arr = o.value(QStringLiteral("channels")).toArray();
+        if (arr.isEmpty()) arr = o.value(QStringLiteral("data")).toArray();
+        if (arr.isEmpty() && page == 0 && !o.contains(QStringLiteral("channels")) && !o.contains(QStringLiteral("data"))) {
+            stop(QStringLiteral("kick answered, but not in a form this version understands")); return;
+        }
+        for (const QJsonValue &v : arr) {
+            const QJsonObject c = v.toObject();
+            QString s = c.value(QStringLiteral("channel_slug")).toString();
+            if (s.isEmpty()) s = c.value(QStringLiteral("slug")).toString();
+            if (s.isEmpty()) s = c.value(QStringLiteral("channel")).toObject().value(QStringLiteral("slug")).toString();
+            if (s.isEmpty()) s = c.value(QStringLiteral("user")).toObject().value(QStringLiteral("username")).toString();
+            s = normalize(s);
+            if (!s.isEmpty() && !slugs.contains(s) && slugs.size() < 500) slugs << s;
+        }
+        QString next;
+        const QJsonValue nc = o.contains(QStringLiteral("nextCursor")) ? o.value(QStringLiteral("nextCursor")) : (o.contains(QStringLiteral("next_cursor")) ? o.value(QStringLiteral("next_cursor")) : o.value(QStringLiteral("cursor")));
+        next = nc.isString() ? nc.toString() : (nc.isDouble() ? QString::number(qint64(nc.toDouble())) : QString());
+        if (!arr.isEmpty() && !next.isEmpty() && next != cursor && page < 20 && slugs.size() < 500) { importPage(gen, next, page + 1, slugs); return; }
+        // done: add them to the local follow list (a blocked streamer stays blocked; ones already followed are not doubled)
+        int added = 0, already = 0, blocked = 0;
+        for (const QString &s : slugs) {
+            if (m_blocked.contains(s)) { ++blocked; continue; }
+            if (m_following.contains(s)) { ++already; continue; }
+            m_following.append(s); ++added;
+        }
+        m_importing = false;
+        m_importMessage = slugs.isEmpty() ? QStringLiteral("you do not follow anyone on kick yet")
+                                          : QStringLiteral("imported %1 channels (%2 were already in your list%3). they are kept on this device now.")
+                                                .arg(added).arg(already).arg(blocked > 0 ? QStringLiteral(", %1 skipped because you blocked them").arg(blocked) : QString());
+        emit signInChanged();
+        if (added > 0) { emit listsChanged(); emit listsEdited(); }
+    }, accountLimits("GET", QByteArray(), m_token));
 }
 
 } // namespace hop

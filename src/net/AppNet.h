@@ -35,6 +35,12 @@ struct NetLimits {
     int timeoutMs = 15000;
     qint64 rangeStart = -1;      // with rangeLength: ask only for this slice of the file (HTTP Range)
     qint64 rangeLength = -1;
+    // Account requests only (sign-in and the follow list): a POST body and a few named headers. The gateway refuses these for any
+    // address that is not on the app's short account list (see AppNet::accountUrlAllowed), and never follows a redirect for them.
+    QByteArray method = "GET";
+    QByteArray body;
+    QList<QPair<QByteArray, QByteArray>> headers;
+    bool isAccount() const { return method != "GET" || !body.isEmpty() || !headers.isEmpty(); }
 };
 
 class NetTransport : public QObject {
@@ -59,6 +65,8 @@ public:
     static QStringList hostsFor(const QString &app);
     // the rules above for one address (without the permission): https, port, user info, host
     static bool urlAllowed(const QString &app, const QUrl &url, QString *why = nullptr);
+    // The few addresses where an app may send a body or headers (its optional sign-in): checked for every account request.
+    static bool accountUrlAllowed(const QString &app, const QUrl &url, QString *why = nullptr);
     // The video itself is fetched by the video engine (libmpv or GStreamer), not by this gateway: it may only be given an address of
     // the video host the app declared (https, standard port, no user name). Inside the engine the host cannot be enforced any further.
     static QStringList streamSuffixesFor(const QString &app);

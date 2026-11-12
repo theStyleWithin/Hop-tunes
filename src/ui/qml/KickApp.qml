@@ -11,7 +11,7 @@ FocusScope {
     objectName: "kickApp"
     readonly property var kick: hop.kick
     property bool allowed: hop.appNetAllowed("kick")
-    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist
+    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account
     property bool disconnected: false
     property string watchTab: "live"             // live | past | clips (on the watch page)
     property string playId: ""                   // the downloaded video being played
@@ -79,6 +79,7 @@ FocusScope {
 
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
+        if (page === "account") { kick.cancelSignIn(); page = "browse"; return true }
         if (page === "play") { page = "downloads"; playId = ""; return true }
         if (page === "playlist") { page = "playlists"; playlistId = ""; return true }
         if (page === "playlists") { page = "browse"; return true }
@@ -315,6 +316,7 @@ FocusScope {
                     background: Item {}
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
+                PlainButton { objectName: "kickAccountButton"; implicitHeight: 36; text: kick.signedIn ? "account \u2713" : "account"; onClicked: root.page = "account" }
                 PlainButton { objectName: "kickPlaylistsButton"; text: "playlists" + (kick.playlists.length > 0 ? " (" + kick.playlists.length + ")" : ""); implicitHeight: 36
                               onClicked: { root.playlistMessage = ""; root.page = "playlists" } }
                 PlainButton { objectName: "kickDownloadsButton"; visible: !!hop.downloads; implicitHeight: 36
@@ -614,6 +616,58 @@ FocusScope {
                 Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                 Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
             }
+        }
+
+        // ---- account: optional. Watching never needs it; it only lets you import who you follow on Kick ----
+        ColumnLayout {
+            objectName: "kickAccountPage"
+            anchors.fill: parent; visible: root.page === "account"; spacing: 10
+            RowLayout {
+                spacing: 12; Layout.fillWidth: true
+                PlainButton { objectName: "kickAccountBack"; text: root.phone ? "\u2039" : "\u2039 streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                Label { text: "kick account"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
+                Item { Layout.fillWidth: true }
+            }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                    text: "signing in is optional: you never need a kick account to watch, search, download or record. it only lets you import the channels you follow on kick into the follow list on this device. nothing is ever followed or changed on kick." }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                    text: "how it works: hop-tunes shows a 6-digit code and an address on kick.com; you open it in your own browser (signed in to kick) and approve it there. hop-tunes never sees your password. kick then gives hop-tunes a session token, which is kept only in this profile on this device (a guest keeps it only until the session ends) and is sent only to kick.com. sign out forgets it. this uses kick's unofficial TV sign-in, so it may stop working if kick changes it." }
+            // signed out
+            ColumnLayout {
+                visible: !kick.signedIn; Layout.fillWidth: true; spacing: 8
+                PlainButton { objectName: "kickSignIn"; visible: kick.signInState === ""; text: "sign in with a code"; primary: true; implicitHeight: 40; onClicked: kick.startSignIn() }
+                ColumnLayout {
+                    visible: kick.signInState === "waiting"; Layout.fillWidth: true; spacing: 6
+                    Label { text: "your code"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 1 } }
+                    Label { objectName: "kickSignInCode"; text: kick.signInCode; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(40); weight: Font.Light; letterSpacing: 6 } }
+                    Label { text: "open this address in your browser, signed in to kick, and approve:"; color: Theme.text2; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                    TextEdit { objectName: "kickSignInUrl"; text: kick.signInUrl; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere; Layout.fillWidth: true
+                               color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                    RowLayout {
+                        spacing: 10
+                        PlainButton { objectName: "kickOpenSignIn"; text: "open it"; implicitHeight: 38; onClicked: Qt.openUrlExternally(kick.signInUrl) }
+                        PlainButton { objectName: "kickCancelSignIn"; text: "cancel"; implicitHeight: 38; onClicked: kick.cancelSignIn() }
+                    }
+                }
+                Label { objectName: "kickSignInMessage"; visible: kick.signInMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap
+                        color: kick.signInState === "error" ? Theme.danger : Theme.muted; text: kick.signInMessage; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                PlainButton { objectName: "kickSignInAgain"; visible: kick.signInState === "error"; text: "try again"; implicitHeight: 38; onClicked: { kick.cancelSignIn(); kick.startSignIn() } }
+            }
+            // signed in
+            ColumnLayout {
+                visible: kick.signedIn; Layout.fillWidth: true; spacing: 8
+                Label { objectName: "kickAccountName"; text: "signed in as " + kick.accountName; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) } }
+                RowLayout {
+                    spacing: 10
+                    PlainButton { objectName: "kickImportFollows"; text: kick.importing ? "reading…" : "import my follows"; primary: true; implicitHeight: 40; enabled: !kick.importing; onClicked: kick.importFollows() }
+                    PlainButton { objectName: "kickSignOut"; text: "sign out"; danger: true; implicitHeight: 40; onClicked: kick.signOut() }
+                }
+                Label { objectName: "kickImportMessage"; visible: kick.importMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; text: kick.importMessage
+                        font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                        text: "imported channels go into your follow list on this device and stay there even after you sign out. a streamer you blocked is not imported." }
+            }
+            Item { Layout.fillHeight: true }
         }
 
         // ---- playlists: favourite channels (and clips / past streams), kept on this device only ----
