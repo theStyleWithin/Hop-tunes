@@ -28,6 +28,11 @@ clean-room project inspired by how the Zune software organised music. It contain
 Microsoft code, artwork, fonts or other assets and is not affiliated with or endorsed by
 Microsoft.
 
+## libwebp
+
+Kick sends its pictures as WebP. Hop-tunes reads them with [libwebp](https://developers.google.com/speed/webp) (Google, BSD 3-clause licence),
+linked from the system on desktop and built statically into the Android app, so the pictures do not depend on Qt's optional WebP plugin.
+
 ## OpenSSL on Android
 
 The Android app bundles OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`), Apache License 2.0, as built by
