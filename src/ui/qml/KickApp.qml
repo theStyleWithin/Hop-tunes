@@ -17,7 +17,7 @@ FocusScope {
     signal leave()
 
     readonly property var hosts: [["kick.com", "finds the channel and its live stream"], ["web.kick.com", "the list of live streams"],
-                                  ["images.kick.com", "the stream pictures"], ["files.kick.com", "profile pictures and emotes"],
+                                  ["images.kick.com", "the stream pictures"], ["stream.kick.com", "the developer\u2019s live picture"], ["files.kick.com", "profile pictures and emotes"],
                                   ["live-video.net", "the video itself"]]
 
     Connections { target: hop; function onAppNetChanged() { root.allowed = hop.appNetAllowed("kick") } }
@@ -266,6 +266,8 @@ FocusScope {
                                 address: modelData.thumb; backing: Theme.artColors("kick" + modelData.slug)[1]
                                 Pill { visible: modelData.viewers > 0 || modelData.live === true; anchors { left: parent.left; top: parent.top; margins: 8 } text: "LIVE"; color: "#fff"
                                        background: Rectangle { color: "#e5484d"; radius: 3 } }
+                                Pill { objectName: "kickDeveloperTag"; visible: modelData.developer === true; anchors { left: parent.left; top: parent.top; leftMargin: 54; topMargin: 8 }
+                                       text: "DEVELOPER"; color: Theme.ink; background: Rectangle { color: Theme.accent; radius: 3 } }
                                 Pill { visible: modelData.viewersText !== ""; anchors { left: parent.left; bottom: parent.bottom; margins: 8 } text: modelData.viewersText + " watching"; color: "#fff"
                                        font.bold: false; font.letterSpacing: 0; background: Rectangle { color: Qt.rgba(0, 0, 0, 0.6); radius: 3 } }
                             }

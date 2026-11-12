@@ -51,12 +51,13 @@ QByteArray streamsJson(const QStringList &slugs, const QString &next, int viewer
     return QJsonDocument(QJsonObject{{"data", QJsonObject{{"livestreams", a}, {"pagination", QJsonObject{{"next_cursor", next}}}}}, {"message", "Success"}}).toJson();
 }
 
-QByteArray channelJson(const QString &slug, bool live)
+QByteArray channelJson(const QString &slug, bool live, bool mature = false)
 {
     QJsonObject o{{"id", 3}, {"slug", slug}, {"playback_url", "https://playback.live-video.net/x.m3u8"}, {"followers_count", 12},
                   {"user", QJsonObject{{"username", slug}, {"profile_pic", "https://files.kick.com/p.webp"}}},
                   {"chatroom", QJsonObject{{"id", 668}}}};
-    o["livestream"] = live ? QJsonValue(QJsonObject{{"session_title", "a title"}, {"viewer_count", 1234},
+    o["livestream"] = live ? QJsonValue(QJsonObject{{"session_title", "a title"}, {"viewer_count", 1234}, {"is_mature", mature},
+                                                    {"thumbnail", QJsonObject{{"url", "https://stream.kick.com/thumbnails/x.jpg"}}},
                                                     {"categories", QJsonArray{QJsonObject{{"name", "Music"}}}}}) : QJsonValue();
     return QJsonDocument(o).toJson();
 }
@@ -84,6 +85,7 @@ private slots:
         QVERIFY(AppNet::urlAllowed("kick", QUrl("https://kick.com/api/v2/channels/x"), &why));
         QVERIFY(AppNet::urlAllowed("kick", QUrl("https://web.kick.com/api/v1/livestreams?limit=1"), &why));
         QVERIFY(AppNet::urlAllowed("kick", QUrl("https://images.kick.com/a.webp"), &why));
+        QVERIFY(AppNet::urlAllowed("kick", QUrl("https://stream.kick.com/thumbnails/x.jpg"), &why));
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("http://kick.com/"), &why));                 // not secure
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://kick.com:8443/"), &why));           // not the standard port
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://user:pw@kick.com/"), &why));        // a user name
@@ -359,6 +361,67 @@ private slots:
         QCOMPARE(other.chatMode(), QString("off"));
         other.setListsJson(QJsonObject{{"chatMode", 5}});
         QCOMPARE(other.chatMode(), QString("off"));
+    }
+
+    void theDevelopersLiveStreamTakesTheFirstCardOfTheDefaultFeed()
+    {
+        fresh();
+        KickClient k(&net);
+        bool devLive = true, devMature = false;
+        ft->handler = [&](const QUrl &u) {
+            if (u.host() == "web.kick.com") return ok(streamsJson({"alpha", "gamehopper", "bravo"}, ""));
+            if (u.host() == "kick.com" && u.path().endsWith("/gamehopper")) return ok(channelJson("gamehopper", devLive, devMature));
+            return ok("{\"data\":[]}");
+        };
+        k.open();
+        QTRY_COMPARE(firstSlug(k), QString("gamehopper"));                         // first card, even though Kick listed it second
+        QCOMPARE(k.streams().size(), 3);                                           // and not twice
+        const QVariantMap card = k.streams().first().toMap();
+        QVERIFY(card.value("developer").toBool());                                 // labelled on the card
+        QCOMPARE(card.value("thumb").toString(), QString("https://stream.kick.com/thumbnails/x.jpg"));
+        QVERIFY(!k.streams().at(1).toMap().value("developer").toBool());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        // not in a search, a category or a language: those lists are what the person asked for
+        k.setCategoryId(15);
+        QTRY_COMPARE(firstSlug(k), QString("alpha"));
+        k.setCategoryId(0);
+        QTRY_COMPARE(firstSlug(k), QString("gamehopper"));
+        k.setLanguage("en");
+        QTRY_COMPARE(firstSlug(k), QString("alpha"));
+        k.setLanguage("");
+        QTRY_COMPARE(firstSlug(k), QString("gamehopper"));
+        // the viewer's own choices win: a block, and 18+ hidden
+        QVERIFY(k.block("gamehopper"));
+        QCOMPARE(firstSlug(k), QString("alpha"));
+        k.unblock("gamehopper");
+        QCOMPARE(firstSlug(k), QString("gamehopper"));
+        devMature = true;
+        k.refresh();
+        QTRY_COMPARE(firstSlug(k), QString("alpha"));                              // 18+ stream and 18+ hidden: not shown
+        k.setShowMature(true);
+        QTRY_COMPARE(firstSlug(k), QString("gamehopper"));
+        k.setShowMature(false);
+        // offline: no card, and no other channel can take it
+        devMature = false; devLive = false;
+        k.refresh();
+        QTRY_COMPARE(firstSlug(k), QString("alpha"));
+        QCOMPARE(k.streams().size(), 3);
+        QVERIFY(!k.streams().at(1).toMap().value("developer").toBool());
+    }
+
+    void onlyTheDevelopersChannelCanTakeThatCard()
+    {
+        fresh();
+        KickClient k(&net);
+        ft->handler = [](const QUrl &u) {
+            if (u.host() == "web.kick.com") return ok(streamsJson({"alpha", "bravo"}, ""));
+            if (u.host() == "kick.com") return ok(channelJson("someoneelse", true));    // whatever the lookup answers, it is not the developer
+            return ok("{\"data\":[]}");
+        };
+        k.open();
+        QTRY_COMPARE(k.streams().size(), 2);
+        QTest::qWait(100);
+        QCOMPARE(firstSlug(k), QString("alpha"));
     }
 
     void searchAndFilters()

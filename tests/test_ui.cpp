@@ -72,6 +72,9 @@ public:
     {
         QJsonObject o{{"slug", slug}, {"user", QJsonObject{{"username", slug}}}, {"chatroom", QJsonObject{{"id", 5}}}, {"followers_count", 3}};
         o["livestream"] = QJsonValue();                     // offline: no video engine is started in this test
+        if (slug == QLatin1String("gamehopper"))            // (the developer is live, so the pinned card shows; the test never opens it)
+            o["livestream"] = QJsonObject{{"session_title", "developer stream"}, {"viewer_count", 12}, {"is_mature", false},
+                                          {"thumbnail", QJsonObject{{"url", "https://stream.kick.com/thumbnails/dev.jpg"}}}};
         return QJsonDocument(o).toJson();
     }
     void get(const QUrl &url, const QByteArray &, const QByteArray &, Done done) override
@@ -79,7 +82,7 @@ public:
         asked << url;
         NetReply r; r.status = 200;
         if (url.host() == "web.kick.com") r.body = list();
-        else if (url.host() == "images.kick.com" || url.host() == "files.kick.com") r.body = pngBytes();
+        else if (url.host() == "images.kick.com" || url.host() == "files.kick.com" || url.host() == "stream.kick.com") r.body = pngBytes();
         else if (url.path().startsWith("/api/v2/channels/")) r.body = channel(url.path().section('/', -1));
         else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"}]}";
         else r.body = "{}";
@@ -2228,6 +2231,11 @@ private slots:
         QVERIFY(m_app->appNetAllowed("kick"));
         QVERIFY(item("kickCard_bravo") != nullptr);
         QVERIFY(item("kickCard_charlie") == nullptr);
+        // the developer is live in this fixture: that card comes first (top left), tagged, ahead of Kick's own order
+        QTRY_VERIFY(item("kickCard_gamehopper") && item("kickCard_gamehopper")->isVisible());
+        QVERIFY(item("kickDeveloperTag") != nullptr);
+        QVERIFY(item("kickCard_gamehopper")->x() < item("kickCard_alpha")->x() || item("kickCard_gamehopper")->y() < item("kickCard_alpha")->y());
+        QVERIFY(item("kickCard_gamehopper")->x() == 0 && item("kickCard_gamehopper")->y() == 0);
         QVERIFY(item("kickPlayer") == nullptr || !item("kickSurface"));
         QVERIFY(item("kickSurface") == nullptr);                                   // nothing plays until a stream is picked
         QVERIFY(item("kickMore") == nullptr || !item("kickMore")->isVisible());   // (one page only in this fixture)

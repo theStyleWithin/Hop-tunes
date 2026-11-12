@@ -42,6 +42,10 @@ class KickClient : public QObject {
 public:
     static constexpr const char *kApp = "kick";
     static constexpr int kPageSize = 36;
+    // The developer's own channel: when it is live it takes the first card of the default feed (no search, category or language chosen).
+    // It is one lookup when the list is loaded, labelled "developer" on its card, and it follows the viewer's own choices: a viewer who blocked
+    // the channel, or who keeps 18+ streams hidden, does not get it.
+    static constexpr const char *kDeveloperSlug = "gamehopper";
 
     explicit KickClient(AppNet *net, QObject *parent = nullptr);
 
@@ -114,6 +118,8 @@ signals:
 private:
     void requestList(bool more);
     void requestCategories();
+    void requestDeveloper();
+    bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && m_language.isEmpty(); }
     void applyFilters();
     void setError(const QString &e);
     void begin() { ++m_pending; emit loadingChanged(); }
@@ -131,6 +137,7 @@ private:
     int m_categoryId = 0, m_emptyPages = 0;
     bool m_showMature = false;
     QVariantMap m_channel;
+    QVariantMap m_dev;           // the developer's stream when it is live (else empty)
     QStringList m_following, m_blocked;
     QString m_chatMode = QStringLiteral("off");
     bool m_signedIn = false;

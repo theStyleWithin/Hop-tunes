@@ -164,11 +164,15 @@ Kick is the first app. It browses the live streams on kick.com in a wide menu an
 until you click a stream, and no Kick account is needed.
 
 - **Allowing it.** The first time you open Kick it asks, and lists exactly which sites it will contact (kick.com, web.kick.com,
-  images.kick.com, files.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
+  images.kick.com, stream.kick.com, files.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
   You can take the permission back any time in **settings → apps settings → kick**. It uses the internet only while the app is open, and the bar at
   the bottom shows what is connected, with a **disconnect** button. Nothing is kept on disk and no cookies are stored.
 - **Browsing.** Search, pick a category, sort by most viewers or featured, choose a language. Adult (18+) streams are hidden unless you tick
   **show 18+**. **show more** and **refresh** are buttons: Hop-tunes never loads more in the background.
+- **The developer's stream.** When the developer of Hop-tunes (gamehopper) is live, their stream takes the first card of the default feed, marked
+  **developer**, ahead of Kick's own order. It is one extra lookup of that channel when the list loads, it never plays by itself, and it is
+  not added to searches, categories or language filters. Your own choices win: if you block that channel, or keep 18+ streams hidden and that stream is
+  marked 18+, you will not see it.
 - **Following and blocking stay on this computer.** The **follow** button on a stream's page (or in a card's ⋯ menu) adds the channel to a
   list in your profile; it is shown as a "following" row with live dots, checked only when you open the app or press refresh. **Block** hides
   a streamer for good from every list and search; unblock them in **settings → apps settings**. Hop-tunes never follows, subscribes or

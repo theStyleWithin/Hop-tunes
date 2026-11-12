@@ -78,7 +78,7 @@ AppNet::~AppNet() = default;
 QStringList AppNet::hostsFor(const QString &app)
 {
     if (app == QLatin1String("kick"))
-        return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("files.kick.com")};
+        return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("stream.kick.com"), QStringLiteral("files.kick.com")};
     return {};
 }
 

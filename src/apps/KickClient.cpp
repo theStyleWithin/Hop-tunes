@@ -151,6 +151,9 @@ bool KickClient::parseChannel(const QByteArray &json, QVariantMap *out)
     m[QStringLiteral("playbackUrl")] = live.isObject() ? text(o.value(QStringLiteral("playback_url"))) : QString();
     m[QStringLiteral("chatroomId")] = whole(o.value(QStringLiteral("chatroom")).toObject().value(QStringLiteral("id")));
     m[QStringLiteral("followers")] = whole(o.value(QStringLiteral("followers_count")));
+    m[QStringLiteral("thumb")] = text(ls.value(QStringLiteral("thumbnail")).toObject().value(QStringLiteral("url")));
+    m[QStringLiteral("mature")] = ls.value(QStringLiteral("is_mature")).toBool(false);
+    m[QStringLiteral("language")] = text(ls.value(QStringLiteral("language")));
     *out = m;
     return true;
 }
@@ -204,6 +207,7 @@ void KickClient::refresh()
     m_raw.clear(); m_streams.clear(); m_next.clear(); m_emptyPages = 0;
     emit streamsChanged();
     requestList(false);
+    requestDeveloper();
 }
 
 void KickClient::loadMore()
@@ -252,8 +256,35 @@ void KickClient::applyFilters()
         if (!m_showMature && m.value(QStringLiteral("mature")).toBool()) continue;
         shown.append(m);
     }
+    if (m_query.isEmpty() && pinApplies() && !m_dev.isEmpty()) {
+        const QString slug = m_dev.value(QStringLiteral("slug")).toString();
+        const bool hidden = m_blocked.contains(slug) || (!m_showMature && m_dev.value(QStringLiteral("mature")).toBool());
+        if (!hidden) {
+            QVariantList withPin{m_dev};
+            for (const QVariant &v : shown) if (v.toMap().value(QStringLiteral("slug")).toString() != slug) withPin.append(v);
+            shown = withPin;
+        }
+    }
     m_streams = shown;
     emit streamsChanged();
+}
+
+void KickClient::requestDeveloper()
+{
+    m_dev.clear();
+    if (!pinApplies()) return;
+    const quint64 gen = m_listGen;
+    begin();
+    m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + QLatin1String(kDeveloperSlug)), [this, gen](NetReply r) {
+        end();
+        if (gen != m_listGen || !r.error.isEmpty()) return;        // not asked for any more, or not reachable: simply no pinned card
+        QVariantMap ch;
+        if (!parseChannel(r.body, &ch) || !ch.value(QStringLiteral("live")).toBool()) return;
+        if (ch.value(QStringLiteral("slug")).toString() != QLatin1String(kDeveloperSlug)) return;      // only that channel can take the card
+        ch[QStringLiteral("developer")] = true;
+        m_dev = ch;
+        applyFilters();
+    });
 }
 
 void KickClient::requestCategories()
@@ -310,7 +341,7 @@ void KickClient::setCategoryId(int id)
 {
     id = qMax(0, id);
     if (id == m_categoryId) return;
-    m_categoryId = id; emit filtersChanged(); if (m_query.isEmpty()) refresh();
+    m_categoryId = id; emit filtersChanged(); if (m_query.isEmpty()) refresh(); else applyFilters();
 }
 void KickClient::setShowMature(bool on)
 {
