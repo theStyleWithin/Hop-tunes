@@ -190,6 +190,12 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
+### English only
+
+The **english only** switch next to the filters on the streams page (also in settings → apps settings → **kick language**) keeps the list to English streams. It is
+saved in your profile and wins over the language menu while it is on. Streams whose language Kick does not state are kept. Searching for a streamer by name, your
+follow list and your playlists are your own choices, so they are not filtered.
+
 ### Playlists
 
 **playlists** on the streams page holds your own lists. Name one, choose what it holds (channels, clips or past streams) and press **create**. Then on a channel's page

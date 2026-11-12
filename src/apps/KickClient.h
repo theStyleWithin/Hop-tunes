@@ -37,7 +37,8 @@ class KickClient : public QObject {
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool hasMore READ hasMore NOTIFY streamsChanged)
     Q_PROPERTY(QString sort READ sort WRITE setSort NOTIFY filtersChanged)        // "viewers" | "featured"
-    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY filtersChanged)   // "" (all) or a code like "en"
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY filtersChanged)   // "" (all) or a code like "en"; "en" whenever english only is on
+    Q_PROPERTY(bool englishOnly READ englishOnly WRITE setEnglishOnly NOTIFY filtersChanged)   // kept in the profile: only English streams, whatever else is chosen
     Q_PROPERTY(int categoryId READ categoryId WRITE setCategoryId NOTIFY filtersChanged) // 0 = all
     Q_PROPERTY(bool showMature READ showMature WRITE setShowMature NOTIFY filtersChanged)
     Q_PROPERTY(QString query READ query NOTIFY filtersChanged)                    // a search is showing when not empty
@@ -71,7 +72,9 @@ public:
     bool hasMore() const { return !m_next.isEmpty(); }
     QString sort() const { return m_sort; }
     void setSort(const QString &s);
-    QString language() const { return m_language; }
+    QString language() const { return m_englishOnly ? QStringLiteral("en") : m_language; }
+    bool englishOnly() const { return m_englishOnly; }
+    void setEnglishOnly(bool on);
     void setLanguage(const QString &l);
     int categoryId() const { return m_categoryId; }
     void setCategoryId(int id);
@@ -148,7 +151,7 @@ private:
     void requestList(bool more);
     void requestCategories();
     void requestDeveloper();
-    bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && m_language.isEmpty(); }
+    bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && (m_language.isEmpty() || m_englishOnly); }
     void applyFilters();
     void setError(const QString &e);
     void begin() { ++m_pending; emit loadingChanged(); }
@@ -164,6 +167,7 @@ private:
     QVariantList m_streams, m_categories, m_searchChannels;
     QString m_next, m_sort = QStringLiteral("viewers"), m_language, m_query;
     int m_categoryId = 0, m_emptyPages = 0;
+    bool m_englishOnly = false;
     bool m_showMature = false;
     QVariantMap m_channel;
     QVariantList m_past, m_clips;

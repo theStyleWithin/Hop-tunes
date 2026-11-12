@@ -1142,6 +1142,68 @@ private slots:
     }
 
 private slots:
+private slots:
+    void englishOnlyKeepsTheStreamsListToEnglishAndIsSaved()
+    {
+        fresh();
+        QStringList urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.host() == "web.kick.com") {
+                QJsonArray a;
+                auto add = [&](const QString &slug, const QString &lang) {
+                    a.append(QJsonObject{{"id", 1}, {"title", slug}, {"viewer_count", 10},
+                                         {"channel", QJsonObject{{"slug", slug}, {"username", slug}}}, {"category", QJsonObject{{"id", 1}, {"name", "x"}}},
+                                         {"language", lang}, {"is_mature", false}});
+                };
+                add("english_one", "en"); add("japanese_one", "ja"); add("unlabelled", ""); add("english_two", "English");
+                return ok(QJsonDocument(QJsonObject{{"data", QJsonObject{{"livestreams", a}, {"pagination", QJsonObject{{"next_cursor", ""}}}}}}).toJson());
+            }
+            if (u.path() == "/api/v2/channels/gamehopper") {
+                QJsonObject o{{"slug", "gamehopper"}, {"user", QJsonObject{{"username", "gamehopper"}}}, {"chatroom", QJsonObject{{"id", 1}}}};
+                o["livestream"] = QJsonObject{{"session_title", "dev"}, {"viewer_count", 3}, {"language", "Japanese"}, {"is_mature", false}};
+                return ok(QJsonDocument(o).toJson());
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.open();
+        QTRY_VERIFY(k.streams().size() >= 4);
+        QStringList slugs;
+        for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        QVERIFY(slugs.contains("japanese_one"));                                      // everything, to start with
+        QVERIFY(k.language().isEmpty());
+        // english only: the list is asked for with language=en, and anything Kick says is not English is left out anyway
+        urls.clear();
+        k.setEnglishOnly(true);
+        QCOMPARE(edited.count(), 1);                                                   // saved with the profile
+        QCOMPARE(k.language(), QString("en"));
+        QTRY_VERIFY(!urls.isEmpty());
+        QVERIFY2(urls.first().contains("language=en"), qPrintable(urls.first()));
+        QTRY_VERIFY(k.streams().size() >= 3);
+        slugs.clear();
+        for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        QVERIFY(!slugs.contains("japanese_one"));
+        QVERIFY(slugs.contains("english_one") && slugs.contains("english_two") && slugs.contains("unlabelled"));   // unlabelled: nothing to go on
+        QVERIFY(!slugs.contains("gamehopper"));                                        // the developer's pinned card follows the same rule
+        QVERIFY(!k.streams().isEmpty() && k.streams().first().toMap().value("developer").toBool() == false);
+        // it survives saving and loading, and a language chosen by hand cannot override it
+        KickClient again(&net);
+        again.setListsJson(k.listsJson());
+        QVERIFY(again.englishOnly());
+        again.setLanguage("fr");
+        QCOMPARE(again.language(), QString("en"));
+        // off again: everything is back
+        k.setEnglishOnly(false);
+        QVERIFY(k.language().isEmpty());
+        QTRY_VERIFY(k.streams().size() >= 4);
+        slugs.clear();
+        for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        QVERIFY(slugs.contains("japanese_one"));
+    }
+
+private slots:
     // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
     void liveClipDownloadAgainstTheRealServers()
     {

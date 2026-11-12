@@ -223,7 +223,7 @@ void KickClient::requestList(bool more)
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("limit"), QString::number(kPageSize));
     q.addQueryItem(QStringLiteral("sort"), m_sort == QLatin1String("featured") ? QStringLiteral("featured") : QStringLiteral("viewer_count_desc"));
-    if (!m_language.isEmpty()) q.addQueryItem(QStringLiteral("language"), m_language);
+    if (!language().isEmpty()) q.addQueryItem(QStringLiteral("language"), language());
     if (m_categoryId > 0) q.addQueryItem(QStringLiteral("category_id"), QString::number(m_categoryId));
     if (more && !m_next.isEmpty()) q.addQueryItem(QStringLiteral("after"), m_next);
     url.setQuery(q);
@@ -247,6 +247,11 @@ void KickClient::requestList(bool more)
     });
 }
 
+namespace {
+// a stream whose language Kick does not say is kept (nothing to go on); one that says something other than English is not
+bool isEnglish(const QString &lang) { return lang.isEmpty() || lang.compare(QLatin1String("en"), Qt::CaseInsensitive) == 0 || lang.compare(QLatin1String("english"), Qt::CaseInsensitive) == 0; }
+} // namespace
+
 void KickClient::applyFilters()
 {
     QVariantList shown;
@@ -255,11 +260,13 @@ void KickClient::applyFilters()
         const QVariantMap m = v.toMap();
         if (m_blocked.contains(m.value(QStringLiteral("slug")).toString())) continue;
         if (!m_showMature && m.value(QStringLiteral("mature")).toBool()) continue;
+        if (m_englishOnly && !isEnglish(m.value(QStringLiteral("language")).toString())) continue;
         shown.append(m);
     }
     if (m_query.isEmpty() && pinApplies() && !m_dev.isEmpty()) {
         const QString slug = m_dev.value(QStringLiteral("slug")).toString();
-        const bool hidden = m_blocked.contains(slug) || (!m_showMature && m_dev.value(QStringLiteral("mature")).toBool());
+        const bool hidden = m_blocked.contains(slug) || (!m_showMature && m_dev.value(QStringLiteral("mature")).toBool())
+                            || (m_englishOnly && !isEnglish(m_dev.value(QStringLiteral("language")).toString()));
         if (!hidden) {
             QVariantList withPin{m_dev};
             for (const QVariant &v : shown) if (v.toMap().value(QStringLiteral("slug")).toString() != slug) withPin.append(v);
@@ -337,6 +344,14 @@ void KickClient::setLanguage(const QString &l)
     const QString v = l.trimmed().left(5).toLower();
     if (v == m_language) return;
     m_language = v; emit filtersChanged(); refresh();
+}
+void KickClient::setEnglishOnly(bool on)
+{
+    if (on == m_englishOnly) return;
+    m_englishOnly = on;
+    emit filtersChanged();
+    emit listsEdited();                                       // a setting worth saving with the profile
+    if (m_open) refresh();
 }
 void KickClient::setCategoryId(int id)
 {
@@ -456,7 +471,8 @@ void KickClient::setChatMode(const QString &mode)
 QJsonObject KickClient::listsJson() const
 {
     return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
-                       {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()}};
+                       {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()},
+                       {QStringLiteral("englishOnly"), m_englishOnly}};
 }
 
 QJsonArray KickClient::playlistsJson() const
@@ -504,6 +520,8 @@ void KickClient::setListsJson(const QJsonObject &o)
             }
         }
     }
+    m_englishOnly = o.value(QStringLiteral("englishOnly")).toBool(false);
+    emit filtersChanged();
     const QString cm = o.value(QStringLiteral("chatMode")).toString();
     m_chatMode = cm == QLatin1String("pretend") || (cm == QLatin1String("kick") && m_signedIn) ? cm : QStringLiteral("off");
     emit chatModeChanged();

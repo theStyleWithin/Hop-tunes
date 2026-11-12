@@ -291,8 +291,9 @@ FocusScope {
                     readonly property var codes: ["", "en", "es", "pt", "fr", "de", "it", "tr", "ru", "ja", "ar"]
                     readonly property var names: ["all languages", "english", "espa\u00f1ol", "portugu\u00eas", "fran\u00e7ais", "deutsch", "italiano", "t\u00fcrk\u00e7e", "\u0440\u0443\u0441\u0441\u043a\u0438\u0439", "\u65e5\u672c\u8a9e", "\u0627\u0644\u0639\u0631\u0628\u064a\u0629"]
                     hoverEnabled: true; focusPolicy: Qt.NoFocus
+                    enabled: !kick.englishOnly
                     onClicked: langMenu.popup()
-                    contentItem: Label { text: lang.names[Math.max(0, lang.codes.indexOf(kick.language))] + " \u25be"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    contentItem: Label { text: kick.englishOnly ? "english only" : lang.names[Math.max(0, lang.codes.indexOf(kick.language))] + " \u25be"; color: kick.englishOnly ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     background: Item {}
                     Menu {
                         id: langMenu
@@ -300,6 +301,12 @@ FocusScope {
                                    delegate: MenuItem { required property int index; required property string modelData; text: modelData
                                                         onTriggered: kick.language = lang.codes[index] } }
                     }
+                }
+                AbstractButton {
+                    objectName: "kickEnglishOnly"; hoverEnabled: true; focusPolicy: Qt.NoFocus
+                    onClicked: kick.englishOnly = !kick.englishOnly
+                    contentItem: Label { text: (kick.englishOnly ? "\u2611 " : "\u2610 ") + "english only"; color: kick.englishOnly ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    background: Item {}
                 }
                 AbstractButton {
                     objectName: "kickMature"; hoverEnabled: true; focusPolicy: Qt.NoFocus

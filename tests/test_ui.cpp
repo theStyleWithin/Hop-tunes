@@ -2623,6 +2623,43 @@ private slots:
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 
+    // "english only": a switch on the streams page and in settings, saved in the profile; the language menu steps aside while it is on.
+    void englishOnlyCanBeForcedFromTheStreamsPageAndSettings()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; KickClient *k; ~Restore() { k->setEnglishOnly(false); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(item("kickEnglishOnly") && item("kickEnglishOnly")->isVisible());
+        QVERIFY(item("kickLanguage")->property("enabled").toBool());
+        QVERIFY(!kick->englishOnly());
+        QVERIFY(click("kickEnglishOnly"));
+        QTRY_VERIFY(kick->englishOnly());
+        QCOMPARE(kick->language(), QStringLiteral("en"));
+        QTRY_VERIFY(!item("kickLanguage")->property("enabled").toBool());              // the menu steps aside: it is English whatever else
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("englishOnly").toBool());   // saved
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());     // (the fixture's streams are English)
+        shot("kick-english-only");
+        QTest::keyClick(w, Qt::Key_Escape);                                            // out of the app
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        // settings has the same choice, and it is the same setting
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("kickEnglishChoice") != nullptr);
+        QVERIFY(click("choice_kickEngAll"));
+        QTRY_VERIFY(!kick->englishOnly());
+        QVERIFY(click("choice_kickEngOnly"));
+        QTRY_VERIFY(kick->englishOnly());
+        w->setProperty("view", QStringLiteral("collection"));
+    }
+
     // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played
     // from disk; deleting removes them.
     void pastStreamsAndClipsCanBeDownloadedListedAndPlayedFromDisk()

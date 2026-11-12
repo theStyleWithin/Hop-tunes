@@ -551,6 +551,24 @@ Item {
             text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
+        SRow {   // only English streams, always (also on the streams page)
+            objectName: "kickEnglishRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
+            spacing: 16
+            Label { text: "kick language"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "kickEnglishChoice"
+                options: [["kickEngAll", "all languages"], ["kickEngOnly", "english only"]]
+                value: hop.kick && hop.kick.englishOnly ? "kickEngOnly" : "kickEngAll"
+                onPicked: function (v) { hop.kick.englishOnly = (v === "kickEngOnly") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "english only keeps the streams list to English streams, whatever else you choose there. it is saved in this profile. searching for a streamer by name, your follow list and your playlists are your own choices and are not filtered."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         ColumnLayout {   // the kick lists
             objectName: "kickListsBox"
             visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && (hop.kick.blocked.length > 0 || hop.kick.following.length > 0)
