@@ -2234,8 +2234,9 @@ private slots:
         // the developer is live in this fixture: that card comes first (top left), tagged, ahead of Kick's own order
         QTRY_VERIFY(item("kickCard_gamehopper") && item("kickCard_gamehopper")->isVisible());
         QVERIFY(item("kickDeveloperTag") != nullptr);
+        QTRY_VERIFY(item("kickCard_alpha")->x() > 0 || item("kickCard_alpha")->y() > 0);        // (the grid has laid the cards out)
+        QVERIFY(item("kickCard_gamehopper")->x() == 0 && item("kickCard_gamehopper")->y() == 0);   // first place: top left
         QVERIFY(item("kickCard_gamehopper")->x() < item("kickCard_alpha")->x() || item("kickCard_gamehopper")->y() < item("kickCard_alpha")->y());
-        QVERIFY(item("kickCard_gamehopper")->x() == 0 && item("kickCard_gamehopper")->y() == 0);
         QVERIFY(item("kickPlayer") == nullptr || !item("kickSurface"));
         QVERIFY(item("kickSurface") == nullptr);                                   // nothing plays until a stream is picked
         QVERIFY(item("kickMore") == nullptr || !item("kickMore")->isVisible());   // (one page only in this fixture)
