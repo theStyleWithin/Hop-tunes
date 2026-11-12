@@ -2414,8 +2414,24 @@ private slots:
         QVERIFY(item("kickFollowButton")->mapToItem(app, QPointF(item("kickFollowButton")->width(), 0)).x() <= app->width() + 1);
         QVERIFY(item("kickBlockButton")->mapToItem(app, QPointF(item("kickBlockButton")->width(), 0)).x() <= app->width() + 1);
         QVERIFY(click("kickChat_off"));
+        // the bottom "search" button searches Kick while the Kick app is open (not the music), from any page of the app
+        QVERIFY(item("navTab_search") && item("navTab_search")->isVisible());
+        QVERIFY(click("navTab_search"));
+        QTRY_VERIFY(item("kickBrowse")->isVisible());                                  // it left the watch page for the streamers list
+        QTRY_VERIFY(item("kickSearch")->property("activeFocus").toBool());             // with the search box ready to type in
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));        // and did not switch to the music search
+        QVERIFY(item("appHost")->property("active").toBool());
+        QTRY_VERIFY(item("navTab_search")->property("on").toBool());                   // the tab shows it is the one in use
+        shot("phone-kick-nav-search");
+        for (const char ch : {'l', 'o', 'f', 'i'}) QTest::keyClick(w, ch);
+        QTest::keyClick(w, Qt::Key_Return);
+        QTRY_COMPARE(kick->query(), QStringLiteral("lofi"));
+        // out of the app, the same button is the music search again
         QTest::keyClick(w, Qt::Key_Escape);
-        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(click("navTab_search"));
+        QTRY_COMPARE(w->property("view").toString(), QStringLiteral("search"));
+        w->setProperty("view", QStringLiteral("collection"));
     }
 #endif
 

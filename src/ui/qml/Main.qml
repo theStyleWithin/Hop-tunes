@@ -223,8 +223,12 @@ ApplicationWindow {
         anchors.fill: parent
         visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen && !(win.view === "now playing" && !win.tablet)
         views: win.navViews
-        view: win.view === "quickplay" || win.view === "settings" ? "profile" : win.view
+        view: win.view === "quickplay" || win.view === "settings" ? "profile" : (win.view === "collection" && collectionView.appSearching ? "search" : win.view)
         tablet: win.tablet
-        onPicked: function (v) { win.view = v }
+        onPicked: function (v) {
+            // inside an app that has its own search (Kick), the search button searches that app, not the music
+            if (v === "search" && win.view === "collection" && collectionView.appSearchable && collectionView.appSearch()) return
+            win.view = v
+        }
     }
 }

@@ -82,6 +82,14 @@ FocusScope {
         return false
     }
     function openChannel(slug) { kick.openChannel(slug); watchTab = "live"; dlMessage = ""; recordMessage = ""; page = "watch" }
+    // the phone's bottom "search" button, while this app is open: find a streamer here instead of searching the music
+    function openSearch() {
+        if (!kick || !allowed || disconnected) return false
+        if (page !== "browse") { page = "browse"; kick.closeChannel(); watchTab = "live" }
+        searchBox.forceActiveFocus()
+        return true
+    }
+    readonly property bool searchActive: !!kick && allowed && !disconnected && page === "browse" && searchBox.activeFocus
     function showTab(t) {
         watchTab = t; dlMessage = ""
         if (t === "past") kick.loadPastStreams(); else if (t === "clips") kick.loadClips()

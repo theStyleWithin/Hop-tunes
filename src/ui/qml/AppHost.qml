@@ -14,6 +14,10 @@ FocusScope {
     visible: active
     signal leave()
 
+    // an app can take over the phone's bottom "search" button while it is open (app.openSearch() returns true when it did)
+    readonly property bool canSearch: active && !!appLoader.item && appLoader.item.openSearch !== undefined
+    readonly property bool searching: canSearch && !!appLoader.item.searchActive
+    function search() { return canSearch && appLoader.item.openSearch() === true }
     function open(id) { appId = id; forceActiveFocus() }
     // Esc and the back button: the app steps back inside itself first (item.goBack() returns true when it did), then it closes
     function close() {

@@ -187,6 +187,9 @@ of the watch page and the chat below it. The Android app carries the internet pe
   on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
   a stream does not play there, the message under the picture says so.
 
+On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
+leave the app and it is the music search again.
+
 ### Downloading past streams and clips
 
 Open a channel in Kick and use the tabs **live**, **past streams** and **clips**. Pick a quality (480p, 720p or best), then press **download** on

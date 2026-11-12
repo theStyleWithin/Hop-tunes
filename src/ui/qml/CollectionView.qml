@@ -34,6 +34,9 @@ Item {
         z: 50
         onLeave: root.collectionTab = "apps"
     }
+    readonly property bool appSearchable: appHost.canSearch
+    readonly property bool appSearching: appHost.searching
+    function appSearch() { return appHost.search() }
     onVisibleChanged: if (!visible) appHost.close()
     // switching apps off in settings takes the tab away (and an app that is open with it)
     Connections {
