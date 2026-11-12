@@ -24,6 +24,13 @@ option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
 # Apps that use the internet (the Kick viewer): the only code that touches the network lives in src/net and src/apps.
 # OFF builds contain none of it. The apps tab itself, and every networked app, are off until the person switches them on.
 option(HOPTUNES_NET_APPS "Build the apps that use the internet" ON)
+# Android: Qt reaches secure sites through OpenSSL 3, which the app must carry itself. Point this at the folder holding
+# libssl_3.so and libcrypto_3.so for arm64-v8a (e.g. KDAB/android_openssl, ssl_3/arm64-v8a). Without it the Android build has no networked apps.
+set(HOPTUNES_ANDROID_OPENSSL_DIR "" CACHE PATH "folder with libssl_3.so and libcrypto_3.so (Android, for the networked apps)")
+set(HOPTUNES_NET_APPS_ON OFF)
+if(HOPTUNES_NET_APPS AND (NOT ANDROID OR EXISTS "${HOPTUNES_ANDROID_OPENSSL_DIR}/libssl_3.so"))
+    set(HOPTUNES_NET_APPS_ON ON)
+endif()
 
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui Network)
 find_package(ZLIB REQUIRED)   # EpubBook unzips the book itself
@@ -83,7 +90,7 @@ add_library(hoptunes_core STATIC
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
-if(HOPTUNES_NET_APPS AND NOT ANDROID)
+if(HOPTUNES_NET_APPS_ON)
     target_sources(hoptunes_core PRIVATE src/net/AppNet.h src/net/AppNet.cpp src/apps/KickClient.h src/apps/KickClient.cpp)
     target_link_libraries(hoptunes_core PUBLIC Qt6::Network)
     target_compile_definitions(hoptunes_core PUBLIC HOPTUNES_NET_APPS=1)
@@ -178,11 +185,28 @@ if(HOPTUNES_BUILD_APP)
     if(ANDROID)
         qt_add_executable(hop-tunes ${HOPTUNES_APP_FILES})   # a shared library the Android app loads
         target_link_libraries(hop-tunes PRIVATE Qt6::CorePrivate)   # the system folder chooser (App::pickAndroidFolder)
+        # The package folder is copied into the build folder so the internet permission is added only to builds that
+        # contain the networked apps (a build without them never asks Android for network access).
+        set(HOPTUNES_ANDROID_PKG "${CMAKE_BINARY_DIR}/android-package")
+        file(REMOVE_RECURSE "${HOPTUNES_ANDROID_PKG}")
+        file(COPY "${CMAKE_CURRENT_SOURCE_DIR}/android/" DESTINATION "${HOPTUNES_ANDROID_PKG}")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/android/AndroidManifest.xml")
+        if(HOPTUNES_NET_APPS_ON)
+            file(READ "${HOPTUNES_ANDROID_PKG}/AndroidManifest.xml" HOPTUNES_MANIFEST)
+            string(REPLACE "<uses-permission android:name=\"android.permission.READ_MEDIA_AUDIO\"/>"
+                "<uses-permission android:name=\"android.permission.INTERNET\"/>\n    <uses-permission android:name=\"android.permission.READ_MEDIA_AUDIO\"/>"
+                HOPTUNES_MANIFEST "${HOPTUNES_MANIFEST}")
+            file(WRITE "${HOPTUNES_ANDROID_PKG}/AndroidManifest.xml" "${HOPTUNES_MANIFEST}")
+        endif()
         set_target_properties(hop-tunes PROPERTIES
-            QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+            QT_ANDROID_PACKAGE_SOURCE_DIR "${HOPTUNES_ANDROID_PKG}"
             QT_ANDROID_ABIS "arm64-v8a"
             QT_ANDROID_MIN_SDK_VERSION 24
             QT_ANDROID_TARGET_SDK_VERSION 34)
+        if(HOPTUNES_NET_APPS_ON)
+            set_target_properties(hop-tunes PROPERTIES QT_ANDROID_EXTRA_LIBS
+                "${HOPTUNES_ANDROID_OPENSSL_DIR}/libssl_3.so;${HOPTUNES_ANDROID_OPENSSL_DIR}/libcrypto_3.so")
+        endif()
     else()
         add_executable(hop-tunes WIN32 ${HOPTUNES_APP_FILES})
     endif()
@@ -227,7 +251,7 @@ if(HOPTUNES_BUILD_TESTS)
     target_link_libraries(test_game PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME game COMMAND test_game)
 
-    if(HOPTUNES_NET_APPS AND NOT ANDROID)
+    if(HOPTUNES_NET_APPS_ON)
         add_executable(test_net tests/test_net.cpp)
         target_link_libraries(test_net PRIVATE hoptunes_core Qt6::Test)
         target_compile_definitions(test_net PRIVATE HOPTUNES_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")

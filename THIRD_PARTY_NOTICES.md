@@ -28,6 +28,12 @@ clean-room project inspired by how the Zune software organised music. It contain
 Microsoft code, artwork, fonts or other assets and is not affiliated with or endorsed by
 Microsoft.
 
+## OpenSSL on Android
+
+The Android app bundles OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`), Apache License 2.0, as built by
+[KDAB/android_openssl](https://github.com/KDAB/android_openssl) (BSD-style/Apache-2.0 build scripts), so that Qt can make secure connections for
+the networked apps. Builds without the networked apps do not contain it.
+
 ## Kick app: references
 
 The Kick app (an app inside Hop-tunes that browses and watches live streams on kick.com) contains no code from other projects. Its

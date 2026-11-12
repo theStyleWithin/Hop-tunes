@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **Kick on Android.** The phone version of Hop-tunes now has the Kick app too, with the same promises: off until you switch apps on, it asks before it uses the internet, only the listed sites, no cookies, nothing kept, follow and block lists stay on the phone. One column of stream cards, the picture on top with the chat underneath on the watch page, and the video plays through Android's own player. The Android app now carries the internet permission (and OpenSSL, for secure connections); a build made without the networked apps has neither.
+
 ## [1.9.0] - 2026-11-12: Giving power back to the ordinary
 
 ### Added

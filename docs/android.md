@@ -23,6 +23,13 @@ qt-cmake -S . -B build-android -G Ninja \
 ninja -C build-android apk
 ```
 
+The networked apps (Kick) are included only when you also pass `-DHOPTUNES_ANDROID_OPENSSL_DIR=<folder>` with
+`libssl_3.so` and `libcrypto_3.so` for arm64-v8a (for example `ssl_3/arm64-v8a` from
+[KDAB/android_openssl](https://github.com/KDAB/android_openssl)). Qt's secure connections on Android need them inside the app, so the build
+bundles them and adds the `INTERNET` permission to that build's manifest. Without the option the build has no networked apps and no
+network permission at all. Kick's stream plays through Qt Multimedia; Qt does not let the app set a user agent there, so on Android the
+"generic user agent" rule applies to everything except the video itself (the address is still checked against the allowed video host first).
+
 The build defines no `HOPTUNES_HAVE_GST`: the GStreamer-only code (probing, thumbnails, the GStreamer video
 player, MPRIS) compiles to small stubs, and `src/platform/android/gst/gst.h` stands in for GStreamer so `Player`
 plays through Qt Multimedia (`src/platform/android/GstShim.cpp`). Desktop builds are unchanged.
