@@ -23,6 +23,10 @@ class KickClient : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList streams READ streams NOTIFY streamsChanged)           // what the grid shows (blocked and 18+ already left out)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY categoriesChanged)  // {id, name, slug}
+    Q_PROPERTY(QVariantList chips READ chips NOTIFY categoriesChanged)                   // the category chips on the streams page: yours if you picked some, else Kick's popular ones
+    Q_PROPERTY(bool categoriesCustom READ categoriesCustom NOTIFY categoriesChanged)    // true once you changed them
+    Q_PROPERTY(QVariantList categoryResults READ categoryResults NOTIFY categoryResultsChanged)   // what a category search found: {id, name, mature}
+    Q_PROPERTY(bool categorySearching READ categorySearching NOTIFY categoryResultsChanged)
     Q_PROPERTY(QVariantList playlists READ playlists NOTIFY listsChanged)          // {id, name, kind, count, items}: channels, clips or past streams
     Q_PROPERTY(QVariantList following READ following NOTIFY listsChanged)         // {slug, name, avatar, live, viewers, checked}
     Q_PROPERTY(QStringList blocked READ blocked NOTIFY listsChanged)
@@ -69,6 +73,10 @@ public:
     QVariantList categories() const { return m_categories; }
     QVariantList following() const;
     QVariantList playlists() const;
+    QVariantList chips() const { return m_customCategories ? m_pinned : m_categories; }
+    bool categoriesCustom() const { return m_customCategories; }
+    QVariantList categoryResults() const { return m_categoryResults; }
+    bool categorySearching() const { return m_categorySearching; }
     QStringList blocked() const { return m_blocked; }
     QVariantMap channel() const { return m_channel; }
     QVariantList pastStreams() const { return m_past; }     // finished broadcasts of the open channel (when asked for)
@@ -137,11 +145,19 @@ public:
     Q_INVOKABLE bool removeFromPlaylist(const QString &id, const QString &key);          // key = the slug, or the clip / stream id
     Q_INVOKABLE bool isInPlaylist(const QString &id, const QString &key) const;
     Q_INVOKABLE QVariantList playlistsHolding(const QString &key) const;                 // ids of the playlists that have it (for "add to playlist" menus)
-    Q_INVOKABLE void refreshPlaylist(const QString &id);                                  // live dots for a channel playlist: one lookup each, only when asked
+    Q_INVOKABLE void refreshPlaylist(const QString &id);
+    // your own category chips (the ones under the search box), kept in the profile: swap Kick's popular ones for the games you care about
+    static constexpr int kMaxPinned = 24;
+    Q_INVOKABLE bool pinCategory(int id, const QString &name);                          // add one (at the end); false if it is already there or the list is full
+    Q_INVOKABLE void unpinCategory(int id);                                             // take one away (the first change copies Kick's popular ones to start from)
+    Q_INVOKABLE void movePinnedCategory(int id, int by);                                // -1 = earlier, +1 = later
+    Q_INVOKABLE void resetCategories();                                                 // back to Kick's popular ones
+    Q_INVOKABLE void searchCategories(const QString &text);                             // finds categories by name (only when asked; fills categoryResults)                                  // live dots for a channel playlist: one lookup each, only when asked
     Q_INVOKABLE bool isBlocked(const QString &slug) const { return m_blocked.contains(normalize(slug)); }
     Q_INVOKABLE void clearBlocked();
     QJsonObject listsJson() const;                 // saved with the profile
     QJsonArray playlistsJson() const;
+    QJsonObject pinnedJson() const;
     void setListsJson(const QJsonObject &o);       // loaded with the profile
 
     // ---- the replies, as plain functions (unit-tested with fixtures) ----
@@ -149,14 +165,20 @@ public:
     static bool parseLivestreams(const QByteArray &json, QVariantList *out, QString *nextCursor);
     static bool parseCategories(const QByteArray &json, QVariantList *out);
     static bool parseSearch(const QByteArray &json, QVariantList *channels);
+    static bool parseSearchCategories(const QByteArray &json, QVariantList *out);
     static bool parseChannel(const QByteArray &json, QVariantMap *out);
     static bool parsePastStreams(const QByteArray &json, QVariantList *out);   // finished ones only (the live one is the channel page)
     static bool parseClips(const QByteArray &json, QVariantList *out);
+    // search results, closest name first: an exact name, then names that start with what was typed, then ones that contain it, then the
+    // nearest spellings (a typed word after the name, "lumiellevtuber" for "lumiellevt", still finds it); Kick's own order breaks ties
+    static void rankByName(QVariantList *channels, const QString &typed);
+    static int nameScore(const QString &typed, const QString &candidate);
     Q_INVOKABLE static QString viewersText(int n);             // 12400 -> "12.4k"
 
 signals:
     void streamsChanged();
     void categoriesChanged();
+    void categoryResultsChanged();
     void listsChanged();      // the lists or what is known about them changed (also: live dots)
     void listsEdited();       // the person followed, unfollowed, blocked or unblocked someone: worth saving
     void channelChanged();
@@ -172,6 +194,7 @@ signals:
 
 private:
     void requestList(bool more);
+    void requestSearch(const QString &word, quint64 gen, bool mayRetry);
     void requestCategories();
     void requestDeveloper();
     bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && (m_language.isEmpty() || m_englishOnly); }
@@ -200,6 +223,9 @@ private:
     QStringList m_following, m_blocked;
     struct Playlist { QString id, name, kind; QVariantList items; };
     QList<Playlist> m_playlists;
+    QVariantList m_pinned, m_categoryResults;
+    bool m_customCategories = false, m_categorySearching = false;
+    quint64 m_categorySearchGen = 0;
     bool channelInPlaylists(const QString &slug) const;
     void refreshChannels(const QStringList &todo);
     QString m_chatMode = QStringLiteral("off");

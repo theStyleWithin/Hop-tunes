@@ -161,6 +161,7 @@ class App : public QObject {
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
     Q_PROPERTY(QStringList netAllowedApps READ netAllowedApps NOTIFY appNetChanged)   // the apps the person has allowed to use the internet
     Q_PROPERTY(QObject *appNetGateway READ gatewayObject CONSTANT)
+    Q_PROPERTY(bool appHints READ appHints WRITE setAppHints NOTIFY appHintsChanged)   // the one-line descriptions that pop up on the apps tiles (on at first, the person can hide them)
     Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString videoOrientation READ videoOrientation WRITE setVideoOrientation NOTIFY videoOrientationChanged)   // phones: how videos open, "portrait" | "auto" | "landscape"
@@ -338,6 +339,8 @@ public:
     Q_INVOKABLE bool appNetAllowed(const QString &app) const { return m_netAllowed.contains(app); }
     Q_INVOKABLE void setAppNetAllowed(const QString &app, bool on);
     bool appsEnabled() const { return m_appsEnabled; }
+    bool appHints() const { return m_appHints; }
+    void setAppHints(bool on);
     void setAppsEnabled(bool on);
     QString videoOrientation() const { return m_videoOrientation; }
     void setVideoOrientation(const QString &mode);
@@ -539,6 +542,7 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void appsEnabledChanged();
+    void appHintsChanged();
     void appNetChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
@@ -588,6 +592,7 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     bool m_appsEnabled = false;
+    bool m_appHints = true;
     QSet<QString> m_netAllowed;
 #ifdef HOPTUNES_NET_APPS
     AppNet m_appNet;

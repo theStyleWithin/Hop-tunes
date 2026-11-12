@@ -84,6 +84,15 @@ public:
         asked << url;
         NetReply r; r.status = 200;
         if (url.host() == "web.kick.com") r.body = list();
+        else if (url.path() == "/api/search") {
+            const QString w = QUrlQuery(url).queryItemValue("searched_word", QUrl::FullyDecoded).toLower();
+            QJsonArray a;
+            for (const QString &s : {QStringLiteral("alphabet"), QStringLiteral("alpha"), QStringLiteral("xalpha")})
+                if (s.contains(w)) a.append(QJsonObject{{"slug", s}, {"user", QJsonObject{{"username", s}}}});
+            QJsonArray cats;
+            if (QStringLiteral("palworld").contains(w)) cats.append(QJsonObject{{"id", 7234}, {"name", "Palworld"}, {"is_mature", false}});
+            r.body = QJsonDocument(QJsonObject{{"channels", a}, {"categories", cats}}).toJson();
+        }
         else if (url.path().startsWith("/api/tv/link/authenticate/")) {
             if (++signInPolls < 2) { r.status = 404; r.error = "the site answered 404"; r.body.clear(); }
             else r.body = "{\"token\":\"tok-ui\"}";
@@ -121,7 +130,7 @@ public:
         else if (url.path().endsWith(".ts")) r.body = QByteArray(5000, 'v');
         else if (url.host() == "images.kick.com" || url.host() == "files.kick.com" || url.host() == "stream.kick.com") r.body = pngBytes();
         else if (url.path().startsWith("/api/v2/channels/")) r.body = channel(url.path().section('/', -1));
-        else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"}]}";
+        else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"},{\"id\":3,\"name\":\"Grand Theft Auto V\",\"slug\":\"gta\"}]}";
         else r.body = "{}";
         QTimer::singleShot(0, this, [done, r] { done(r); });
     }
@@ -2407,6 +2416,18 @@ private slots:
         QTRY_VERIFY(item("kickCard_bravo")->y() > item("kickCard_alpha")->y());      // the next one is under it
         QVERIFY(item("kickCardMenu_alpha")->isVisible());                            // no hover on a touch screen: the menu is always there
         shot("phone-kick-browse");
+        // the arrow at the top right pulls the menu up like a curtain (room for streams) and back down
+        QVERIFY(item("appCollapse") && item("appCollapse")->isVisible());
+        const qreal cardY = item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y();
+        QVERIFY(click("appCollapse"));
+        QTRY_VERIFY(!item("kickSearch")->isVisible());
+        QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() < cardY - 200);       // the streams moved up into the room
+        shot("phone-kick-curtain-up");
+        QVERIFY(click("appCollapse"));
+        QTRY_VERIFY(item("kickSearch")->isVisible());
+        QTRY_VERIFY(qAbs(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() - cardY) < 3);   // and back where it was
+        QVERIFY(click("appCollapse"));                                                              // leave it pulled up: the search button brings it back (below)
+        QTRY_VERIFY(!item("kickSearch")->isVisible());
         QVERIFY(click("kickCard_alpha"));
         QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
         QTRY_VERIFY(item("kickChannelState")->isVisible());
@@ -2425,6 +2446,7 @@ private slots:
         QVERIFY(item("navTab_search") && item("navTab_search")->isVisible());
         QVERIFY(click("navTab_search"));
         QTRY_VERIFY(item("kickBrowse")->isVisible());                                  // it left the watch page for the streamers list
+        QTRY_VERIFY(item("kickSearch")->isVisible());                                  // (the menu was pulled up: searching brings it back down)
         QTRY_VERIFY(item("kickSearch")->property("activeFocus").toBool());             // with the search box ready to type in
         QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));        // and did not switch to the music search
         QVERIFY(item("appHost")->property("active").toBool());
@@ -2714,6 +2736,108 @@ private slots:
         QTRY_VERIFY(item("kickBrowse")->isVisible());
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // Search follows the spelling as you type (after a short pause), closest names first; no need to press enter.
+    void searchFollowsTheSpellingAsYouType()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; KickClient *k; ~Restore() { k->search(""); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        auto searches = [&] { int n = 0; for (const QUrl &u : ft->asked) if (u.path() == "/api/search") ++n; return n; };
+        QCOMPARE(searches(), 0);
+        QQuickItem *box = item("kickSearch");
+        box->setProperty("text", QStringLiteral("a"));                                   // one letter finds too much: nothing is asked
+        QTest::qWait(600);
+        QCOMPARE(searches(), 0);
+        box->setProperty("text", QStringLiteral("alp"));                                 // a pause after typing: the list follows, no enter
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QStringLiteral("alp"), 3000);
+        QTRY_VERIFY(item("kickCard_alphabet") && item("kickCard_alpha"));
+        QVERIFY(item("kickCard_xalpha") != nullptr);
+        QCOMPARE(kick->streams().first().toMap().value("slug").toString(), QString("alpha"));            // "alpha" starts with it and is the shortest
+        box->setProperty("text", QStringLiteral("alpha"));                               // the spelling gets closer: exact name first
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QStringLiteral("alpha"), 3000);
+        QTRY_COMPARE(kick->streams().first().toMap().value("slug").toString(), QString("alpha"));
+        QVERIFY(searches() <= 3);                                                        // it waited for pauses: not one request per key
+        shot("kick-search-as-you-type");
+        // a pasted link waits for enter (it opens the channel); clearing the box goes back to the live list
+        box->setProperty("text", QStringLiteral("https://kick.com/bravo"));
+        QTest::qWait(600);
+        QCOMPARE(kick->query(), QStringLiteral("alpha"));
+        box->setProperty("text", QString());
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QString(), 3000);
+        QTRY_VERIFY(item("kickCard_bravo") && item("kickCard_bravo")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // Your own category chips: swap GTA for Palworld in the kick app; settings can reorder / remove / reset; the app descriptions can be hidden.
+    void categoryChipsCanBeSwappedAndAppDescriptionsHidden()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; KickClient *k; ~Restore() { k->resetCategories(); app->setAppHints(true); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QTRY_VERIFY(item("kickCat_3") && item("kickCat_3")->isVisible());                  // Kick's popular ones, including the one you do not care about
+        QVERIFY(!kick->categoriesCustom());
+        QVERIFY(click("kickEditCategories"));
+        QTRY_VERIFY(item("kickCategoriesPage") && item("kickCategoriesPage")->isVisible());
+        QTRY_VERIFY(item("kickCatRow_3") && item("kickCatRow_15"));
+        QVERIFY(click("kickCatRemove_3"));
+        QTRY_VERIFY(item("kickCatRow_3") == nullptr);
+        QVERIFY(kick->categoriesCustom());
+        item("kickCatSearch")->setProperty("text", QStringLiteral("palw"));
+        QTRY_VERIFY_WITH_TIMEOUT(item("kickCatAdd_7234") && item("kickCatAdd_7234")->isVisible(), 3000);
+        QVERIFY(click("kickCatAdd_7234"));
+        QTRY_VERIFY(item("kickCatRow_7234") != nullptr);
+        QTRY_VERIFY(item("kickCatAdd_7234")->property("text").toString().startsWith("in your list"));
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("pinnedCategories").toObject().value("custom").toBool());   // saved
+        shot("kick-categories-editor");
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTRY_VERIFY(item("kickCat_7234") && item("kickCat_7234")->isVisible());            // Palworld is a chip now
+        QVERIFY(item("kickCat_3") == nullptr);                                             // and GTA is gone
+        QVERIFY(click("kickCat_7234"));                                                    // choosing it filters the list
+        QTRY_COMPARE(kick->categoryId(), 7234);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        // settings: the same list, reorder offline, back to kick's popular ones
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("kickCategoriesBox") && item("kickCategoriesBox")->isVisible());
+        QVERIFY(item("kickCategoriesSummary")->property("text").toString().contains("your own list"));
+        QTRY_VERIFY(item("kickCatSettingsUp_7234") != nullptr);
+        QVERIFY(click("kickCatSettingsUp_7234"));
+        QTRY_COMPARE(kick->chips().first().toMap().value("id").toInt(), 7234);
+        QVERIFY(click("kickCatSettingsReset"));
+        QTRY_VERIFY(!kick->categoriesCustom());
+        QTRY_VERIFY(item("kickCategoriesSummary")->property("text").toString().contains("popular"));
+        // the little description on the apps tiles can be hidden for good
+        QVERIFY(m_app->appHints());
+        QTRY_VERIFY(item("appHintsChoice") != nullptr);
+        QVERIFY(click("choice_hintsOff"));
+        QTRY_VERIFY(!m_app->appHints());
+        QVERIFY(!m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("appHints").toBool(true));   // saved
+        QVERIFY(click("choice_hintsOn"));
+        QTRY_VERIFY(m_app->appHints());
+        w->setProperty("view", QStringLiteral("collection"));
     }
 
     // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played

@@ -198,6 +198,20 @@ Hop-tunes shows a 6-digit code and an address on kick.com. Open the address in y
 Kick). The session token Kick gives Hop-tunes is kept only in your profile on this device (a guest keeps it until the session ends) and is sent only to kick.com. **sign out**
 forgets it; the imported follows stay. This uses Kick's unofficial TV sign-in, so it may stop working if Kick changes it.
 
+### Pulling the menu out of the way
+
+On the streams page, the round arrow at the top right of the Kick app pulls the search box, filters and categories up like a curtain, so the streams get the room; press it again and
+the menu comes back down. Searching with the phone's bottom search button also brings it back.
+
+### Searching, and your own categories
+
+Type a streamer's name in the search box and the list follows your spelling a moment after you pause (no enter needed), with the closest names first. If Kick finds nothing for a
+phrase like "name vtuber", Hop-tunes searches its longest word and still puts the closest name first. Pasting a kick.com link opens that channel when you press enter.
+
+The chips under the search box are Kick's popular categories. Press **edit** at the end of them (or open settings → apps settings → **kick categories**) to make them yours: take away the
+ones you do not care about, search for a game or category by name and add it, move them up and down, or go back to Kick's popular ones. Finding categories needs the internet, so adding
+works inside the Kick app; removing, moving and resetting also work from settings. The list is kept in your profile.
+
 ### English only
 
 The **english only** switch next to the filters on the streams page (also in settings → apps settings → **kick language**) keeps the list to English streams. It is

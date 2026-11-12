@@ -462,6 +462,8 @@ void App::activate(const QString &id, bool guest)
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_appsEnabled = !guest && s.value(QStringLiteral("appsEnabled")).toBool(false);
     emit appsEnabledChanged();
+    m_appHints = guest || s.value(QStringLiteral("appHints")).toBool(true);
+    emit appHintsChanged();
     m_netAllowed.clear();
     if (!guest) {
         const QJsonObject net = s.value(QStringLiteral("appsNet")).toObject();
@@ -637,6 +639,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
+    s.insert(QStringLiteral("appHints"), m_appHints);
     {
         QJsonObject net;
         for (const QString &a : m_netAllowed) net.insert(a, true);
@@ -1895,6 +1898,14 @@ void App::setVideoViewStyle(const QString &style)
     m_videoViewStyle = s;
     saveProfileSettings();
     emit videoViewStyleChanged();
+}
+
+void App::setAppHints(bool on)
+{
+    if (on == m_appHints) return;
+    m_appHints = on;
+    saveProfileSettings();
+    emit appHintsChanged();
 }
 
 void App::setAppsEnabled(bool on)

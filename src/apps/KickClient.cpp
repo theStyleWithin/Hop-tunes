@@ -102,6 +102,21 @@ bool KickClient::parseCategories(const QByteArray &json, QVariantList *out)
     return true;
 }
 
+bool KickClient::parseSearchCategories(const QByteArray &json, QVariantList *out)
+{
+    bool ok = false;
+    const QJsonObject root = object(json, &ok);
+    if (!ok || !root.contains(QStringLiteral("categories"))) return false;
+    for (const QJsonValue &v : root.value(QStringLiteral("categories")).toArray()) {
+        const QJsonObject o = v.toObject();
+        const int id = whole(o.value(QStringLiteral("id")));
+        const QString name = text(o.value(QStringLiteral("name")));
+        if (id <= 0 || name.isEmpty()) continue;
+        out->append(QVariantMap{{QStringLiteral("id"), id}, {QStringLiteral("name"), name.left(60)}, {QStringLiteral("mature"), o.value(QStringLiteral("is_mature")).toBool(false)}});
+    }
+    return true;
+}
+
 bool KickClient::parseSearch(const QByteArray &json, QVariantList *channels)
 {
     bool ok = false;
@@ -311,26 +326,85 @@ void KickClient::requestCategories()
     });
 }
 
+namespace {
+// lower case, letters and digits only: "Lumielle VT_uber" -> "lumiellevtuber"
+QString plain(const QString &s)
+{
+    QString out;
+    for (QChar c : s.toLower()) if (c.isLetterOrNumber()) out += c;
+    return out;
+}
+int editDistance(const QString &a, const QString &b)
+{
+    QVector<int> prev(b.size() + 1), cur(b.size() + 1);
+    for (int j = 0; j <= b.size(); ++j) prev[j] = j;
+    for (int i = 1; i <= a.size(); ++i) {
+        cur[0] = i;
+        for (int j = 1; j <= b.size(); ++j)
+            cur[j] = qMin(qMin(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1));
+        std::swap(prev, cur);
+    }
+    return prev[b.size()];
+}
+} // namespace
+
+int KickClient::nameScore(const QString &typedIn, const QString &candidateIn)
+{
+    const QString q = plain(typedIn), c = plain(candidateIn);
+    if (q.isEmpty() || c.isEmpty()) return 0;
+    if (q == c) return 1000;
+    if (c.startsWith(q)) return 900 - qMin(99, c.size() - q.size());                 // the name begins with what was typed: shorter (closer) first
+    if (q.startsWith(c) && c.size() >= 3) return 800 + qMin(99, c.size());           // what was typed is the name plus more ("... vtuber")
+    const int at = c.indexOf(q);
+    if (at > 0) return 700 - qMin(99, at);                                           // somewhere inside the name
+    const int d = editDistance(q, c.left(qMax(q.size(), 1) + 2));                    // otherwise the nearest spelling
+    const double sim = 1.0 - double(d) / double(qMax(q.size(), 1));
+    return sim > 0 ? int(600 * sim) : 0;
+}
+
+void KickClient::rankByName(QVariantList *channels, const QString &typed)
+{
+    std::stable_sort(channels->begin(), channels->end(), [&typed](const QVariant &x, const QVariant &y) {
+        const QVariantMap a = x.toMap(), b = y.toMap();
+        const int sa = qMax(nameScore(typed, a.value(QStringLiteral("slug")).toString()), nameScore(typed, a.value(QStringLiteral("name")).toString()));
+        const int sb = qMax(nameScore(typed, b.value(QStringLiteral("slug")).toString()), nameScore(typed, b.value(QStringLiteral("name")).toString()));
+        return sa > sb;
+    });
+}
+
 void KickClient::search(const QString &text)
 {
     m_query = text.trimmed();
     emit filtersChanged();
     if (!ready()) return;
-    if (m_query.isEmpty()) { m_searchChannels.clear(); refresh(); return; }
-    QUrl url(QStringLiteral("https://kick.com/api/search"));
-    QUrlQuery q;
-    q.addQueryItem(QStringLiteral("searched_word"), m_query);
-    url.setQuery(q);
+    if (m_query.isEmpty()) { ++m_listGen; m_searchChannels.clear(); refresh(); return; }
     const quint64 gen = ++m_listGen;
     setError(QString());
     m_next.clear();
+    requestSearch(m_query, gen, m_query.contains(QLatin1Char(' ')));
+}
+
+// Kick finds nothing for a phrase like "name vtuber": then it is asked again with the longest single word, and the answers are ranked by
+// how close each name is to everything that was typed
+void KickClient::requestSearch(const QString &word, quint64 gen, bool mayRetry)
+{
+    QUrl url(QStringLiteral("https://kick.com/api/search"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("searched_word"), word);
+    url.setQuery(q);
     begin();
-    m_net->get(kApp, url, [this, gen](NetReply r) {
+    m_net->get(kApp, url, [this, gen, mayRetry](NetReply r) {
         end();
         if (gen != m_listGen) return;
         if (!r.error.isEmpty()) { setError(r.error); return; }
         QVariantList ch;
         if (!parseSearch(r.body, &ch)) { setError(QStringLiteral("kick answered, but not in a form this version understands")); return; }
+        if (ch.isEmpty() && mayRetry) {
+            QString longest;
+            for (const QString &w : m_query.split(QLatin1Char(' '), Qt::SkipEmptyParts)) if (plain(w).size() > plain(longest).size()) longest = w;
+            if (plain(longest).size() >= 2) { requestSearch(longest, gen, false); return; }
+        }
+        rankByName(&ch, m_query);
         m_searchChannels = ch;
         applyFilters();
     });
@@ -475,8 +549,15 @@ QJsonObject KickClient::listsJson() const
 {
     return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
                        {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()},
-                       {QStringLiteral("englishOnly"), m_englishOnly},
+                       {QStringLiteral("englishOnly"), m_englishOnly}, {QStringLiteral("pinnedCategories"), pinnedJson()},
                        {QStringLiteral("account"), m_signedIn ? QJsonObject{{QStringLiteral("token"), m_token}, {QStringLiteral("name"), m_accountName}} : QJsonObject{}}};
+}
+
+QJsonObject KickClient::pinnedJson() const
+{
+    QJsonArray a;
+    for (const QVariant &v : m_pinned) { const QVariantMap m = v.toMap(); a.append(QJsonObject{{QStringLiteral("id"), m.value(QStringLiteral("id")).toInt()}, {QStringLiteral("name"), m.value(QStringLiteral("name")).toString()}}); }
+    return QJsonObject{{QStringLiteral("custom"), m_customCategories}, {QStringLiteral("items"), a}};
 }
 
 QJsonArray KickClient::playlistsJson() const
@@ -534,6 +615,23 @@ void KickClient::setListsJson(const QJsonObject &o)
         m_accountName = m_signedIn ? acc.value(QStringLiteral("name")).toString().left(60) : QString();
         emit signedInChanged();
         emit signInChanged();
+    }
+    {   // your category chips; anything not well formed is left out
+        m_pinned.clear();
+        const QJsonObject pc = o.value(QStringLiteral("pinnedCategories")).toObject();
+        m_customCategories = pc.value(QStringLiteral("custom")).toBool(false);
+        for (const QJsonValue &v : pc.value(QStringLiteral("items")).toArray()) {
+            if (m_pinned.size() >= kMaxPinned) break;
+            const QJsonObject co = v.toObject();
+            const int id = whole(co.value(QStringLiteral("id")));
+            const QString name = co.value(QStringLiteral("name")).toString().trimmed().left(60);
+            bool dup = false;
+            for (const QVariant &p : m_pinned) if (p.toMap().value(QStringLiteral("id")).toInt() == id) dup = true;
+            if (id > 0 && !name.isEmpty() && !dup) m_pinned.append(QVariantMap{{QStringLiteral("id"), id}, {QStringLiteral("name"), name}, {QStringLiteral("slug"), QString()}});
+        }
+        m_categoryResults.clear();
+        emit categoriesChanged();
+        emit categoryResultsChanged();
     }
     m_englishOnly = o.value(QStringLiteral("englishOnly")).toBool(false);
     emit filtersChanged();
@@ -975,6 +1073,80 @@ void KickClient::importPage(quint64 gen, QString cursor, int page, QStringList s
         emit signInChanged();
         if (added > 0) { emit listsChanged(); emit listsEdited(); }
     }, accountLimits("GET", QByteArray(), m_token));
+}
+
+// ---- your own category chips -------------------------------------------------------------------------------
+
+bool KickClient::pinCategory(int id, const QString &nameIn)
+{
+    const QString name = nameIn.trimmed().left(60);
+    if (id <= 0 || name.isEmpty()) return false;
+    if (!m_customCategories) { m_pinned = m_categories; m_customCategories = true; }       // the first change starts from what is shown now
+    for (const QVariant &v : m_pinned) if (v.toMap().value(QStringLiteral("id")).toInt() == id) return false;
+    if (m_pinned.size() >= kMaxPinned) return false;
+    m_pinned.append(QVariantMap{{QStringLiteral("id"), id}, {QStringLiteral("name"), name}, {QStringLiteral("slug"), QString()}});
+    emit categoriesChanged();
+    emit listsEdited();
+    return true;
+}
+
+void KickClient::unpinCategory(int id)
+{
+    if (!m_customCategories) { m_pinned = m_categories; m_customCategories = true; }
+    for (int i = 0; i < m_pinned.size(); ++i) {
+        if (m_pinned[i].toMap().value(QStringLiteral("id")).toInt() != id) continue;
+        m_pinned.removeAt(i);
+        if (m_categoryId == id) setCategoryId(0);                                          // the list was filtered by it: back to everything
+        emit categoriesChanged();
+        emit listsEdited();
+        return;
+    }
+    emit categoriesChanged();                                                              // (the copy above may have changed what is shown)
+    emit listsEdited();
+}
+
+void KickClient::movePinnedCategory(int id, int by)
+{
+    if (by == 0) return;
+    if (!m_customCategories) { m_pinned = m_categories; m_customCategories = true; }       // the first change starts from what is shown now
+    for (int i = 0; i < m_pinned.size(); ++i) {
+        if (m_pinned[i].toMap().value(QStringLiteral("id")).toInt() != id) continue;
+        const int to = qBound(0, i + (by < 0 ? -1 : 1), int(m_pinned.size()) - 1);
+        if (to == i) return;
+        m_pinned.move(i, to);
+        emit categoriesChanged();
+        emit listsEdited();
+        return;
+    }
+}
+
+void KickClient::resetCategories()
+{
+    if (!m_customCategories && m_pinned.isEmpty()) return;
+    m_customCategories = false;
+    m_pinned.clear();
+    emit categoriesChanged();
+    emit listsEdited();
+}
+
+void KickClient::searchCategories(const QString &textIn)
+{
+    const QString word = textIn.trimmed();
+    const quint64 gen = ++m_categorySearchGen;
+    if (word.size() < 2 || !ready()) { m_categoryResults.clear(); m_categorySearching = false; emit categoryResultsChanged(); return; }
+    m_categorySearching = true;
+    emit categoryResultsChanged();
+    QUrl url(QStringLiteral("https://kick.com/api/search"));
+    QUrlQuery q;
+    q.addQueryItem(QStringLiteral("searched_word"), word);
+    url.setQuery(q);
+    m_net->get(kApp, url, [this, gen](NetReply r) {
+        if (gen != m_categorySearchGen) return;
+        m_categorySearching = false;
+        QVariantList cats;
+        if (r.error.isEmpty() && parseSearchCategories(r.body, &cats)) m_categoryResults = cats; else m_categoryResults.clear();
+        emit categoryResultsChanged();
+    });
 }
 
 } // namespace hop

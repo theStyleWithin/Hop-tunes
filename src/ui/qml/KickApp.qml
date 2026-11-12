@@ -11,8 +11,11 @@ FocusScope {
     objectName: "kickApp"
     readonly property var kick: hop.kick
     property bool allowed: hop.appNetAllowed("kick")
-    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account
+    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account | categories
     property bool disconnected: false
+    property bool collapsed: false               // the menu above the streams (search, filters, categories) is pulled up out of the way
+    readonly property bool collapsible: !!kick && allowed && !disconnected && page === "browse"
+    function toggleCollapse() { collapsed = !collapsed }
     property string watchTab: "live"             // live | past | clips (on the watch page)
     property string playId: ""                   // the downloaded video being played
     property string playlistId: ""               // the playlist being looked at
@@ -80,6 +83,7 @@ FocusScope {
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
         if (page === "account") { kick.cancelSignIn(); page = "browse"; return true }
+        if (page === "categories") { kick.searchCategories(""); page = "browse"; return true }
         if (page === "play") { page = "downloads"; playId = ""; return true }
         if (page === "playlist") { page = "playlists"; playlistId = ""; return true }
         if (page === "playlists") { page = "browse"; return true }
@@ -92,6 +96,7 @@ FocusScope {
     function openSearch() {
         if (!kick || !allowed || disconnected) return false
         if (page !== "browse") { page = "browse"; kick.closeChannel(); watchTab = "live" }
+        collapsed = false                                                    // searching brings the menu back down
         searchBox.forceActiveFocus()
         return true
     }
@@ -164,6 +169,11 @@ FocusScope {
         background: Rectangle { radius: 15; color: ch.on ? Theme.accent : "transparent"; border { width: ch.on ? 0 : 1; color: ch.hovered ? Theme.text2 : Theme.border } }
         contentItem: Label { id: lbl; text: ch.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                              color: ch.on ? Theme.ink : Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+    }
+    component Box: Rectangle {   // a tick box drawn here (the tick-box characters are missing from some phone fonts)
+        property bool on: false
+        implicitWidth: 16; implicitHeight: 16; radius: 3; color: on ? Theme.accent : "transparent"
+        border { width: 1.5; color: on ? Theme.accent : Theme.muted }
     }
     component Pill: Label {   // a small tag
         font { family: Theme.font; pixelSize: Theme.fs(11); letterSpacing: 1; bold: true }
@@ -260,6 +270,20 @@ FocusScope {
             id: browse
             objectName: "kickBrowse"
             anchors.fill: parent; visible: root.page === "browse"; spacing: 12
+            Item {   // the curtain: search, filters and categories. The arrow at the top right of the app pulls it up (more room for streams) and back down.
+                id: curtain
+                objectName: "kickCurtain"
+                Layout.fillWidth: true
+                Layout.preferredHeight: root.collapsed ? 0 : controls.implicitHeight
+                clip: true
+                opacity: root.collapsed ? 0 : 1
+                enabled: !root.collapsed
+                visible: !root.collapsed || height > 1
+                Behavior on Layout.preferredHeight { NumberAnimation { duration: Theme.reduceMotion ? 0 : 200; easing.type: Easing.InOutQuad } }
+                Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 160 } }
+                ColumnLayout {
+                    id: controls
+                    width: parent.width; spacing: 12
             GridLayout {
                 columns: root.phone ? 1 : 2; rowSpacing: 8; columnSpacing: 10; Layout.fillWidth: true
                 TextField {
@@ -270,8 +294,22 @@ FocusScope {
                     font { family: Theme.font; pixelSize: Theme.fs(16) } color: Theme.text; placeholderTextColor: Theme.dim
                     background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.border } }
                     onAccepted: {
+                        searchTimer.stop()
                         if (/kick\.com\//i.test(text)) root.openChannel(text)     // a pasted link opens that channel
                         else kick.search(text)
+                    }
+                    // search as you type: the list follows the spelling (a moment after you pause), closest names first
+                    onTextChanged: searchTimer.restart()
+                    Timer {
+                        id: searchTimer
+                        objectName: "kickSearchTimer"
+                        interval: 350
+                        onTriggered: {
+                            const t = searchBox.text.trim()
+                            if (/kick\.com\//i.test(t)) return                   // a pasted link waits for enter
+                            if (t.length === 1) return                           // one letter finds too much
+                            if (t !== kick.query) kick.search(t)
+                        }
                     }
                 }
                 Flow {   // sort, language, 18+, refresh: one row on a computer, wraps on a phone
@@ -283,7 +321,9 @@ FocusScope {
                 AbstractButton {
                     objectName: "kickSort"; hoverEnabled: true; focusPolicy: Qt.NoFocus
                     onClicked: kick.sort = kick.sort === "viewers" ? "featured" : "viewers"
-                    contentItem: Label { text: (kick.sort === "viewers" ? "most viewers" : "featured") + " ▾"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    contentItem: Row { spacing: 6
+                        Label { text: kick.sort === "viewers" ? "most viewers" : "featured"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } anchors.verticalCenter: parent.verticalCenter }
+                        Icon { kind: "down"; ink: Theme.text; width: 12; height: 12; anchors.verticalCenter: parent.verticalCenter } }
                     background: Item {}
                 }
                 AbstractButton {   // language: a small menu in the same plain style as the sort label
@@ -294,7 +334,9 @@ FocusScope {
                     hoverEnabled: true; focusPolicy: Qt.NoFocus
                     enabled: !kick.englishOnly
                     onClicked: langMenu.popup()
-                    contentItem: Label { text: kick.englishOnly ? "english only" : lang.names[Math.max(0, lang.codes.indexOf(kick.language))] + " \u25be"; color: kick.englishOnly ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    contentItem: Row { spacing: 6
+                        Label { text: kick.englishOnly ? "english only" : lang.names[Math.max(0, lang.codes.indexOf(kick.language))]; color: kick.englishOnly ? Theme.accent : Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } anchors.verticalCenter: parent.verticalCenter }
+                        Icon { visible: !kick.englishOnly; kind: "down"; ink: Theme.text; width: 12; height: 12; anchors.verticalCenter: parent.verticalCenter } }
                     background: Item {}
                     Menu {
                         id: langMenu
@@ -306,17 +348,21 @@ FocusScope {
                 AbstractButton {
                     objectName: "kickEnglishOnly"; hoverEnabled: true; focusPolicy: Qt.NoFocus
                     onClicked: kick.englishOnly = !kick.englishOnly
-                    contentItem: Label { text: (kick.englishOnly ? "\u2611 " : "\u2610 ") + "english only"; color: kick.englishOnly ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    contentItem: Row { spacing: 8
+                        Box { on: kick.englishOnly; anchors.verticalCenter: parent.verticalCenter }
+                        Label { text: "english only"; color: kick.englishOnly ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } anchors.verticalCenter: parent.verticalCenter } }
                     background: Item {}
                 }
                 AbstractButton {
                     objectName: "kickMature"; hoverEnabled: true; focusPolicy: Qt.NoFocus
                     onClicked: kick.showMature = !kick.showMature
-                    contentItem: Label { text: (kick.showMature ? "☑ " : "☐ ") + "show 18+"; color: kick.showMature ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                    contentItem: Row { spacing: 8
+                        Box { on: kick.showMature; anchors.verticalCenter: parent.verticalCenter }
+                        Label { text: "show 18+"; color: kick.showMature ? Theme.accent : Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } anchors.verticalCenter: parent.verticalCenter } }
                     background: Item {}
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
-                PlainButton { objectName: "kickAccountButton"; implicitHeight: 36; text: kick.signedIn ? "account \u2713" : "account"; onClicked: root.page = "account" }
+                PlainButton { objectName: "kickAccountButton"; implicitHeight: 36; text: kick.signedIn ? "account (signed in)" : "account"; onClicked: root.page = "account" }
                 PlainButton { objectName: "kickPlaylistsButton"; text: "playlists" + (kick.playlists.length > 0 ? " (" + kick.playlists.length + ")" : ""); implicitHeight: 36
                               onClicked: { root.playlistMessage = ""; root.page = "playlists" } }
                 PlainButton { objectName: "kickDownloadsButton"; visible: !!hop.downloads; implicitHeight: 36
@@ -355,9 +401,12 @@ FocusScope {
                 visible: kick.query === ""
                 Layout.fillWidth: true; spacing: 8
                 Chip { objectName: "kickCat_all"; text: "all"; on: kick.categoryId === 0; onClicked: kick.categoryId = 0 }
-                Repeater { model: kick.categories
+                Repeater { model: kick.chips
                            delegate: Chip { required property var modelData; objectName: "kickCat_" + modelData.id; text: modelData.name.toLowerCase(); on: kick.categoryId === modelData.id
                                             onClicked: kick.categoryId = modelData.id } }
+                Chip { objectName: "kickEditCategories"; text: "edit"; onClicked: root.page = "categories" }
+            }
+                }
             }
             Label { visible: kick.query !== ""; text: "results for “" + kick.query + "”"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
@@ -615,6 +664,78 @@ FocusScope {
                 }
                 Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                 Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
+            }
+        }
+
+        // ---- categories: pick the chips under the search box (swap Kick's popular ones for what you care about) ----
+        ColumnLayout {
+            objectName: "kickCategoriesPage"
+            anchors.fill: parent; visible: root.page === "categories"; spacing: 10
+            RowLayout {
+                spacing: 12; Layout.fillWidth: true
+                PlainButton { objectName: "kickCategoriesBack"; text: root.phone ? "\u2039" : "\u2039 streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                Label { text: "your categories"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
+                Item { Layout.fillWidth: true }
+                PlainButton { objectName: "kickCatReset"; visible: kick.categoriesCustom; text: root.phone ? "reset" : "back to kick\u2019s popular ones"; implicitHeight: 36; Layout.minimumWidth: 0; onClicked: kick.resetCategories() }
+            }
+            Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                    text: kick.categoriesCustom ? "these are the category chips under the search box. take away the ones you do not care about, move the rest, and add your own below. kept in this profile."
+                                                : "these are kick\u2019s popular categories. change anything (take one away, or add your own below) and the list becomes yours, kept in this profile." }
+            TextField {
+                id: catSearch
+                objectName: "kickCatSearch"
+                Layout.fillWidth: true; implicitHeight: root.phone ? 46 : 40; selectByMouse: true
+                placeholderText: "find a category to add (a game, irl, music\u2026)"
+                font { family: Theme.font; pixelSize: Theme.fs(15) } color: Theme.text; placeholderTextColor: Theme.dim
+                background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.border } }
+                onTextChanged: catTimer.restart()
+                Timer { id: catTimer; objectName: "kickCatTimer"; interval: 350; onTriggered: kick.searchCategories(catSearch.text) }
+            }
+            Label { visible: catSearch.text.trim().length >= 2 && !kick.categorySearching && kick.categoryResults.length === 0; Layout.fillWidth: true; color: Theme.muted
+                    text: "no category found for that name."; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            Flow {   // what the search found
+                objectName: "kickCatResults"
+                Layout.fillWidth: true; spacing: 8; visible: kick.categoryResults.length > 0
+                Repeater {
+                    model: kick.categoryResults
+                    delegate: Chip {
+                        required property var modelData
+                        readonly property bool pinned: { for (let i = 0; i < kick.chips.length; i++) if (kick.chips[i].id === modelData.id && kick.categoriesCustom) return true; return false }
+                        objectName: "kickCatAdd_" + modelData.id
+                        text: (pinned ? "in your list: " : "+ ") + modelData.name.toLowerCase() + (modelData.mature ? " (18+)" : "")
+                        enabled: !pinned
+                        onClicked: kick.pinCategory(modelData.id, modelData.name)
+                    }
+                }
+            }
+            Label { text: "your list"; color: Theme.muted; Layout.topMargin: 6; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+            Label { objectName: "kickCatEmpty"; visible: kick.chips.length === 0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                    text: kick.categoriesCustom ? "nothing in your list: only \u201call\u201d shows. add some above, or go back to kick\u2019s popular ones." : "kick\u2019s popular categories have not loaded yet." }
+            ListView {
+                id: catList
+                objectName: "kickCatList"
+                Layout.fillWidth: true; Layout.fillHeight: true; clip: true; spacing: 6
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar {}
+                model: kick.chips
+                delegate: Item {
+                    id: crow
+                    required property var modelData
+                    required property int index
+                    objectName: "kickCatRow_" + modelData.id
+                    width: catList.width - 12; height: 46
+                    Rectangle { anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line } }
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 12; rightMargin: 8 } spacing: 8
+                        Label { text: crow.modelData.name.toLowerCase(); color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                        PlainButton { objectName: "kickCatUp_" + crow.modelData.id; text: "up"; enabled: crow.index > 0; implicitHeight: 34; Layout.preferredWidth: 60; Layout.minimumWidth: 0
+                                      onClicked: kick.movePinnedCategory(crow.modelData.id, -1) }
+                        PlainButton { objectName: "kickCatDown_" + crow.modelData.id; text: "down"; enabled: crow.index < kick.chips.length - 1; implicitHeight: 34; Layout.preferredWidth: 72; Layout.minimumWidth: 0
+                                      onClicked: kick.movePinnedCategory(crow.modelData.id, 1) }
+                        PlainButton { objectName: "kickCatRemove_" + crow.modelData.id; text: "remove"; danger: true; implicitHeight: 34; Layout.preferredWidth: 84; Layout.minimumWidth: 0
+                                      onClicked: kick.unpinCategory(crow.modelData.id) }
+                    }
+                }
             }
         }
 

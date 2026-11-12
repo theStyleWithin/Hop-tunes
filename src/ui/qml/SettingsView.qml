@@ -527,6 +527,24 @@ Item {
                 onPicked: function (v) { hop.appsEnabled = v === "appsOn" }
             }
         }
+        SRow {   // the little description that pops up on an app's tile
+            objectName: "appHintsRow"
+            visible: hop.appsEnabled
+            spacing: 16
+            Label { text: "descriptions"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "appHintsChoice"
+                options: [["hintsOn", "show"], ["hintsOff", "hide"]]
+                value: hop.appHints ? "hintsOn" : "hintsOff"
+                onPicked: function (v) { hop.appHints = v === "hintsOn" }
+            }
+        }
+        Label {
+            visible: hop.appsEnabled
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "the short line that pops up when you hover over (or hold your finger on) an app's tile, like what kick is and that it uses the internet. hide it once you know your way around."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
             text: "apps are small programs that are part of hop-tunes and open inside its window. they are off until you switch them on here, so a fresh hop-tunes shows every other tab and stays exactly as quiet as before. an app that needs the internet says so and asks you first."
@@ -568,6 +586,34 @@ Item {
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
             text: "english only keeps the streams list to English streams, whatever else you choose there. it is saved in this profile. searching for a streamer by name, your follow list and your playlists are your own choices and are not filtered."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
+        ColumnLayout {   // the category chips under kick's search box: yours, or kick's popular ones
+            objectName: "kickCategoriesBox"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
+            Layout.fillWidth: true; Layout.maximumWidth: 640; spacing: 6
+            RowLayout {
+                spacing: 12
+                Label { text: "kick categories"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+                Label { objectName: "kickCategoriesSummary"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                        text: hop.kick && hop.kick.categoriesCustom ? (hop.kick.chips.length === 0 ? "your own list: empty" : "your own list: " + hop.kick.chips.length + " categories") : "kick\u2019s popular ones" }
+            }
+            Repeater {
+                model: hop.kick && hop.kick.categoriesCustom ? hop.kick.chips : []
+                delegate: RowLayout {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true; spacing: 6
+                    Label { text: modelData.name.toLowerCase(); color: Theme.text; Layout.fillWidth: true; elide: Text.ElideRight; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                    Button { objectName: "kickCatSettingsUp_" + modelData.id; text: "up"; enabled: index > 0; onClicked: hop.kick.movePinnedCategory(modelData.id, -1) }
+                    Button { objectName: "kickCatSettingsDown_" + modelData.id; text: "down"; enabled: index < hop.kick.chips.length - 1; onClicked: hop.kick.movePinnedCategory(modelData.id, 1) }
+                    Button { objectName: "kickCatSettingsRemove_" + modelData.id; text: "remove"; onClicked: hop.kick.unpinCategory(modelData.id) }
+                }
+            }
+            Button { objectName: "kickCatSettingsReset"; visible: hop.kick && hop.kick.categoriesCustom; text: "back to kick\u2019s popular ones"; onClicked: hop.kick.resetCategories() }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                text: "these are the chips under the search box in the kick app (not a fan of one of kick\u2019s popular ones? swap it). to add a category, open the kick app and press edit at the end of the chips: finding categories needs the internet, so it only works inside the app. kept in this profile."
+            }
         }
         ColumnLayout {   // the kick lists
             objectName: "kickListsBox"

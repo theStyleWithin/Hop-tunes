@@ -1383,6 +1383,131 @@ private slots:
     }
 
 private slots:
+    // ---- searching by name: closest first, and phrases Kick finds nothing for ----
+    void searchResultsAreRankedByHowCloseTheNameIs()
+    {
+        QVERIFY(KickClient::nameScore("Lumielle", "lumielle") > KickClient::nameScore("Lumielle", "lumiellevt"));      // exact beats longer
+        QVERIFY(KickClient::nameScore("lumie", "lumiere") > KickClient::nameScore("lumie", "lumiellevt"));            // shorter name that starts the same
+        QVERIFY(KickClient::nameScore("lumie", "lumiellevt") > KickClient::nameScore("lumie", "sharelylumielle"));    // starts with beats contains
+        QVERIFY(KickClient::nameScore("lumie", "sharelylumielle") > KickClient::nameScore("lumie", "unrelated"));     // contains beats nothing in common
+        QVERIFY(KickClient::nameScore("Lumielle vtuber", "lumiellevt") > KickClient::nameScore("Lumielle vtuber", "sharelylumielle"));   // name + extra word
+        QVERIFY(KickClient::nameScore("lumielle", "lumielel") > KickClient::nameScore("lumielle", "zzzzzzzz"));       // a near spelling beats nonsense
+        QCOMPARE(KickClient::nameScore("", "x"), 0);
+        QVariantList l;
+        for (const char *s : {"sharelylumielle", "lumiellevt", "unrelated", "lumielle", "llumiellee"})
+            l.append(QVariantMap{{"slug", s}, {"name", QString(s).toUpper()}});
+        KickClient::rankByName(&l, "lumielle");
+        QStringList order; for (const QVariant &v : l) order << v.toMap().value("slug").toString();
+        QCOMPARE(order.first(), QString("lumielle"));
+        QCOMPARE(order.at(1), QString("lumiellevt"));
+        QCOMPARE(order.last(), QString("unrelated"));
+    }
+    void aPhraseKickFindsNothingForIsSearchedByItsLongestWord()
+    {
+        fresh();
+        QStringList words;
+        ft->handler = [&words](const QUrl &u) -> NetReply {
+            if (u.path() == "/api/search") {
+                const QString w = QUrlQuery(u).queryItemValue("searched_word", QUrl::FullyDecoded);
+                words << w;
+                if (w == "Lumielle") return ok("{\"channels\":[{\"slug\":\"sharelylumielle\",\"user\":{\"username\":\"SharelyLumielle\"}},{\"slug\":\"lumiellevt\",\"user\":{\"username\":\"LumielleVT\"},\"isLive\":false},{\"slug\":\"lumielle\",\"user\":{\"username\":\"Lumielle\"}}],\"categories\":[]}");
+                return ok("{\"channels\":[],\"categories\":[]}");
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        k.search("Lumielle vtuber");
+        QTRY_VERIFY(!k.streams().isEmpty());
+        QCOMPARE(words, (QStringList{"Lumielle vtuber", "Lumielle"}));                  // the phrase first, then its longest word
+        QCOMPARE(k.streams().first().toMap().value("slug").toString(), QString("lumiellevt"));      // closest to what was typed first
+        QCOMPARE(k.streams().last().toMap().value("slug").toString(), QString("sharelylumielle"));
+        // typing on: a stale answer never replaces a newer search
+        words.clear();
+        k.search("lum");
+        k.search("lumi");
+        QTRY_VERIFY(words.contains("lumi"));
+        QCOMPARE(k.query(), QString("lumi"));
+        // clearing the box goes back to the live list
+        k.search("");
+        QVERIFY(k.query().isEmpty());
+    }
+
+private slots:
+    // ---- your own category chips ----
+    void yourOwnCategoryChipsReplaceKicksPopularOnesAndAreKept()
+    {
+        fresh();
+        ft->handler = [](const QUrl &u) -> NetReply {
+            if (u.path().startsWith("/api/v1/subcategories"))
+                return ok("{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"jc\"},{\"id\":3,\"name\":\"Grand Theft Auto V\",\"slug\":\"gta\"},{\"id\":9,\"name\":\"Minecraft\",\"slug\":\"mc\"}]}");
+            if (u.path() == "/api/search") {
+                const QString w = QUrlQuery(u).queryItemValue("searched_word").toLower();
+                QJsonArray cats;
+                if (QString("palworld").contains(w)) cats.append(QJsonObject{{"id", 7234}, {"category_id", 1}, {"name", "Palworld"}, {"is_mature", false}});
+                if (QString("pal's adult game").contains(w)) cats.append(QJsonObject{{"id", 55}, {"name", "Pal's Adult Game"}, {"is_mature", true}});
+                return ok(QJsonDocument(QJsonObject{{"channels", QJsonArray{}}, {"categories", cats}}).toJson());
+            }
+            return ok("{\"data\":{\"livestreams\":[],\"pagination\":{\"next_cursor\":\"\"}}}");
+        };
+        KickClient k(&net);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.open();
+        QTRY_COMPARE(k.chips().size(), 3);
+        QVERIFY(!k.categoriesCustom());                                                  // Kick's popular ones to start with
+        auto ids = [&] { QList<int> l; for (const QVariant &v : k.chips()) l << v.toMap().value("id").toInt(); return l; };
+        // taking one away starts from what is shown, and the list is yours from then on
+        k.unpinCategory(3);
+        QVERIFY(k.categoriesCustom());
+        QCOMPARE(ids(), (QList<int>{15, 9}));
+        QCOMPARE(edited.count(), 1);
+        // the category search finds games by name; a one-letter search asks nothing
+        const int before = ft->asked.size();
+        k.searchCategories("p");
+        QCOMPARE(ft->asked.size(), before);
+        k.searchCategories("pal");
+        QTRY_VERIFY(!k.categoryResults().isEmpty());
+        QCOMPARE(k.categoryResults().first().toMap().value("name").toString(), QString("Palworld"));
+        QVERIFY(k.categoryResults().last().toMap().value("mature").toBool());
+        QVERIFY(k.pinCategory(7234, "Palworld"));
+        QVERIFY(!k.pinCategory(7234, "Palworld"));                                        // not twice
+        QVERIFY(!k.pinCategory(0, "x") && !k.pinCategory(5, "  "));
+        QCOMPARE(ids(), (QList<int>{15, 9, 7234}));
+        // moving: earlier / later, never off the ends
+        k.movePinnedCategory(7234, -1);
+        QCOMPARE(ids(), (QList<int>{15, 7234, 9}));
+        k.movePinnedCategory(15, -1);
+        QCOMPARE(ids(), (QList<int>{15, 7234, 9}));
+        k.movePinnedCategory(9, 1);
+        QCOMPARE(ids(), (QList<int>{15, 7234, 9}));
+        // a category that was filtering the list and is taken away stops filtering
+        k.setCategoryId(7234);
+        k.unpinCategory(7234);
+        QCOMPARE(k.categoryId(), 0);
+        QCOMPARE(ids(), (QList<int>{15, 9}));
+        // limits
+        for (int i = 0; i < 40; ++i) k.pinCategory(1000 + i, QString("c%1").arg(i));
+        QCOMPARE(k.chips().size(), int(KickClient::kMaxPinned));
+        // saved with the profile and restored; junk is left out
+        KickClient again(&net);
+        again.setListsJson(k.listsJson());
+        QVERIFY(again.categoriesCustom());
+        QCOMPARE(again.chips().size(), int(KickClient::kMaxPinned));
+        QCOMPARE(again.chips().first().toMap().value("id").toInt(), 15);
+        again.setListsJson(QJsonObject{{"pinnedCategories", QJsonObject{{"custom", true}, {"items", QJsonArray{
+            QJsonObject{{"id", 7}, {"name", "ok"}}, QJsonObject{{"id", 7}, {"name", "dup"}}, QJsonObject{{"id", -2}, {"name", "neg"}}, QJsonObject{{"id", 8}, {"name", ""}}, "junk"}}}}});
+        QCOMPARE(again.chips().size(), 1);
+        // an emptied own list stays empty (it does not quietly bring Kick's back); reset does
+        again.unpinCategory(7);
+        QVERIFY(again.categoriesCustom() && again.chips().isEmpty());
+        again.resetCategories();
+        QVERIFY(!again.categoriesCustom());
+        k.resetCategories();
+        QVERIFY(!k.categoriesCustom());
+        QCOMPARE(ids(), (QList<int>{15, 3, 9}));
+    }
+
+private slots:
     // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
     void liveClipDownloadAgainstTheRealServers()
     {
