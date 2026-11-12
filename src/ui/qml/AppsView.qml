@@ -11,9 +11,11 @@ Item {
     signal openApp(string appId)
 
     // id, the name under the tile, a line for the tooltip, an icon (a url, or "" for the plain glass)
-    readonly property var apps: [
-        { id: "sample", name: "sample app", blurb: "a sample, to show how apps open inside Hop-tunes", icon: "" }
+    // net: the app uses the internet (it says so on its tile, and is left out of builds without networked apps)
+    readonly property var allApps: [
+        { id: "kick", name: "kick", blurb: "browse and watch live streams from kick.com. uses the internet only while it is open, and only after you allow it", icon: "qrc:/images/app-kick.png", net: true }
     ]
+    readonly property var apps: allApps.filter(function (a) { return !a.net || hop.netAppsBuilt })
 
     // one glass tile
     component AppTile: AbstractButton {
@@ -21,7 +23,7 @@ Item {
         required property var app
         objectName: "appTile_" + app.id
         readonly property real side: 132
-        width: side; height: side + 34
+        width: side; height: side + 52
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
         Accessible.name: app.name
@@ -67,6 +69,11 @@ Item {
                 text: tile.app.name
                 color: tile.hovered || tile.activeFocus ? Theme.text : Theme.text2
                 font { family: Theme.font; pixelSize: Theme.fs(16) }
+            }
+            Label {   // honest about the network
+                visible: tile.app.net === true
+                anchors { top: glass.bottom; topMargin: 30; horizontalCenter: parent.horizontalCenter }
+                text: "uses the internet"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(11) }
             }
         }
         background: Item {}

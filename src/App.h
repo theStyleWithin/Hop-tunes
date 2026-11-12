@@ -21,6 +21,10 @@
 #include "game/AnalysisGuard.h"
 #include "game/MusyNoteGame.h"
 #include "game/PinballGame.h"
+#ifdef HOPTUNES_NET_APPS
+#include "apps/KickClient.h"
+#include "net/AppNet.h"
+#endif
 #include "game/AudioAnalyzer.h"
 #include "game/Gamepad.h"
 #include "playback/Player.h"
@@ -36,6 +40,8 @@
 #include <QUrl>
 #include <QVariantList>
 #include <QVariantMap>
+
+class QQmlEngine;
 
 namespace hop {
 
@@ -147,6 +153,10 @@ class App : public QObject {
     // How video is shown: "window" (video with the movie's details and an up-next list), "theater" (a wide video
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
+    Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
+    Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
+    Q_PROPERTY(QStringList netAllowedApps READ netAllowedApps NOTIFY appNetChanged)   // the apps the person has allowed to use the internet
+    Q_PROPERTY(QObject *appNetGateway READ gatewayObject CONSTANT)
     Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString videoOrientation READ videoOrientation WRITE setVideoOrientation NOTIFY videoOrientationChanged)   // phones: how videos open, "portrait" | "auto" | "landscape"
@@ -272,6 +282,37 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    QObject *kickObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_kick;
+#else
+        return nullptr;
+#endif
+    }
+    static constexpr bool netAppsBuilt() {
+#ifdef HOPTUNES_NET_APPS
+        return true;
+#else
+        return false;
+#endif
+    }
+    QStringList netAllowedApps() const { return QStringList(m_netAllowed.begin(), m_netAllowed.end()); }
+#ifdef HOPTUNES_NET_APPS
+    KickClient *kickClient() { return &m_kick; }      // for tests
+    AppNet *gateway() { return &m_appNet; }
+#endif
+    QObject *gatewayObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_appNet;
+#else
+        return nullptr;
+#endif
+    }
+    // the person's permission for an app that uses the internet (settings > apps, or the first-open card); kept per profile
+    // QML's pictures of the Kick app come through the gateway: called once for each engine, before the QML is loaded
+    void installImageProviders(QQmlEngine *engine);
+    Q_INVOKABLE bool appNetAllowed(const QString &app) const { return m_netAllowed.contains(app); }
+    Q_INVOKABLE void setAppNetAllowed(const QString &app, bool on);
     bool appsEnabled() const { return m_appsEnabled; }
     void setAppsEnabled(bool on);
     QString videoOrientation() const { return m_videoOrientation; }
@@ -473,6 +514,7 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void appsEnabledChanged();
+    void appNetChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
     void videoOrientationChanged();
@@ -521,6 +563,11 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     bool m_appsEnabled = false;
+    QSet<QString> m_netAllowed;
+#ifdef HOPTUNES_NET_APPS
+    AppNet m_appNet;
+    KickClient m_kick{&m_appNet};
+#endif
     QString m_videoComments = QStringLiteral("off");
     QString m_videoOrientation = QStringLiteral("auto");
     QString m_navStyle = QStringLiteral("bar");

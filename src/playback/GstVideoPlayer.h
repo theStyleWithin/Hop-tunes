@@ -45,6 +45,7 @@ public:
     // the pipeline the first time, no-ops after (one surface per player, like MpvVideoItem).
     Q_INVOKABLE void attachSurface(QQuickItem *item);
     Q_INVOKABLE bool openSource(const QString &path, qint64 startPositionMs = 0);
+    Q_INVOKABLE bool openStream(const QString &url);   // a live stream (Kick app): https, the app's video host only
     Q_INVOKABLE void play();
     Q_INVOKABLE void pause();
     Q_INVOKABLE void togglePause();
@@ -93,6 +94,7 @@ private:
     qint64 m_position = 0;
     qint64 m_duration = 0;
     qint64 m_pendingSeekMs = 0;
+    bool m_streamUa = false;     // the user-agent hook for streams is installed
     int m_volume = 100;
     QString m_hwdecActive;
     QString m_error;

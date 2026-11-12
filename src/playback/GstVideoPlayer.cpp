@@ -7,6 +7,9 @@
 
 #ifdef HOPTUNES_HAVE_GST
 #include <gst/gst.h>
+#ifdef HOPTUNES_NET_APPS
+#include "net/AppNet.h"
+#endif
 #endif
 
 #ifndef HOPTUNES_HAVE_GST   // Android for now: no GStreamer, so this engine is never available
@@ -162,6 +165,39 @@ void GstVideoPlayer::attachSurface(QQuickItem *item)
 
     m_bus = gst_element_get_bus(m_pipeline);
     m_busTimer.start();
+}
+
+#ifdef HOPTUNES_NET_APPS
+// Every HTTP source GStreamer makes for a stream (also the ones inside the HLS demuxer) gets the generic user agent.
+static void streamElementAdded(GstBin *, GstBin *, GstElement *element, gpointer)
+{
+    if (g_object_class_find_property(G_OBJECT_GET_CLASS(element), "user-agent"))
+        g_object_set(element, "user-agent", hop::AppNet::userAgent().constData(), nullptr);
+}
+#endif
+
+bool GstVideoPlayer::openStream(const QString &url)
+{
+    if (!m_pipeline) return false;
+#ifdef HOPTUNES_NET_APPS
+    QString why;
+    if (!hop::AppNet::streamUrlAllowed(QStringLiteral("kick"), QUrl(url), &why)) { setError(why); return false; }
+    if (!m_streamUa) { g_signal_connect(m_pipeline, "deep-element-added", G_CALLBACK(streamElementAdded), nullptr); m_streamUa = true; }
+    gst_element_set_state(m_pipeline, GST_STATE_NULL);
+    g_object_set(m_pipeline, "uri", url.toUtf8().constData(), "suburi", nullptr, nullptr);
+    m_pendingSeekMs = 0;
+    m_idle = false;
+    m_duration = 0;
+    emit durationChanged();
+    if (gst_element_set_state(m_pipeline, GST_STATE_PLAYING) == GST_STATE_CHANGE_FAILURE) { setError(QStringLiteral("could not start the stream (is the GStreamer HLS plugin installed?)")); return false; }
+    setPaused(false);
+    m_posTimer.start();
+    return true;
+#else
+    Q_UNUSED(url)
+    setError(QStringLiteral("this build has no apps that use the internet"));
+    return false;
+#endif
 }
 
 bool GstVideoPlayer::openSource(const QString &path, qint64 startPositionMs)

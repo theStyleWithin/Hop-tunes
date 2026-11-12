@@ -60,7 +60,8 @@ linuxdeploy --appdir "$APPDIR" \
 
 # Wayland needs its shell/decoration plugins too, or Qt silently falls back to XWayland.
 QT_PLUGINS=$(qmake -query QT_INSTALL_PLUGINS)
-for d in wayland-shell-integration wayland-decoration-client wayland-graphics-integration-client; do
+# (tls: the HTTPS backend of the Kick app; it uses the system's OpenSSL 3, present on every distro this AppImage supports)
+for d in wayland-shell-integration wayland-decoration-client wayland-graphics-integration-client tls; do
   if [ -d "$QT_PLUGINS/$d" ]; then
     mkdir -p "$APPDIR/usr/plugins/$d"
     cp -a "$QT_PLUGINS/$d/." "$APPDIR/usr/plugins/$d/"

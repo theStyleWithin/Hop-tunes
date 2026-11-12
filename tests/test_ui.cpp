@@ -4,8 +4,16 @@
 #include "App.h"
 #include "core/Paths.h"
 #include "ui/MpvVideoItem.h"
+#ifdef HOPTUNES_NET_APPS
+#include "apps/KickClient.h"
+#include "net/AppNet.h"
+#endif
 
+#include <QBuffer>
 #include <QDir>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QJsonArray>
 #include <QJSEngine>
 #include <QRegularExpression>
 #include <QElapsedTimer>
@@ -36,6 +44,53 @@
 using namespace hop;
 
 namespace {
+
+#ifdef HOPTUNES_NET_APPS
+// Answers the Kick app's requests from fixtures, a moment later like a real reply, and remembers what was asked (never touches the network).
+class FakeKick : public NetTransport {
+public:
+    QList<QUrl> asked;
+    int aborted = 0;
+    static QByteArray pngBytes()
+    {
+        QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(90, 60, 160));
+        QByteArray b; QBuffer buf(&b); buf.open(QIODevice::WriteOnly); im.save(&buf, "PNG"); return b;
+    }
+    static QByteArray list()
+    {
+        QJsonArray a;
+        auto add = [&](const QString &slug, int v, bool mature) {
+            a.append(QJsonObject{{"id", 1}, {"title", "title of " + slug}, {"viewer_count", v},
+                                 {"thumbnail", QJsonObject{{"src", "https://images.kick.com/t/" + slug + ".webp"}}},
+                                 {"channel", QJsonObject{{"slug", slug}, {"username", slug}, {"profile_pic", "https://files.kick.com/p/" + slug + ".webp"}}},
+                                 {"category", QJsonObject{{"id", 15}, {"name", "Just Chatting"}}}, {"language", "en"}, {"is_mature", mature}});
+        };
+        add("alpha", 9000, false); add("bravo", 8000, false); add("charlie", 7000, true);
+        return QJsonDocument(QJsonObject{{"data", QJsonObject{{"livestreams", a}, {"pagination", QJsonObject{{"next_cursor", ""}}}}}}).toJson();
+    }
+    static QByteArray channel(const QString &slug)
+    {
+        QJsonObject o{{"slug", slug}, {"user", QJsonObject{{"username", slug}}}, {"chatroom", QJsonObject{{"id", 5}}}, {"followers_count", 3}};
+        o["livestream"] = QJsonValue();                     // offline: no video engine is started in this test
+        if (slug == QLatin1String("gamehopper"))            // (the developer is live, so the pinned card shows; the test never opens it)
+            o["livestream"] = QJsonObject{{"session_title", "developer stream"}, {"viewer_count", 12}, {"is_mature", false},
+                                          {"thumbnail", QJsonObject{{"url", "https://stream.kick.com/thumbnails/dev.jpg"}}}};
+        return QJsonDocument(o).toJson();
+    }
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, Done done) override
+    {
+        asked << url;
+        NetReply r; r.status = 200;
+        if (url.host() == "web.kick.com") r.body = list();
+        else if (url.host() == "images.kick.com" || url.host() == "files.kick.com" || url.host() == "stream.kick.com") r.body = pngBytes();
+        else if (url.path().startsWith("/api/v2/channels/")) r.body = channel(url.path().section('/', -1));
+        else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"}]}";
+        else r.body = "{}";
+        QTimer::singleShot(0, this, [done, r] { done(r); });
+    }
+    void abortAll() override { ++aborted; }
+};
+#endif
 
 bool writeWav(const QString &path, int ms)
 {
@@ -200,6 +255,7 @@ class TestUi : public QObject {
         m_app.reset(new App);
         QVERIFY(m_app->init());
         m_engine.reset(new QQmlApplicationEngine);
+        m_app->installImageProviders(m_engine.get());
         m_engine->rootContext()->setContextProperty(QStringLiteral("hop"), m_app.get());
         m_engine->rootContext()->setContextProperty(QStringLiteral("initialView"), QString());
         m_engine->load(QUrl(QStringLiteral("qrc:/qml/Main.qml")));
@@ -2099,15 +2155,15 @@ private slots:
         QTRY_VERIFY(item("subTab_apps")->isVisible());
         QVERIFY(click("subTab_apps"));
         QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
-        QQuickItem *tile = item("appTile_sample");
+        QQuickItem *tile = item("appTile_kick");
         QVERIFY(tile && tile->isVisible());
         QVERIFY(tile->width() >= 100 && tile->height() > tile->width());       // a glass square with its name under it
         shot("apps-tab");
-        QVERIFY(click("appTile_sample"));
+        QVERIFY(click("appTile_kick"));
         QObject *host = item("appHost");
         QVERIFY(host);
         QTRY_VERIFY(host->property("active").toBool());
-        QTRY_VERIFY(item("sampleApp") && item("sampleApp")->isVisible());
+        QTRY_VERIFY(item("kickApp") && item("kickApp")->isVisible());
         QVERIFY(m_app->player()->isPlaying());                                  // the music plays on inside an app
         QVERIFY(!item("appsView")->isVisible() || host->property("visible").toBool());
         shot("apps-open");
@@ -2115,12 +2171,12 @@ private slots:
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(!host->property("active").toBool());
         QVERIFY(item("appsView")->isVisible());
-        QVERIFY(click("appTile_sample"));
+        QVERIFY(click("appTile_kick"));
         QTRY_VERIFY(host->property("active").toBool());
         QVariant r;
         QVERIFY(QMetaObject::invokeMethod(w, "goBack", Q_RETURN_ARG(QVariant, r)));
         QTRY_VERIFY(!host->property("active").toBool());
-        QVERIFY(click("appTile_sample"));
+        QVERIFY(click("appTile_kick"));
         QTRY_VERIFY(host->property("active").toBool());
         w->setProperty("view", QStringLiteral("now playing"));                 // leaving the collection closes it
         QTRY_VERIFY(!host->property("active").toBool());
@@ -2138,6 +2194,134 @@ private slots:
         QTRY_VERIFY(item("subTab_music")->isVisible());
         QVERIFY(click("subTab_music"));
     }
+
+#ifdef HOPTUNES_NET_APPS
+    // Kick: asks before it connects, browses without playing anything, follow and block stay local, and everything it reaches goes
+    // through the gateway (answered here from fixtures).
+    void kickAppAsksThenBrowsesFollowsAndBlocksLocally()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        // 1. the first time it asks, and nothing has been sent
+        QTRY_VERIFY(item("kickPermission") && item("kickPermission")->isVisible());
+        QVERIFY(!m_app->appNetAllowed("kick"));
+        QCOMPARE(ft->asked.size(), 0);
+        QVERIFY(!kick->isOpen() || kick->streams().isEmpty());
+        QVERIFY(item("kickAllow") && item("kickNotNow"));
+        QVERIFY(item("kickDevLink") && item("kickDevLink")->property("text").toString().contains("https://kick.com/gamehopper/about"));   // the link at the very bottom
+        QVERIFY(item("kickDevLink")->mapToItem(item("kickPermission"), QPointF(0, 0)).y() > item("kickAllow")->mapToItem(item("kickPermission"), QPointF(0, 0)).y());
+        shot("kick-permission");
+        // "not now" leaves and still nothing was sent
+        QVERIFY(click("kickNotNow"));
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QCOMPARE(ft->asked.size(), 0);
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickPermission")->isVisible());
+        QVERIFY(click("kickAllow"));
+        // 2. allowed: the live list comes in, 18+ streams are hidden, and no video engine has been started
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(m_app->appNetAllowed("kick"));
+        QVERIFY(item("kickCard_bravo") != nullptr);
+        QVERIFY(item("kickCard_charlie") == nullptr);
+        // the developer is live in this fixture: that card comes first (top left), tagged, ahead of Kick's own order
+        QTRY_VERIFY(item("kickCard_gamehopper") && item("kickCard_gamehopper")->isVisible());
+        QVERIFY(item("kickDeveloperTag") != nullptr);
+        QTRY_VERIFY(item("kickCard_alpha")->x() > 0 || item("kickCard_alpha")->y() > 0);        // (the grid has laid the cards out)
+        QVERIFY(item("kickCard_gamehopper")->x() == 0 && item("kickCard_gamehopper")->y() == 0);   // first place: top left
+        QVERIFY(item("kickCard_gamehopper")->x() < item("kickCard_alpha")->x() || item("kickCard_gamehopper")->y() < item("kickCard_alpha")->y());
+        QVERIFY(item("kickPlayer") == nullptr || !item("kickSurface"));
+        QVERIFY(item("kickSurface") == nullptr);                                   // nothing plays until a stream is picked
+        QVERIFY(item("kickMore") == nullptr || !item("kickMore")->isVisible());   // (one page only in this fixture)
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        QTRY_VERIFY(item("kickContacted") && item("kickContacted")->property("text").toString().contains("web.kick.com"));
+        shot("kick-browse");
+        QVERIFY(click("kickMature"));
+        QTRY_VERIFY(item("kickCard_charlie") != nullptr);
+        QVERIFY(click("kickMature"));
+        QTRY_VERIFY(item("kickCard_charlie") == nullptr);
+        // 3. a card opens its channel (offline in the fixture: nothing to play, and it says so); follow and block are local
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QTRY_VERIFY(item("kickChannelState") && item("kickChannelState")->isVisible());
+        QTRY_VERIFY(item("kickChannelState")->property("text").toString().contains("offline"));
+        QVERIFY(item("kickSurface") == nullptr);
+        const int sentBefore = ft->asked.size();
+        // chat: none at the start; pretend is a choice; Kick's own chat is not offered without signing in
+        QCOMPARE(kick->chatMode(), QStringLiteral("off"));
+        QVERIFY(item("kickPretendChat") != nullptr && !item("kickPretendChat")->isVisible());
+        QVERIFY(item("kickChat_pretend") != nullptr && item("kickChat_kick") == nullptr);
+        kick->setChatMode("kick");                                                   // refused without a sign-in
+        QCOMPARE(kick->chatMode(), QStringLiteral("off"));
+        QVERIFY(click("kickChat_pretend"));
+        QTRY_VERIFY(item("kickPretendChat")->isVisible());
+        QCOMPARE(kick->chatMode(), QStringLiteral("pretend"));
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("chatMode").toString() == QLatin1String("pretend"));
+        QVERIFY(click("kickChat_off"));
+        QTRY_VERIFY(!item("kickPretendChat")->isVisible());
+        QVERIFY(click("kickFollowButton"));
+        QVERIFY(kick->isFollowing("alpha"));
+        QCOMPARE(ft->asked.size(), sentBefore);                                    // following asks nobody
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("following").toArray().contains("alpha"));
+        QTest::keyClick(w, Qt::Key_Escape);                                        // Esc steps back to the streams first
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(item("appHost")->property("active").toBool());
+        QVERIFY(click("kickCard_bravo"));
+        QTRY_VERIFY(item("kickWatch")->isVisible());
+        QVERIFY(click("kickBlockButton"));
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(kick->isBlocked("bravo"));
+        QTRY_VERIFY(item("kickCard_bravo") == nullptr);
+        QTRY_VERIFY(item("kickUndo") && item("kickUndo")->isVisible());
+        QVERIFY(click("kickUndoButton"));                                          // undo
+        QTRY_VERIFY(item("kickCard_bravo") != nullptr);
+        QVERIFY(!kick->isBlocked("bravo"));
+        kick->block("bravo");
+        QTRY_VERIFY(item("kickCard_bravo") == nullptr);
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("blocked").toArray().contains("bravo"));
+        // 4. disconnect drops everything and says so; reconnect asks again
+        QVERIFY(click("kickDisconnect"));
+        QTRY_VERIFY(item("kickDisconnected") && item("kickDisconnected")->isVisible());
+        QVERIFY(!m_app->gateway()->isOpen("kick"));
+        QVERIFY(ft->aborted >= 1);
+        const int sentAtCut = ft->asked.size();
+        QTest::qWait(300);
+        QCOMPARE(ft->asked.size(), sentAtCut);
+        QVERIFY(click("kickReconnect"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QTRY_VERIFY(item("kickCard_bravo") == nullptr);                           // still blocked after reconnecting
+        // 5. settings: the permission and the lists, and taking the permission back closes the app's connection
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("kickNetChoice") != nullptr);
+        QVERIFY(item("kickListsBox") != nullptr);
+        QTRY_VERIFY(item("kickUnblock_bravo") != nullptr);
+        m_app->setAppNetAllowed("kick", false);
+        QVERIFY(!m_app->gateway()->isOpen("kick"));
+        QVERIFY(!m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("appsNet").toObject().value("kick").toBool());
+        w->setProperty("view", QStringLiteral("collection"));
+        // 6. leaving: Esc at the top of the app closes it and the gateway
+        m_app->setAppNetAllowed("kick", true);
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(m_app->gateway()->isOpen("kick"));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QTRY_VERIFY(!m_app->gateway()->isOpen("kick"));
+        // tidy up for the tests after this one
+        kick->clearBlocked(); kick->unfollow("alpha");
+        m_app->setAppNetAllowed("kick", false);
+        m_app->setAppsEnabled(false);
+        QVERIFY(click("subTab_music"));
+    }
+#endif
 
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
     void aConnectedControllerOpensNowPlayingWhenASongStarts()

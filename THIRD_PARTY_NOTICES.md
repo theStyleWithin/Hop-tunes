@@ -27,3 +27,11 @@ Zune and Microsoft are trademarks of Microsoft Corporation. Hop-tunes is an inde
 clean-room project inspired by how the Zune software organised music. It contains no
 Microsoft code, artwork, fonts or other assets and is not affiliated with or endorsed by
 Microsoft.
+
+## Kick app: references
+
+The Kick app (an app inside Hop-tunes that browses and watches live streams on kick.com) contains no code from other projects. Its
+understanding of kick.com's website addresses and of how its live chat is delivered comes from reading, and from testing against, the
+GPL-3.0 projects [kickNX](https://github.com/j2k-lab/kickNX) by j2k, [twiNX](https://github.com/DomazinUS/twiNX) by DomazinUS and
+[Switchfin](https://github.com/dragonflylee/switchfin) by dragonflylee, which we thank. Hop-tunes is an independent project and is not
+affiliated with or endorsed by Kick.

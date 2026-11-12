@@ -178,6 +178,7 @@ int main(int argc, char *argv[])
 
     hop::registerVideoQmlTypes();
     QQmlApplicationEngine engine;
+    hopApp.installImageProviders(&engine);
     engine.rootContext()->setContextProperty(QStringLiteral("hop"), &hopApp);
     // Developer hook: HOPTUNES_VIEW=collection|artists|albums|songs|nowplaying|quickplay|settings picks the first view.
     engine.rootContext()->setContextProperty(QStringLiteral("initialView"),

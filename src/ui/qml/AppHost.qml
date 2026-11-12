@@ -10,12 +10,17 @@ FocusScope {
     objectName: "appHost"
     property string appId: ""
     readonly property bool active: appId !== ""
-    readonly property var names: ({ "sample": "sample app" })
+    readonly property var names: ({ "kick": "kick" })
     visible: active
     signal leave()
 
     function open(id) { appId = id; forceActiveFocus() }
-    function close() { if (!active) return; appId = ""; leave() }
+    // Esc and the back button: the app steps back inside itself first (item.goBack() returns true when it did), then it closes
+    function close() {
+        if (!active) return
+        if (appLoader.item && appLoader.item.goBack && appLoader.item.goBack()) return
+        appId = ""; leave()
+    }
 
     Rectangle { anchors.fill: parent; color: Theme.bg }
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.AllButtons; hoverEnabled: true }   // nothing underneath hears the mouse
@@ -42,23 +47,10 @@ FocusScope {
 
     // ---- the apps ----
     Loader {
+        id: appLoader
         anchors { left: parent.left; right: parent.right; top: bar.bottom; bottom: parent.bottom; margins: Theme.pad; topMargin: 18 }
         active: root.active
-        sourceComponent: root.appId === "sample" ? sampleApp : null
+        sourceComponent: root.appId === "kick" ? kickApp : null
     }
-    Component {
-        id: sampleApp
-        Item {
-            objectName: "sampleApp"
-            ColumnLayout {
-                anchors.centerIn: parent; spacing: 14; width: Math.min(parent.width, 520)
-                Label { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: Theme.strong; wrapMode: Text.WordWrap
-                        text: "this is a sample app"; font { family: Theme.font; pixelSize: Theme.fs(34); weight: Font.Light } }
-                Label { Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter; color: Theme.muted; wrapMode: Text.WordWrap
-                        font { family: Theme.font; pixelSize: Theme.fs(17) }
-                        text: "Apps are part of Hop-tunes and open right here, inside its window. The music keeps playing"
-                              + (hop.player.hasTrack ? ": " + hop.player.title : "") + ". Press Esc or the back button to leave." }
-            }
-        }
-    }
+    Component { id: kickApp; KickApp { onLeave: { root.appId = ""; root.leave() } } }
 }

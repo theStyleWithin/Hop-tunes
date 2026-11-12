@@ -62,6 +62,7 @@ public:
     // not something routed through surface.error.
     Q_INVOKABLE void setResumePosition(qint64 ms) { m_pendingResumeMs = ms; }
 
+    Q_INVOKABLE bool openStream(const QString &url) { m_source = url; emit sourceChanged(); return m_core.openStream(url); }   // a live stream (Kick app)
     Q_INVOKABLE void play() { m_core.play(); }
     Q_INVOKABLE void pause() { m_core.pause(); }
     Q_INVOKABLE void togglePause() { m_core.togglePause(); }

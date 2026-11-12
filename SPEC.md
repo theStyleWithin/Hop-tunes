@@ -10,7 +10,7 @@ Hop-tunes is a simple, fast, local-first music player for Linux. Its organisatio
 
 ### Goals
 1. **A great music player first.** Gapless playback, fast library browsing, clean organisation.
-2. **No login, ever.** Nothing in the app needs an internet account. The app works fully offline.
+2. **No login required, ever.** Nothing in the app needs an internet account, and the app works fully offline. The one exception to "offline" is the optional **apps** (off until you switch them on in settings), starting with the Kick viewer: an app that uses the internet says so, asks before it connects, contacts only the sites it lists, and only while it is open, all through one gateway (`src/net`). Signing in anywhere is optional and never needed.
 3. **Local profiles.** Multiple people on one computer each get their own profile with their own library view, playlists, play history, ratings and settings. Profiles are created inside the app and are independent of the operating system's user accounts.
 4. **Zune-inspired UX, original implementation.** Reproduce the *behaviour* and *organisation* (pivots, collection layout, Now Playing, Quickplay) with original code, art and branding.
 5. **Linux-native.** Feels at home on KDE and GNOME. Packaged as Flatpak and AppImage, with an AUR package for Arch/CachyOS.
@@ -22,7 +22,7 @@ Hop-tunes is a simple, fast, local-first music player for Linux. Its organisatio
 | Marketplace, Zune Pass, rentals, purchases | The services are gone, and selling content is out of scope |
 | Zune Social, friends, cards | Needs a server and accounts |
 | Zune / KIN / Windows Phone device sync, MTPZ | Removed to stay simple and avoid MTPZ legal issues (may be revisited as a separate plugin later, see §10) |
-| Telemetry or "phone home" of any kind | Privacy |
+| Telemetry or "phone home" of any kind | Privacy (the opt-in Kick app contacts only kick.com's own sites, and only because you opened it) |
 | Microsoft trademarks, logos, fonts, sounds, art | Legal: see §9 |
 
 ---

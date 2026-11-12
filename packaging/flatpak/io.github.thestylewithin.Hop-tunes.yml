@@ -37,6 +37,9 @@ finish-args:
   # Your Music folder, read-only. Other folders are picked with the file chooser
   # (the document portal), so Hop-tunes never needs access to your whole home folder.
   - --filesystem=xdg-music:ro
+  # The internet, for the Kick app only: it is off until you switch apps on in Settings, it asks before it connects, it contacts only
+  # the sites it lists, and only while it is open. Nothing else in Hop-tunes uses the network.
+  - --share=network
   # Media keys and desktop media widgets (MPRIS).
   - --own-name=org.mpris.MediaPlayer2.hoptunes
 
