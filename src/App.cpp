@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "App.h"
+#include <QQmlEngine>
+#ifdef HOPTUNES_NET_APPS
+#include "apps/KickImages.h"
+#endif
 #include "core/DiagLog.h"
 #include <QClipboard>
 #include <QGuiApplication>
@@ -77,6 +81,9 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
         if (s == Qt::ApplicationActive) { if (m_audio.active()) m_analysisGuard.arm(); }
         else m_analysisGuard.disarm();
     });
+#endif
+#ifdef HOPTUNES_NET_APPS
+    connect(&m_kick, &KickClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
 #endif
     connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
     connect(&m_audio, &AudioAnalyzer::beat, &m_musyNote, &MusyNoteGame::onBeat);
@@ -450,6 +457,17 @@ void App::activate(const QString &id, bool guest)
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_appsEnabled = !guest && s.value(QStringLiteral("appsEnabled")).toBool(false);
     emit appsEnabledChanged();
+    m_netAllowed.clear();
+    if (!guest) {
+        const QJsonObject net = s.value(QStringLiteral("appsNet")).toObject();
+        for (auto it = net.constBegin(); it != net.constEnd(); ++it) if (it.value().toBool()) m_netAllowed.insert(it.key());
+    }
+#ifdef HOPTUNES_NET_APPS
+    m_kick.close();
+    m_kick.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("kick")).toObject());
+    m_appNet.setAllowed(QStringLiteral("kick"), m_netAllowed.contains(QStringLiteral("kick")));
+#endif
+    emit appNetChanged();
     m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
     if (m_videoOrientation != QLatin1String("portrait") && m_videoOrientation != QLatin1String("landscape")) m_videoOrientation = QStringLiteral("auto");
     m_navStyle = s.value(QStringLiteral("navStyle")).toString() == QLatin1String("drawer") ? QStringLiteral("drawer") : QStringLiteral("bar");
@@ -538,6 +556,13 @@ void App::leaveProfile()
     m_videoViewStyle = QStringLiteral("window");
     m_appsEnabled = false;
     emit appsEnabledChanged();
+    m_netAllowed.clear();
+#ifdef HOPTUNES_NET_APPS
+    m_kick.close();
+    m_appNet.setAllowed(QStringLiteral("kick"), false);
+    m_kick.setListsJson(QJsonObject{});
+#endif
+    emit appNetChanged();
     m_videoOrientation = QStringLiteral("auto");
     m_navStyle = QStringLiteral("bar");
     m_statusNote.clear();
@@ -603,6 +628,14 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
+    {
+        QJsonObject net;
+        for (const QString &a : m_netAllowed) net.insert(a, true);
+        s.insert(QStringLiteral("appsNet"), net);
+#ifdef HOPTUNES_NET_APPS
+        s.insert(QStringLiteral("kick"), m_kick.listsJson());
+#endif
+    }
     s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
     s.insert(QStringLiteral("navStyle"), m_navStyle);
     s.insert(QStringLiteral("statusNote"), m_statusNote);
@@ -1858,8 +1891,32 @@ void App::setAppsEnabled(bool on)
 {
     if (on == m_appsEnabled) return;
     m_appsEnabled = on;
+#ifdef HOPTUNES_NET_APPS
+    if (!on) m_kick.close();                  // switching apps off drops any connection
+#endif
     saveProfileSettings();
     emit appsEnabledChanged();
+}
+
+void App::installImageProviders(QQmlEngine *engine)
+{
+#ifdef HOPTUNES_NET_APPS
+    engine->addImageProvider(QStringLiteral("kick"), new KickImageProvider(&m_appNet));
+#else
+    Q_UNUSED(engine)
+#endif
+}
+
+void App::setAppNetAllowed(const QString &app, bool on)
+{
+    if (app != QLatin1String("kick") || on == m_netAllowed.contains(app)) return;
+    if (on) m_netAllowed.insert(app); else m_netAllowed.remove(app);
+#ifdef HOPTUNES_NET_APPS
+    if (!on) m_kick.close();
+    m_appNet.setAllowed(app, on);
+#endif
+    saveProfileSettings();                    // (guests keep nothing: this holds for the session only)
+    emit appNetChanged();
 }
 
 void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)

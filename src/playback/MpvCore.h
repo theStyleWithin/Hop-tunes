@@ -32,6 +32,8 @@ public:
     mpv_handle *handle() const { return m_mpv; }
 
     bool open(const QString &path, qint64 startPositionMs = 0);
+    // a live stream of an app that uses the internet (the Kick app): https only, only the app's video host, nothing identifying is sent
+    bool openStream(const QString &url);
     void play();
     void pause();
     void togglePause();

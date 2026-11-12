@@ -532,6 +532,45 @@ Item {
             color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
         }
 
+        SRow {   // apps that use the internet: each one asks, and can be switched off here
+            objectName: "kickNetRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            spacing: 16
+            Label { text: "kick"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "kickNetChoice"
+                options: [["kickNetOff", "not allowed to use the internet"], ["kickNetOn", "allowed"]]
+                value: hop.netAllowedApps.indexOf("kick") >= 0 ? "kickNetOn" : "kickNetOff"
+                onPicked: function (v) { hop.setAppNetAllowed("kick", v === "kickNetOn") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "kick contacts kick.com, web.kick.com, images.kick.com, files.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
+        ColumnLayout {   // the kick lists
+            objectName: "kickListsBox"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && (hop.kick.blocked.length > 0 || hop.kick.following.length > 0)
+            Layout.fillWidth: true; Layout.maximumWidth: 640; spacing: 6
+            Label { visible: hop.kick && hop.kick.following.length > 0; text: "kick: following " + (hop.kick ? hop.kick.following.length : 0) + " channels"; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+            Label { visible: hop.kick && hop.kick.blocked.length > 0; text: "kick: blocked streamers"; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } Layout.topMargin: 6 }
+            Repeater {
+                model: hop.kick ? hop.kick.blocked : []
+                delegate: RowLayout {
+                    required property string modelData
+                    Layout.fillWidth: true
+                    Label { text: modelData; color: Theme.text; Layout.fillWidth: true; elide: Text.ElideRight; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                    Button { objectName: "kickUnblock_" + modelData; text: "unblock"; onClicked: hop.kick.unblock(modelData) }
+                }
+            }
+            RowLayout {
+                spacing: 10
+                Button { objectName: "kickClearBlocked"; visible: hop.kick && hop.kick.blocked.length > 0; text: "unblock everyone"; onClicked: hop.kick.clearBlocked() }
+            }
+        }
+
         // ---- music folders ---------------------------------------------------------
         // The music scanner's list. Videos use their own list below once one is added; until
         // then they scan these same folders, so existing libraries keep working.

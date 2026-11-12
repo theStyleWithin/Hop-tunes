@@ -21,8 +21,11 @@ endif()
 
 option(HOPTUNES_BUILD_APP   "Build the desktop application" ON)
 option(HOPTUNES_BUILD_TESTS "Build unit tests" ON)
+# Apps that use the internet (the Kick viewer): the only code that touches the network lives in src/net and src/apps.
+# OFF builds contain none of it. The apps tab itself, and every networked app, are off until the person switches them on.
+option(HOPTUNES_NET_APPS "Build the apps that use the internet" ON)
 
-find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Concurrent Gui Network)
 find_package(ZLIB REQUIRED)   # EpubBook unzips the book itself
 if(ANDROID)
     # No pkg-config on Android: TagLib and SQLite are cross-built into HOPTUNES_ANDROID_PREFIX
@@ -80,6 +83,11 @@ add_library(hoptunes_core STATIC
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
+if(HOPTUNES_NET_APPS AND NOT ANDROID)
+    target_sources(hoptunes_core PRIVATE src/net/AppNet.h src/net/AppNet.cpp src/apps/KickClient.h src/apps/KickClient.cpp)
+    target_link_libraries(hoptunes_core PUBLIC Qt6::Network)
+    target_compile_definitions(hoptunes_core PUBLIC HOPTUNES_NET_APPS=1)
+endif()
 target_compile_options(hoptunes_core PRIVATE -Wall -Wextra)
 
 # ---- playback library: GStreamer, still no GUI (unit-testable) -----------------
@@ -218,6 +226,13 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_game tests/test_game.cpp)
     target_link_libraries(test_game PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME game COMMAND test_game)
+
+    if(HOPTUNES_NET_APPS AND NOT ANDROID)
+        add_executable(test_net tests/test_net.cpp)
+        target_link_libraries(test_net PRIVATE hoptunes_core Qt6::Test)
+        target_compile_definitions(test_net PRIVATE HOPTUNES_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+        add_test(NAME net COMMAND test_net)
+    endif()
 
     add_executable(test_profiles tests/test_profiles.cpp)
     target_link_libraries(test_profiles PRIVATE hoptunes_core Qt6::Test)

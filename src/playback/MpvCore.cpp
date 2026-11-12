@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "playback/MpvCore.h"
+#ifdef HOPTUNES_NET_APPS
+#include "net/AppNet.h"
+#endif
 
 #ifdef HOPTUNES_HAVE_MPV
 
@@ -80,6 +83,8 @@ bool MpvCore::init()
     mpv_set_option_string(m_mpv, "keep-open", "yes");
     mpv_set_option_string(m_mpv, "video-timeout", "20");
     mpv_set_option_string(m_mpv, "volume-max", "150");   // the video player's boost range
+    mpv_set_option_string(m_mpv, "ytdl", "no");          // never hand an address to an outside downloader
+    mpv_set_option_string(m_mpv, "load-scripts", "no");
     const int rc = mpv_initialize(m_mpv);
     if (rc < 0) {
         setError(QString::fromUtf8(mpv_error_string(rc)));
@@ -98,8 +103,37 @@ bool MpvCore::init()
     return true;
 }
 
+bool MpvCore::openStream(const QString &url)
+{
+    if (!m_mpv) return false;
+#ifdef HOPTUNES_NET_APPS
+    QString why;
+    if (!AppNet::streamUrlAllowed(QStringLiteral("kick"), QUrl(url), &why)) { setError(why); return false; }
+    // the engine itself fetches the stream: generic user agent, no referrer, no cookies, secure transports only
+    mpv_set_property_string(m_mpv, "user-agent", AppNet::userAgent().constData());
+    mpv_set_property_string(m_mpv, "referrer", "");
+    mpv_set_property_string(m_mpv, "cookies", "no");
+    mpv_set_property_string(m_mpv, "network-timeout", "15");
+    // (mpv splits this list at commas, so the value carries its length: "%34%...")
+    const QByteArray whitelist = "https,tls,tcp,crypto,hls,httpproxy";
+    const QByteArray lavf = "protocol_whitelist=%" + QByteArray::number(whitelist.size()) + "%" + whitelist;
+    mpv_set_property_string(m_mpv, "demuxer-lavf-o", lavf.constData());
+    const QByteArray u = url.toUtf8();
+    const char *args[] = {"loadfile", u.constData(), "replace", nullptr};
+    const int rc = mpv_command(m_mpv, args);
+    if (rc < 0) { setError(QString::fromUtf8(mpv_error_string(rc))); return false; }
+    m_pendingSeekMs = 0;
+    return true;
+#else
+    Q_UNUSED(url)
+    setError(QStringLiteral("this build has no apps that use the internet"));
+    return false;
+#endif
+}
+
 bool MpvCore::open(const QString &path, qint64 startPositionMs)
 {
+    if (m_mpv) mpv_set_property_string(m_mpv, "demuxer-lavf-o", "");     // (a file after a stream: back to the ordinary settings)
     if (!m_mpv) return false;
     const QByteArray url = QUrl::fromLocalFile(path).toString().toUtf8();
     const char *args[] = {"loadfile", url.constData(), "replace", nullptr};
@@ -252,6 +286,7 @@ bool MpvCore::init()
 }
 
 bool MpvCore::open(const QString &, qint64) { return false; }
+bool MpvCore::openStream(const QString &) { return false; }
 void MpvCore::play() {}
 void MpvCore::pause() {}
 void MpvCore::togglePause() {}

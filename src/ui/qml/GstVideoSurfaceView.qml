@@ -27,6 +27,7 @@ Item {
 
     property int volume: hop.gstVideo.volume
     onVolumeChanged: if (hop.gstVideo.volume !== volume) hop.gstVideo.volume = volume
+    function openStream(url) { return hop.gstVideo.openStream(url) }   // a live stream (Kick app)
     function play() { hop.gstVideo.play() }
     function pause() { hop.gstVideo.pause() }
     function togglePause() { hop.gstVideo.togglePause() }

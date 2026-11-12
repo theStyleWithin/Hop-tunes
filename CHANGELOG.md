@@ -5,6 +5,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- **Kick, the first app (desktop).** Browse the live streams on kick.com in a wide menu (nothing plays until you pick one), watch one inside Hop-tunes, and keep a follow list and a block list that stay on this computer. It is off until you switch apps on in settings, and it asks before it uses the internet, listing exactly which sites it contacts. Everything it reaches goes through one gateway: secure connections only, only those sites, no cookies, no referrer, nothing kept after you close the app, and a bar that shows what is connected with a disconnect button. No Kick account is needed, and Hop-tunes never follows or subscribes for you on Kick.
+
+### Added
 - **Apps (desktop).** A new collection tab, next to pictures, audiobooks, ebooks and podcasts: small apps that are part of Hop-tunes and open inside its window, each one a glass tile. The tab is off until you switch it on in the new **settings > apps** section, so a fresh Hop-tunes shows every other tab and stays as quiet as before. There is one sample app for now; real ones come one at a time. The music keeps playing inside an app, and Esc or the back button leaves it.
 
 ## [1.8.0] - 2026-11-06
