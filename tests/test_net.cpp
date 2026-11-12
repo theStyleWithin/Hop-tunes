@@ -338,6 +338,29 @@ private slots:
         QVERIFY(k2.streams().isEmpty());
     }
 
+    void chatIsNoneOrPretendUnlessSignedIn()
+    {
+        KickClient k(&net);
+        QCOMPARE(k.chatMode(), QString("off"));                                    // the start: no chat
+        QVERIFY(!k.signedIn());
+        k.setChatMode("kick");                                                     // Kick's own chat needs a sign-in the person chose
+        QCOMPARE(k.chatMode(), QString("off"));
+        k.setChatMode("whatever");
+        QCOMPARE(k.chatMode(), QString("off"));
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.setChatMode("pretend");
+        QCOMPARE(k.chatMode(), QString("pretend"));
+        QCOMPARE(edited.size(), 1);
+        QCOMPARE(k.listsJson().value("chatMode").toString(), QString("pretend"));
+        KickClient other(&net);
+        other.setListsJson(QJsonObject{{"chatMode", "pretend"}});
+        QCOMPARE(other.chatMode(), QString("pretend"));
+        other.setListsJson(QJsonObject{{"chatMode", "kick"}});                     // a saved "kick" without a sign-in falls back to none
+        QCOMPARE(other.chatMode(), QString("off"));
+        other.setListsJson(QJsonObject{{"chatMode", 5}});
+        QCOMPARE(other.chatMode(), QString("off"));
+    }
+
     void searchAndFilters()
     {
         fresh();

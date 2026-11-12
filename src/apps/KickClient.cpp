@@ -406,9 +406,19 @@ void KickClient::clearBlocked()
     applyFilters();
 }
 
+void KickClient::setChatMode(const QString &mode)
+{
+    QString m = mode == QLatin1String("pretend") ? mode : (mode == QLatin1String("kick") && m_signedIn ? mode : QStringLiteral("off"));
+    if (m == m_chatMode) return;
+    m_chatMode = m;
+    emit chatModeChanged();
+    emit listsEdited();                       // worth saving with the profile
+}
+
 QJsonObject KickClient::listsJson() const
 {
-    return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)}};
+    return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
+                       {QStringLiteral("chatMode"), m_chatMode}};
 }
 
 void KickClient::setListsJson(const QJsonObject &o)
@@ -417,6 +427,9 @@ void KickClient::setListsJson(const QJsonObject &o)
     for (const QJsonValue &v : o.value(QStringLiteral("following")).toArray()) { const QString s = normalize(v.toString()); if (!s.isEmpty() && !m_following.contains(s)) m_following.append(s); }
     for (const QJsonValue &v : o.value(QStringLiteral("blocked")).toArray()) { const QString s = normalize(v.toString()); if (!s.isEmpty() && !m_blocked.contains(s)) m_blocked.append(s); }
     for (const QString &s : m_blocked) m_following.removeAll(s);
+    const QString cm = o.value(QStringLiteral("chatMode")).toString();
+    m_chatMode = cm == QLatin1String("pretend") || (cm == QLatin1String("kick") && m_signedIn) ? cm : QStringLiteral("off");
+    emit chatModeChanged();
     emit listsChanged();
     if (!m_raw.isEmpty() || !m_searchChannels.isEmpty()) applyFilters();
 }

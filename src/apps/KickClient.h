@@ -35,6 +35,10 @@ class KickClient : public QObject {
     Q_PROPERTY(QString query READ query NOTIFY filtersChanged)                    // a search is showing when not empty
     Q_PROPERTY(QStringList contacted READ contacted NOTIFY contactedChanged)      // the sites reached since the app was opened
     Q_PROPERTY(bool connected READ isOpen NOTIFY openChanged)
+    // What the chat beside the stream is: "off" (the start), "pretend" (Hop-tunes' made-up chat, nobody in it is real) or "kick" (Kick's own
+    // live chat). Kick's chat is only for someone who chose to sign in to Kick; without that the choice is no chat or the pretend one.
+    Q_PROPERTY(QString chatMode READ chatMode WRITE setChatMode NOTIFY chatModeChanged)
+    Q_PROPERTY(bool signedIn READ signedIn NOTIFY signedInChanged)
 public:
     static constexpr const char *kApp = "kick";
     static constexpr int kPageSize = 36;
@@ -60,6 +64,9 @@ public:
     QString query() const { return m_query; }
     QStringList contacted() const { return m_net->contacted(kApp); }
     bool isOpen() const { return m_open; }
+    QString chatMode() const { return m_chatMode; }
+    void setChatMode(const QString &mode);
+    bool signedIn() const { return m_signedIn; }      // optional; nothing needs it to watch (sign-in is a later step: false until then)
 
     // the app opens: the gateway opens and the first list is asked for. close() drops everything still on the way.
     Q_INVOKABLE void open();
@@ -101,6 +108,8 @@ signals:
     void filtersChanged();
     void contactedChanged();
     void openChanged();
+    void chatModeChanged();
+    void signedInChanged();
 
 private:
     void requestList(bool more);
@@ -123,6 +132,8 @@ private:
     bool m_showMature = false;
     QVariantMap m_channel;
     QStringList m_following, m_blocked;
+    QString m_chatMode = QStringLiteral("off");
+    bool m_signedIn = false;
     QHash<QString, QVariantMap> m_status;   // slug -> {live, viewers, name, avatar, checked}
     int m_followChecks = 0;
 };

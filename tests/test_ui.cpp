@@ -2243,6 +2243,18 @@ private slots:
         QTRY_VERIFY(item("kickChannelState")->property("text").toString().contains("offline"));
         QVERIFY(item("kickSurface") == nullptr);
         const int sentBefore = ft->asked.size();
+        // chat: none at the start; pretend is a choice; Kick's own chat is not offered without signing in
+        QCOMPARE(kick->chatMode(), QStringLiteral("off"));
+        QVERIFY(item("kickPretendChat") != nullptr && !item("kickPretendChat")->isVisible());
+        QVERIFY(item("kickChat_pretend") != nullptr && item("kickChat_kick") == nullptr);
+        kick->setChatMode("kick");                                                   // refused without a sign-in
+        QCOMPARE(kick->chatMode(), QStringLiteral("off"));
+        QVERIFY(click("kickChat_pretend"));
+        QTRY_VERIFY(item("kickPretendChat")->isVisible());
+        QCOMPARE(kick->chatMode(), QStringLiteral("pretend"));
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("chatMode").toString() == QLatin1String("pretend"));
+        QVERIFY(click("kickChat_off"));
+        QTRY_VERIFY(!item("kickPretendChat")->isVisible());
         QVERIFY(click("kickFollowButton"));
         QVERIFY(kick->isFollowing("alpha"));
         QCOMPARE(ft->asked.size(), sentBefore);                                    // following asks nobody

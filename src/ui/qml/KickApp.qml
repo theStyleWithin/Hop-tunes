@@ -354,10 +354,32 @@ FocusScope {
                     }
                 }
             }
-            Rectangle {   // the chat (real chat and the pretend chat come in the next steps)
-                Layout.preferredWidth: 360; Layout.fillHeight: true; color: Theme.panel; border { width: 1; color: Theme.line }
-                Label { anchors.centerIn: parent; width: parent.width - 40; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-                        text: "chat is coming in the next step"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
+                Layout.preferredWidth: 360; Layout.fillHeight: true; spacing: 8
+                RowLayout {
+                    spacing: 8
+                    Label { text: "chat"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+                    Chip { objectName: "kickChat_off"; text: "none"; on: kick.chatMode === "off"; onClicked: kick.chatMode = "off" }
+                    Chip { objectName: "kickChat_pretend"; text: "pretend"; on: kick.chatMode === "pretend"; onClicked: kick.chatMode = "pretend" }
+                }
+                Label { visible: kick.chatMode === "off"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                        text: "no live chat. choose pretend for a made-up one (nobody in it is real)." }
+                LiveChat {
+                    id: kickChat
+                    objectName: "kickPretendChat"
+                    visible: kick.chatMode === "pretend"
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    look: hop.videoChatLook
+                    seed: "kick|" + (kick.channel.slug || "")
+                    info: ({ meta: { title: kick.channel.title || "", year: "", album: kick.channel.category || "" },
+                             cast: kick.channel.name ? [{ name: kick.channel.name, role: "streamer" }] : [] })
+                    property real clock: 900000 + ((kick.channel.slug || "a").charCodeAt(0) * 7919) % 1800000   // a stable "how far into the stream"
+                    position: clock
+                    duration: 0
+                    Timer { interval: 250; repeat: true; running: kickChat.visible; onTriggered: kickChat.clock += 250 }
+                }
+                Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
             }
         }
 
