@@ -445,7 +445,21 @@ FocusScope {
             }
                 }
             }
-            Label { visible: kick.query !== ""; text: "results for “" + kick.query + "”" + (kick.searchCategory !== "" ? ": live streams playing " + kick.searchCategory.toLowerCase() + " first, then channels with a similar name" : ""); color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+            ColumnLayout {   // what the search is looking at: streams playing a game, channels by name, or both
+                objectName: "kickSearchScope"
+                visible: kick.query !== ""; Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 6
+                Label { Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.WordWrap; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
+                        text: "results for \u201c" + kick.query + "\u201d" }
+                Flow {
+                    Layout.fillWidth: true; spacing: 8
+                    Chip { objectName: "kickScope_all"; text: "everything"; on: kick.searchScope === "all"; onClicked: kick.searchScope = "all" }
+                    Chip { objectName: "kickScope_streams"; text: "streams playing it"; on: kick.searchScope === "streams"; onClicked: kick.searchScope = "streams" }
+                    Chip { objectName: "kickScope_channels"; text: "channels"; on: kick.searchScope === "channels"; onClicked: kick.searchScope = "channels" }
+                }
+                Label { objectName: "kickScopeNote"; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                        visible: kick.searchScope === "streams" && kick.gameStreams.length === 0 && !kick.loading
+                        text: "no live streams are playing a game or category with that name. try \u201cchannels\u201d to look for a streamer by name." }
+            }
 
             Flickable {
                 id: gridScroll
@@ -459,56 +473,72 @@ FocusScope {
                     id: grid
                     objectName: "kickGrid"
                     width: gridScroll.width - 12; spacing: 18
-                    Repeater {
-                        model: kick.streams
-                        delegate: Item {
-                            id: card
-                            required property var modelData
-                            objectName: "kickCard_" + modelData.slug
-                            width: gridScroll.cardW; height: gridScroll.cardW * 9 / 16 + 78
-                            Rectangle { anchors.fill: parent; anchors.margins: -4; color: Theme.hover; visible: hit.containsMouse; radius: 4 }
-                            Pic {   // a still picture, never live video
-                                id: still
-                                width: parent.width; height: width * 9 / 16
-                                address: modelData.thumb; backing: Theme.artColors("kick" + modelData.slug)[1]
-                                Pic { visible: modelData.thumb === "" && (modelData.avatar || "") !== ""; anchors.centerIn: parent; width: parent.height * 0.6; height: width
-                                      address: modelData.avatar || ""; round: true; backing: still.backing; maskColor: still.backing }
-                                Pill { visible: modelData.viewers > 0 || modelData.live === true; anchors { left: parent.left; top: parent.top; margins: 8 } text: "LIVE"; color: "#fff"
-                                       background: Rectangle { color: "#e5484d"; radius: 3 } }
-                                Pill { objectName: "kickDeveloperTag"; visible: modelData.developer === true; anchors { left: parent.left; top: parent.top; leftMargin: 54; topMargin: 8 }
-                                       text: "DEVELOPER"; color: Theme.ink; background: Rectangle { color: Theme.accent; radius: 3 } }
-                                Pill { visible: modelData.viewersText !== ""; anchors { left: parent.left; bottom: parent.bottom; margins: 8 } text: modelData.viewersText + " watching"; color: "#fff"
-                                       font.bold: false; font.letterSpacing: 0; background: Rectangle { color: Qt.rgba(0, 0, 0, 0.6); radius: 3 } }
-                            }
-                            MouseArea { id: hit; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.cardTapped(modelData) }
-                            Rectangle {   // the card's menu
-                                objectName: "kickCardMenu_" + modelData.slug
-                                anchors { right: still.right; top: still.top; margins: 8 }
-                                width: root.phone ? 40 : 28; height: root.phone ? 34 : 24; radius: 4; color: Qt.rgba(0, 0, 0, 0.6); visible: root.phone || hit.containsMouse || cardMenu.visible
-                                Label { anchors.centerIn: parent; text: "⋯"; color: "#fff"; font.pixelSize: 16 }
-                                MouseArea { anchors.fill: parent; onClicked: cardMenu.popup() }
-                                Menu {
-                                    id: cardMenu
-                                    MenuItem { text: kick.isFollowing(modelData.slug) ? "unfollow" : "follow"
-                                               onTriggered: kick.isFollowing(modelData.slug) ? kick.unfollow(modelData.slug) : kick.follow(modelData.slug) }
-                                    MenuItem { text: "open"; onTriggered: root.openChannel(modelData.slug) }
-                                    MenuItem { objectName: "kickBlockMenu_" + modelData.slug; text: "block this streamer"
-                                               onTriggered: { root.lastBlocked = modelData.slug; kick.block(modelData.slug); undoTimer.restart() } }
+                    Component {   // one stream card (shared by the two sections of a search)
+                        id: streamCard
+                        Item {
+                                    id: card
+                                    required property var modelData
+                                    objectName: "kickCard_" + modelData.slug
+                                    width: gridScroll.cardW; height: gridScroll.cardW * 9 / 16 + 78
+                                    Rectangle { anchors.fill: parent; anchors.margins: -4; color: Theme.hover; visible: hit.containsMouse; radius: 4 }
+                                    Pic {   // a still picture, never live video
+                                        id: still
+                                        width: parent.width; height: width * 9 / 16
+                                        address: modelData.thumb; backing: Theme.artColors("kick" + modelData.slug)[1]
+                                        Pic { visible: modelData.thumb === "" && (modelData.avatar || "") !== ""; anchors.centerIn: parent; width: parent.height * 0.6; height: width
+                                              address: modelData.avatar || ""; round: true; backing: still.backing; maskColor: still.backing }
+                                        Pill { visible: modelData.viewers > 0 || modelData.live === true; anchors { left: parent.left; top: parent.top; margins: 8 } text: "LIVE"; color: "#fff"
+                                               background: Rectangle { color: "#e5484d"; radius: 3 } }
+                                        Pill { objectName: "kickDeveloperTag"; visible: modelData.developer === true; anchors { left: parent.left; top: parent.top; leftMargin: 54; topMargin: 8 }
+                                               text: "DEVELOPER"; color: Theme.ink; background: Rectangle { color: Theme.accent; radius: 3 } }
+                                        Pill { visible: modelData.viewersText !== ""; anchors { left: parent.left; bottom: parent.bottom; margins: 8 } text: modelData.viewersText + " watching"; color: "#fff"
+                                               font.bold: false; font.letterSpacing: 0; background: Rectangle { color: Qt.rgba(0, 0, 0, 0.6); radius: 3 } }
+                                    }
+                                    MouseArea { id: hit; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.cardTapped(modelData) }
+                                    Rectangle {   // the card's menu
+                                        objectName: "kickCardMenu_" + modelData.slug
+                                        anchors { right: still.right; top: still.top; margins: 8 }
+                                        width: root.phone ? 40 : 28; height: root.phone ? 34 : 24; radius: 4; color: Qt.rgba(0, 0, 0, 0.6); visible: root.phone || hit.containsMouse || cardMenu.visible
+                                        Label { anchors.centerIn: parent; text: "⋯"; color: "#fff"; font.pixelSize: 16 }
+                                        MouseArea { anchors.fill: parent; onClicked: cardMenu.popup() }
+                                        Menu {
+                                            id: cardMenu
+                                            MenuItem { text: kick.isFollowing(modelData.slug) ? "unfollow" : "follow"
+                                                       onTriggered: kick.isFollowing(modelData.slug) ? kick.unfollow(modelData.slug) : kick.follow(modelData.slug) }
+                                            MenuItem { text: "open"; onTriggered: root.openChannel(modelData.slug) }
+                                            MenuItem { objectName: "kickBlockMenu_" + modelData.slug; text: "block this streamer"
+                                                       onTriggered: { root.lastBlocked = modelData.slug; kick.block(modelData.slug); undoTimer.restart() } }
+                                        }
+                                    }
+                                    RowLayout {
+                                        anchors { left: parent.left; right: parent.right; top: still.bottom; topMargin: 8 } spacing: 10
+                                        Pic { Layout.preferredWidth: 34; Layout.preferredHeight: 34; Layout.alignment: Qt.AlignTop; address: modelData.avatar; round: true
+                                              backing: Qt.hsla((modelData.slug.charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
+                                        ColumnLayout {
+                                            spacing: 1; Layout.fillWidth: true
+                                            Label { text: modelData.title !== "" ? modelData.title : modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                                            Label { text: modelData.name; color: Theme.text2; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                                            Label { text: modelData.category; color: Theme.dim; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                                        }
+                                    }
                                 }
-                            }
-                            RowLayout {
-                                anchors { left: parent.left; right: parent.right; top: still.bottom; topMargin: 8 } spacing: 10
-                                Pic { Layout.preferredWidth: 34; Layout.preferredHeight: 34; Layout.alignment: Qt.AlignTop; address: modelData.avatar; round: true
-                                      backing: Qt.hsla((modelData.slug.charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
-                                ColumnLayout {
-                                    spacing: 1; Layout.fillWidth: true
-                                    Label { text: modelData.title !== "" ? modelData.title : modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) } }
-                                    Label { text: modelData.name; color: Theme.text2; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(13) } }
-                                    Label { text: modelData.category; color: Theme.dim; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(12) } }
-                                }
-                            }
-                        }
                     }
+                    Label {   // search: live streams playing a game or category
+                        objectName: "kickGameHeader"
+                        visible: kick.query !== "" && kick.gameStreams.length > 0
+                        width: kick.query !== "" && kick.gameStreams.length > 0 ? grid.width : 0; height: visible ? implicitHeight + 6 : 0
+                        wrapMode: Text.WordWrap; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(17) }
+                        text: "live streams playing " + kick.searchCategory.toLowerCase()
+                    }
+                    Repeater { model: kick.query !== "" ? kick.gameStreams : kick.streams; delegate: streamCard }
+                    Label {   // search: channels whose name looks like what was typed
+                        objectName: "kickChannelHeader"
+                        visible: kick.query !== "" && kick.channelResults.length > 0 && kick.gameStreams.length > 0
+                        width: visible ? grid.width : 0; height: visible ? implicitHeight + 6 : 0
+                        wrapMode: Text.WordWrap; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(17) }
+                        text: "channels named like \u201c" + kick.query + "\u201d"
+                    }
+                    Repeater { model: kick.query !== "" ? kick.channelResults : []; delegate: streamCard }
                 }
                 Column {
                     id: footer

@@ -28,6 +28,9 @@ class KickClient : public QObject {
     Q_PROPERTY(bool categoriesCustom READ categoriesCustom NOTIFY categoriesChanged)    // true once you changed them
     Q_PROPERTY(QVariantList categoryResults READ categoryResults NOTIFY categoryResultsChanged)   // what a category search found: {id, name, mature}
     Q_PROPERTY(bool categorySearching READ categorySearching NOTIFY categoryResultsChanged)
+    Q_PROPERTY(QVariantList gameStreams READ gameStreams NOTIFY streamsChanged)        // search: live streams playing a game or category that matches what was typed
+    Q_PROPERTY(QVariantList channelResults READ channelResults NOTIFY streamsChanged)  // search: channels whose name looks like it
+    Q_PROPERTY(QString searchScope READ searchScope WRITE setSearchScope NOTIFY filtersChanged)   // "all" | "streams" | "channels": what a search looks at
     Q_PROPERTY(QString searchCategory READ searchCategory NOTIFY streamsChanged)    // when the search matched a game/category: its name (live streams of it come first)
     Q_PROPERTY(QVariantList playlists READ playlists NOTIFY listsChanged)          // {id, name, kind, count, items}: channels, clips or past streams
     Q_PROPERTY(QVariantList following READ following NOTIFY listsChanged)         // {slug, name, avatar, live, viewers, checked}
@@ -77,6 +80,10 @@ public:
     QVariantList following() const;
     QVariantList playlists() const;
     QString searchCategory() const { return m_searchCategory; }
+    QVariantList gameStreams() const { return m_gameShown; }
+    QVariantList channelResults() const { return m_channelShown; }
+    QString searchScope() const { return m_searchScope; }
+    void setSearchScope(const QString &s);
     QVariantList chips() const { return m_customCategories ? m_pinned : m_categories; }
     bool categoriesCustom() const { return m_customCategories; }
     QVariantList categoryResults() const { return m_categoryResults; }
@@ -218,7 +225,8 @@ private:
     QString m_error;
     QVariantList m_raw;          // everything fetched for the current list, before blocked / 18+ are left out
     QVariantList m_streams, m_categories, m_searchChannels, m_searchStreams;
-    QString m_searchCategory;
+    QString m_searchCategory, m_searchScope = QStringLiteral("all");
+    QVariantList m_gameShown, m_channelShown;
     QString m_next, m_sort = QStringLiteral("viewers"), m_language, m_query;
     int m_categoryId = 0, m_emptyPages = 0;
     bool m_englishOnly = false;

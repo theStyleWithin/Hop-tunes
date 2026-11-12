@@ -217,6 +217,11 @@ the stream is asked for again automatically.
 On the streams page, the round arrow at the top right of the Kick app pulls the search box, filters and categories up like a curtain, so the streams get the room; press it again and
 the menu comes back down. Searching with the phone's bottom search button also brings it back.
 
+### Streams playing a game versus channels
+
+Under the search box, **everything**, **streams playing it** and **channels** choose what the search shows. A game or category that matches what you typed brings up the live streams playing it (most viewers first); channels with a similar
+name are the other kind of answer. "Everything" shows both, streams first, with headings. Switching between them is instant (nothing new is asked of Kick) and the choice resets when you clear the search.
+
 ### Searching for a game
 
 Type a game or category in the search box (for example "Palworld") and the live streams playing it come first, most viewers first, followed by channels with a similar name. Channels that are not

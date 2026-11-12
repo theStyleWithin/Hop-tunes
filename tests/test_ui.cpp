@@ -2907,6 +2907,53 @@ private slots:
         w->setProperty("view", QStringLiteral("collection"));
     }
 
+    // A search keeps gameplay streams and channel names apart: headings, a scope choice, and nothing wider than the screen.
+    void searchSeparatesGameplayStreamsFromChannels()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size; App *app; KickClient *k; ~Restore() { k->search(""); w->setProperty("forceMobile", false); w->resize(size); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{w, before, m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        w->setProperty("forceMobile", true);                                           // a phone: the narrowest case
+        w->resize(390, 844);
+        QTRY_COMPARE(w->width(), 390);
+        QTRY_VERIFY(item("pillTab_apps") != nullptr);
+        item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));
+        QTRY_VERIFY(item("appTile_kick") && item("appTile_kick")->isVisible());
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        item("kickSearch")->setProperty("text", QStringLiteral("palw"));                // a game, typed
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QStringLiteral("palw"), 3000);
+        QTRY_VERIFY(item("kickGameHeader") && item("kickGameHeader")->isVisible());
+        QVERIFY(item("kickGameHeader")->property("text").toString().contains("palworld"));
+        QVERIFY(item("kickSearchScope")->isVisible());
+        QVERIFY(item("kickScope_streams") && item("kickScope_channels") && item("kickScope_all"));
+        // nothing is wider than the screen (a long results line used to push the whole page wider)
+        QQuickItem *app = item("kickApp");
+        QVERIFY(item("kickSearchScope")->mapToItem(app, QPointF(item("kickSearchScope")->width(), 0)).x() <= app->width() + 1);
+        QVERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(item("kickCard_alpha")->width(), 0)).x() <= app->width() + 1);
+        shot("phone-kick-search-scope");
+        // channels only: the streams playing the game are gone from the list
+        QVERIFY(click("kickScope_channels"));
+        QTRY_VERIFY(item("kickCard_alpha") == nullptr);
+        QVERIFY(!item("kickGameHeader")->isVisible());
+        // streams only: they are back, and nothing about channels
+        QVERIFY(click("kickScope_streams"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(!item("kickScopeNote")->isVisible());
+        QVERIFY(click("kickScope_all"));
+        QTRY_VERIFY(item("kickCard_alpha") != nullptr);
+        item("kickSearch")->setProperty("text", QString());
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QString(), 3000);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
     // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played
     // from disk; deleting removes them.
     void pastStreamsAndClipsCanBeDownloadedListedAndPlayedFromDisk()

@@ -275,13 +275,17 @@ bool isEnglish(const QString &lang) { return lang.isEmpty() || lang.compare(QLat
 void KickClient::applyFilters()
 {
     QVariantList shown;
-    // a search shows the live streams of a matching game or category first, then the channels with a similar name
+    // a search has two kinds of answer: live streams playing a matching game or category, and channels with a similar name
+    // (the scope chooses one or both; "everything" lists the streams first and the channels after, nobody twice)
     QVariantList merged;
     if (!m_query.isEmpty()) {
         QSet<QString> seen;
-        for (const QVariant &v : m_searchStreams) { merged.append(v); seen.insert(v.toMap().value(QStringLiteral("slug")).toString()); }
-        for (const QVariant &v : m_searchChannels) if (!seen.contains(v.toMap().value(QStringLiteral("slug")).toString())) merged.append(v);
+        if (m_searchScope != QLatin1String("channels"))
+            for (const QVariant &v : m_searchStreams) { merged.append(v); seen.insert(v.toMap().value(QStringLiteral("slug")).toString()); }
+        if (m_searchScope != QLatin1String("streams"))
+            for (const QVariant &v : m_searchChannels) if (!seen.contains(v.toMap().value(QStringLiteral("slug")).toString())) merged.append(v);
     }
+    const int gameCount = m_searchScope == QLatin1String("channels") ? 0 : int(m_searchStreams.size());
     const QVariantList &src = m_query.isEmpty() ? m_raw : merged;
     for (const QVariant &v : src) {
         const QVariantMap m = v.toMap();
@@ -301,6 +305,12 @@ void KickClient::applyFilters()
         }
     }
     m_streams = shown;
+    m_gameShown.clear(); m_channelShown.clear();
+    if (!m_query.isEmpty()) {
+        QSet<QString> gameSlugs;
+        if (gameCount > 0) for (const QVariant &v : m_searchStreams) gameSlugs.insert(v.toMap().value(QStringLiteral("slug")).toString());
+        for (const QVariant &v : shown) (gameSlugs.contains(v.toMap().value(QStringLiteral("slug")).toString()) ? m_gameShown : m_channelShown).append(v);
+    }
     emit streamsChanged();
 }
 
@@ -470,7 +480,7 @@ void KickClient::search(const QString &text)
     emit filtersChanged();
     if (!ready()) return;
     m_searchStreams.clear(); m_searchCategory.clear();
-    if (m_query.isEmpty()) { ++m_listGen; m_searchChannels.clear(); refresh(); return; }
+    if (m_query.isEmpty()) { ++m_listGen; m_searchChannels.clear(); m_searchScope = QStringLiteral("all"); m_gameShown.clear(); m_channelShown.clear(); emit filtersChanged(); emit streamsChanged(); refresh(); return; }
     const quint64 gen = ++m_listGen;
     setError(QString());
     m_next.clear();
@@ -524,6 +534,15 @@ void KickClient::requestSearch(const QString &word, quint64 gen, bool mayRetry)
         }
         if (!chosen.isEmpty()) requestCategoryStreams(chosen, gen);
     });
+}
+
+void KickClient::setSearchScope(const QString &s)
+{
+    const QString v = s == QLatin1String("streams") || s == QLatin1String("channels") ? s : QStringLiteral("all");
+    if (v == m_searchScope) return;
+    m_searchScope = v;
+    emit filtersChanged();
+    if (!m_query.isEmpty()) applyFilters();                    // no new request: the same answers, looked at another way
 }
 
 void KickClient::setSort(const QString &s)

@@ -1637,6 +1637,56 @@ private slots:
     }
 
 private slots:
+private slots:
+    void aSearchKeepsGameStreamsAndChannelNamesApart()
+    {
+        fresh();
+        QStringList urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search")
+                return ok("{\"channels\":[{\"slug\":\"palworld52\",\"user\":{\"username\":\"Palworld52\"}},{\"slug\":\"gamerx\",\"user\":{\"username\":\"GamerX\"}}],\"categories\":[{\"id\":7234,\"name\":\"Palworld\"}]}");
+            if (u.host() == "web.kick.com" && QUrlQuery(u).queryItemValue("category_id") == "7234") return ok(streamsJson({"pal_one", "pal_two", "gamerx"}, ""));
+            if (u.host() == "web.kick.com") return ok(streamsJson({"someone"}, ""));
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTRY_VERIFY(!k.streams().isEmpty());
+        k.search("Palworld");
+        QTRY_COMPARE(k.gameStreams().size(), 3);
+        auto slugs = [](const QVariantList &l) { QStringList o; for (const QVariant &v : l) o << v.toMap().value("slug").toString(); return o; };
+        // everything (the start): streams playing it first, then channels named like it, nobody twice
+        QCOMPARE(k.searchScope(), QString("all"));
+        QCOMPARE(slugs(k.gameStreams()), (QStringList{"pal_one", "pal_two", "gamerx"}));
+        QCOMPARE(slugs(k.channelResults()), (QStringList{"palworld52"}));
+        QCOMPARE(slugs(k.streams()), (QStringList{"pal_one", "pal_two", "gamerx", "palworld52"}));
+        const int asked = urls.size();
+        // only the streams playing a game
+        k.setSearchScope("streams");
+        QCOMPARE(slugs(k.streams()), (QStringList{"pal_one", "pal_two", "gamerx"}));
+        QVERIFY(k.channelResults().isEmpty());
+        // only channels by name (all of them, including one that is also streaming the game)
+        k.setSearchScope("channels");
+        QCOMPARE(slugs(k.streams()), (QStringList{"palworld52", "gamerx"}));
+        QVERIFY(k.gameStreams().isEmpty());
+        QCOMPARE(slugs(k.channelResults()), (QStringList{"palworld52", "gamerx"}));
+        k.setSearchScope("nonsense");                                                 // anything else means everything
+        QCOMPARE(k.searchScope(), QString("all"));
+        QCOMPARE(urls.size(), asked);                                                 // changing the view asks nobody
+        // a blocked streamer is left out of both kinds
+        k.block("gamerx");
+        QCOMPARE(slugs(k.gameStreams()), (QStringList{"pal_one", "pal_two"}));
+        QCOMPARE(slugs(k.channelResults()), (QStringList{"palworld52"}));
+        k.unblock("gamerx");
+        // clearing the search puts the scope back to everything
+        k.setSearchScope("streams");
+        k.search("");
+        QCOMPARE(k.searchScope(), QString("all"));
+        QVERIFY(k.gameStreams().isEmpty());
+    }
+
+private slots:
     // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
     void liveClipDownloadAgainstTheRealServers()
     {

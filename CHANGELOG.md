@@ -8,6 +8,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 - **Kick stream pictures.** Kick sends every stream picture and profile picture as WebP, which Qt can only read through an optional plugin that the Android app (and some Linux installs) do not have, so the cards showed plain tiles. Hop-tunes now reads WebP itself (with libwebp), on desktop and, once the Android build carries it, on the phone.
 
 ### Added
+- **Search tells gameplay streams from channel names.** After typing, three choices appear under the box: **everything**, **streams playing it** and **channels**. "Everything" lists the live streams playing a matching game or category first (under a "live streams playing palworld" heading) and the channels with a similar name after (under "channels named like..."); the other two show just one kind, and say so when there is nothing to show. Switching asks Kick for nothing new, and a blocked streamer is left out of both.
+
+### Fixed
+- The line above the search results was one long line that made the whole page wider than the phone's screen (cards went off the right edge); it wraps now.
 - **Search finds streams playing a game.** Typing a game or category ("Palworld") now shows the live streams playing it first (most viewers first, with their pictures), then the channels whose names are similar, instead of only channels named like it. English only applies to those streams too.
 - **Pictures stay.** Live search results get their stream picture (from what was seen before, or by asking for the live ones), channels that are not live show their avatar on the tile instead of a blank colour, channel playlists show a channel's live picture when it is live, and downloads and recordings keep their picture (fetched again the next time the app opens if it was missing).
 - **More room for the chat on a phone.** The chat is taller, and the tab that brings back a pushed-away mini player is now a slim handle at the right edge that takes no room (it used to sit in its own row and squeeze the page).
