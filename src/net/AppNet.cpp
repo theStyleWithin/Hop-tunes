@@ -106,8 +106,12 @@ bool AppNet::urlAllowed(const QString &app, const QUrl &url, QString *why)
     if (!url.isValid() || url.scheme() != QLatin1String("https")) return no(QStringLiteral("only secure (https) addresses are allowed"));
     if (!url.userInfo().isEmpty()) return no(QStringLiteral("addresses with a user name are not allowed"));
     if (url.port() != -1 && url.port() != 443) return no(QStringLiteral("only the standard port is allowed"));
-    if (!hostsFor(app).contains(url.host().toLower())) return no(QStringLiteral("%1 is not one of the sites this app uses").arg(url.host()));
-    return true;
+    const QString host = url.host().toLower();
+    if (hostsFor(app).contains(host)) return true;
+    // the app's video host (a live stream's playlist and pieces): the declared domain and its subdomains, nothing that merely ends alike
+    for (const QString &suffix : streamSuffixesFor(app))
+        if (host == suffix || host.endsWith(QLatin1Char('.') + suffix)) return true;
+    return no(QStringLiteral("%1 is not one of the sites this app uses").arg(url.host()));
 }
 
 void AppNet::setAllowed(const QString &app, bool on)

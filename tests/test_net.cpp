@@ -104,6 +104,13 @@ private slots:
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://kick.com.evil.example/"), &why));   // look-alike
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://notkick.com/"), &why));
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("file:///etc/passwd"), &why));
+        // the video host family (live streams' playlists and pieces), and nothing that only looks like it
+        QVERIFY(AppNet::urlAllowed("kick", QUrl("https://fa72.us-west-2.playback.live-video.net/api/video/v1/x.m3u8?token=1"), &why));
+        QVERIFY(AppNet::urlAllowed("kick", QUrl("https://live-video.net/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("http://a.live-video.net/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://live-video.net.evil.example/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://evillive-video.net/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://a.live-video.net:8443/x"), &why));
         QVERIFY(!AppNet::urlAllowed("someapp", QUrl("https://kick.com/"), &why));             // an app with no declared sites
     }
 
@@ -891,6 +898,119 @@ private slots:
         r.store.refresh();
         QVERIFY(r.store.usedBytes() <= 1);
     }
+    // ---- recording a live stream ----
+private:
+    struct LiveRig { Rig *r; int polls = 0; int endAt = 1000; int failFrom = -1; };
+    static const QString liveMaster() { return "https://a1.playback.live-video.net/live/master.m3u8"; }
+    void liveRig(Rig &r, LiveRig &lv)
+    {
+        rig(r);
+        lv.r = &r;
+        r.dl->setPollIntervalMs(20);
+        auto inner = ft->handler;
+        ft->handler = [&lv, inner](const QUrl &u) -> NetReply {
+            const QString path = u.path();
+            if (path == "/live/master.m3u8")
+                return ok("#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p/playlist.m3u8\n");
+            if (path == "/live/720p/playlist.m3u8") {
+                const int k = lv.polls++;
+                if (lv.failFrom >= 0 && k >= lv.failFrom) { NetReply e; e.status = 404; e.error = "the site answered 404"; return e; }
+                QByteArray t = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0.04\n#EXT-X-MEDIA-SEQUENCE:" + QByteArray::number(k) + "\n";
+                for (int i = 0; i < 4; ++i) t += "#EXTINF:2.0,\n" + QByteArray::number(k + i) + ".ts\n";
+                if (k >= lv.endAt) t += "#EXT-X-ENDLIST\n";
+                return ok(t);
+            }
+            return inner(u);
+        };
+    }
+    static QVariantMap recInfo(const QString &id = "rec-1")
+    {
+        return {{"id", id}, {"title", "live now"}, {"channel", "alpha"}, {"url", liveMaster()}, {"maxHeight", 720}};
+    }
+    static QByteArray partsFrom(int first, int last) { QByteArray b; for (int i = first; i <= last; ++i) b += partBytes(i); return b; }
+
+private slots:
+    void recordingFollowsTheLivePlaylistFromNowToTheEnd()
+    {
+        Rig r; LiveRig lv; liveRig(r, lv);
+        lv.endAt = 6;
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->startRecording(recInfo()), QString());
+        QCOMPARE(r.dl->item("rec-1").value("state").toString(), QString("recording"));
+        QVERIFY(r.dl->busy());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 6000);
+        const QVariantMap it = r.dl->item("rec-1");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        QCOMPARE(it.value("kind").toString(), QString("recording"));
+        QCOMPARE(it.value("error").toString(), QString("the stream ended"));
+        // from the live edge (the last three of the first window: 1, 2, 3), then every new piece once, in order, to the end (9)
+        QCOMPARE(readAll(r.dl->videoPath("rec-1")), partsFrom(1, 9));
+        QVERIFY(qAbs(it.value("seconds").toDouble() - 18.0) < 0.001);
+        QVERIFY(!r.dl->busy());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        // it is a finished item now: it survives a restart
+        OfflineDownloads again(&net, &r.store);
+        again.reload();
+        QCOMPARE(again.item("rec-1").value("state").toString(), QString("done"));
+    }
+    void recordingStopsWhenToldTheAppClosesOrTheDriveFills()
+    {
+        // stop: what was recorded is kept, and nothing more is fetched
+        Rig r; LiveRig lv; liveRig(r, lv);
+        QCOMPARE(r.dl->startRecording(recInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(r.dl->item("rec-1").value("doneParts").toInt() >= 4, 6000);
+        QVERIFY(r.dl->startRecording(recInfo("rec-2")).contains("already recording"));   // one at a time
+        r.dl->stopRecording("rec-1");
+        const QVariantMap it = r.dl->item("rec-1");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        QVERIFY(!r.dl->busy());
+        const int n = it.value("doneParts").toInt();
+        const int sent = ft->asked.size();
+        QTest::qWait(150);
+        QCOMPARE(ft->asked.size(), sent);
+        QCOMPARE(readAll(r.dl->videoPath("rec-1")), partsFrom(1, n));                   // whole pieces only, in order
+        // the app closes: it ends cleanly with a note
+        Rig a; LiveRig la; liveRig(a, la);
+        QCOMPARE(a.dl->startRecording(recInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(a.dl->item("rec-1").value("doneParts").toInt() >= 2, 6000);
+        net.close("kick");
+        QCOMPARE(a.dl->item("rec-1").value("state").toString(), QString("done"));
+        QVERIFY(a.dl->item("rec-1").value("error").toString().contains("closed"));
+        QVERIFY(!a.dl->busy());
+        // the drive nearly fills: stopped early with a plain reason, what there is stays
+        Rig d; LiveRig ld; liveRig(d, ld);
+        QCOMPARE(d.dl->startRecording(recInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(d.dl->item("rec-1").value("doneParts").toInt() >= 3, 6000);
+        d.free = 100LL * 1024 * 1024;
+        QTRY_COMPARE_WITH_TIMEOUT(d.dl->item("rec-1").value("state").toString(), QString("done"), 6000);
+        QVERIFY(d.dl->item("rec-1").value("error").toString().contains("stopped early"));
+        QVERIFY(QFileInfo(d.dl->videoPath("rec-1")).size() > 0);
+    }
+    void recordingNeedsTheAppAndAGoodAddressAndEndsWhenTheChannelGoesOffline()
+    {
+        Rig r; LiveRig lv; liveRig(r, lv);
+        QVERIFY(r.dl->startRecording({{"id", "x"}, {"url", "https://evil.example/live.m3u8"}}).contains("not one of the sites"));
+        QVERIFY(r.dl->startRecording({{"id", "x"}, {"url", "http://a.live-video.net/live.m3u8"}}).contains("secure"));
+        net.close("kick");
+        QVERIFY(r.dl->startRecording(recInfo()).contains("open the kick app"));
+        net.open("kick");
+        // the channel goes offline (the playlist answers errors): the recording ends, keeping what it has
+        lv.failFrom = 4;
+        QCOMPARE(r.dl->startRecording(recInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(r.dl->item("rec-1").value("state").toString(), QString("done"), 8000);
+        QCOMPARE(r.dl->item("rec-1").value("error").toString(), QString("the stream ended"));
+        QVERIFY(r.dl->item("rec-1").value("doneParts").toInt() >= 3);
+        // never online at all: no empty item is left pretending to be a recording
+        Rig n; LiveRig ln; liveRig(n, ln);
+        ln.failFrom = 0;
+        QCOMPARE(n.dl->startRecording(recInfo("rec-9")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(n.dl->item("rec-9").value("state").toString(), QString("failed"), 8000);
+        QCOMPARE(n.dl->item("rec-9").value("doneParts").toInt(), 0);
+        n.dl->setEnabled(false);
+        QVERIFY(n.dl->startRecording(recInfo("rec-8")).contains("guests"));
+    }
+
+private slots:
     // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
     void liveClipDownloadAgainstTheRealServers()
     {
@@ -925,6 +1045,38 @@ private slots:
         QCOMPARE(uchar(data[0]), uchar(0x47));                             // an MPEG-TS packet starts with the sync byte
         QCOMPARE(uchar(data[188]), uchar(0x47));
         QFile::copy(dl.videoPath(clip.value("id").toString()), qEnvironmentVariable("HOPTUNES_LIVE_OUT", tmp.filePath("clip-copy.ts")));
+    }
+    // A real live stream, only when asked for: HOPTUNES_LIVE_KICK=<a channel that is live now>. Records ~15 s. Not run in CI.
+    void liveRecordingAgainstTheRealServers()
+    {
+        const QString slug = qEnvironmentVariable("HOPTUNES_LIVE_KICK");
+        if (slug.isEmpty()) QSKIP("set HOPTUNES_LIVE_KICK=<live channel> to try the real servers");
+        QNetworkProxyFactory::setUseSystemConfiguration(true);
+        AppNet realNet;
+        realNet.setAllowed("kick", true);
+        realNet.open("kick");
+        KickClient k(&realNet);
+        k.open();
+        k.openChannel(slug);
+        QTRY_VERIFY_WITH_TIMEOUT(!k.channel().value("loading").toBool(), 20000);
+        const QString addr = k.channel().value("playbackUrl").toString();
+        if (addr.isEmpty()) QSKIP("that channel is not live right now");
+        QTemporaryDir tmp;
+        OfflineStore store;
+        store.setDefaultBase(tmp.filePath("offline"));
+        store.setProfileId("live");
+        OfflineDownloads dl(&realNet, &store);
+        QCOMPARE(dl.startRecording({{"id", "rec-live"}, {"title", "t"}, {"channel", slug}, {"url", addr}, {"maxHeight", 480}}), QString());
+        QTest::qWait(15000);
+        dl.stopRecording("rec-live");
+        const QVariantMap it = dl.item("rec-live");
+        qInfo() << "live recording:" << it.value("state") << it.value("error") << it.value("bytes") << it.value("seconds") << it.value("quality");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        const QByteArray data = readAll(dl.videoPath("rec-live"));
+        QVERIFY(data.size() > 50000);
+        QCOMPARE(uchar(data[0]), uchar(0x47));
+        QCOMPARE(uchar(data[188]), uchar(0x47));
+        QFile::copy(dl.videoPath("rec-live"), qEnvironmentVariable("HOPTUNES_LIVE_OUT", tmp.filePath("rec-copy.ts")));
     }
 };
 

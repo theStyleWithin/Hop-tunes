@@ -34,11 +34,25 @@ FocusScope {
         if (n >= 1048576) return Math.round(n / 1048576) + " MB"
         return Math.max(1, Math.round(n / 1024)) + " KB"
     }
+    // the recording in progress, if any
+    readonly property var activeRecording: {
+        const l = hop.downloads ? hop.downloads.items : []
+        for (let i = 0; i < l.length; i++) if (l[i].kind === "recording" && l[i].state === "recording") return l[i]
+        return null
+    }
+    property string recordMessage: ""
+    function record() {
+        const ch = kick.channel
+        if (!ch.playbackUrl) { root.recordMessage = "this stream has no address to record"; return }
+        root.recordMessage = hop.downloads.startRecording({ id: "rec-" + ch.slug + "-" + Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss"), title: ch.title || "", channel: ch.slug,
+                                                            url: ch.playbackUrl, maxHeight: root.dlHeight })
+    }
     function dlState(it) {
         if (!it) return ""
         const pc = Math.round((it.progress || 0) * 100)
         switch (it.state) {
-        case "done": return "ready \u00b7 " + fmtBytes(it.bytes)
+        case "recording": return "recording " + fmtDur(it.seconds) + " \u00b7 " + fmtBytes(it.bytes)
+        case "done": return "ready \u00b7 " + fmtBytes(it.bytes) + (it.error ? " \u00b7 " + it.error : "")
         case "running": return "downloading " + pc + "% \u00b7 " + fmtBytes(it.bytes)
         case "queued": return "waiting its turn"
         case "paused": return "paused at " + pc + "%"
@@ -67,7 +81,7 @@ FocusScope {
         if (page === "watch") { page = "browse"; kick.closeChannel(); watchTab = "live"; return true }
         return false
     }
-    function openChannel(slug) { kick.openChannel(slug); watchTab = "live"; dlMessage = ""; page = "watch" }
+    function openChannel(slug) { kick.openChannel(slug); watchTab = "live"; dlMessage = ""; recordMessage = ""; page = "watch" }
     function showTab(t) {
         watchTab = t; dlMessage = ""
         if (t === "past") kick.loadPastStreams(); else if (t === "clips") kick.loadClips()
@@ -406,6 +420,20 @@ FocusScope {
                     Chip { objectName: "kickTab_clips"; text: "clips"; on: root.watchTab === "clips"; onClicked: root.showTab("clips") }
                     Item { Layout.fillWidth: true }
                 }
+                RowLayout {   // record this live stream (only when pressed; never by itself)
+                    objectName: "kickRecordRow"
+                    spacing: 10; Layout.fillWidth: true
+                    visible: !!hop.downloads && root.watchTab === "live" && kick.channel.live === true
+                    PlainButton { objectName: "kickRecordButton"; visible: !root.activeRecording; text: "\u25cf record"; implicitHeight: 36; Layout.minimumWidth: 0
+                                  onClicked: root.record() }
+                    Rectangle { visible: !!root.activeRecording; width: 10; height: 10; radius: 5; color: "#e5484d" }
+                    Label { objectName: "kickRecordingBar"; visible: !!root.activeRecording; color: "#e5484d"; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                            text: root.activeRecording ? "recording \u00b7 " + root.fmtDur(root.activeRecording.seconds) + " \u00b7 " + root.fmtBytes(root.activeRecording.bytes) : "" }
+                    PlainButton { objectName: "kickStopRecord"; visible: !!root.activeRecording; text: "stop"; implicitHeight: 36; Layout.minimumWidth: 0
+                                  onClicked: hop.downloads.stopRecording(root.activeRecording.id) }
+                    Label { Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight; color: !root.activeRecording && root.recordMessage !== "" ? Theme.danger : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
+                            text: root.activeRecording ? "kept in your downloads when you stop" : (root.recordMessage !== "" ? root.recordMessage : "keeps this stream from now on, in your offline downloads") }
+                }
                 ColumnLayout {   // finished streams and clips: pick one to download for offline viewing
                     id: library
                     objectName: "kickLibrary"
@@ -570,12 +598,12 @@ FocusScope {
                             ColumnLayout {
                                 spacing: 2; Layout.fillWidth: true; Layout.minimumWidth: 0
                                 Label { text: drow.modelData.title !== "" ? drow.modelData.title : "(untitled)"; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) } }
-                                Label { text: drow.modelData.channel + " \u00b7 " + (drow.modelData.kind === "clip" ? "clip" : "past stream") + " \u00b7 " + root.fmtDur(drow.modelData.seconds)
+                                Label { text: drow.modelData.channel + " \u00b7 " + (drow.modelData.kind === "clip" ? "clip" : (drow.modelData.kind === "recording" ? "recording" : "past stream")) + " \u00b7 " + root.fmtDur(drow.modelData.seconds)
                                                + (drow.modelData.quality !== "" ? " \u00b7 " + drow.modelData.quality : "")
                                         color: Theme.muted; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                                 Label { objectName: "kickDlState_" + drow.modelData.id; text: root.dlState(drow.modelData); elide: Text.ElideRight; Layout.fillWidth: true
                                         color: drow.modelData.state === "failed" || drow.modelData.state === "limit" ? Theme.danger : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
-                                Rectangle { visible: drow.modelData.state !== "done"; Layout.fillWidth: true; height: 4; color: Theme.line
+                                Rectangle { visible: drow.modelData.state !== "done" && drow.modelData.kind !== "recording"; Layout.fillWidth: true; height: 4; color: Theme.line
                                             Rectangle { width: parent.width * (drow.modelData.progress || 0); height: parent.height; color: Theme.accent } }
                             }
                         }
@@ -585,7 +613,9 @@ FocusScope {
                                           enabled: drow.modelData.state === "done"; onClicked: { root.playId = drow.modelData.id; root.page = "play" } }
                             PlainButton { objectName: "kickDlPause_" + drow.modelData.id; visible: drow.modelData.state === "running" || drow.modelData.state === "queued"; text: "pause"; implicitHeight: 34
                                           onClicked: hop.downloads.pause(drow.modelData.id) }
-                            PlainButton { objectName: "kickDlResume_" + drow.modelData.id; visible: ["paused", "waiting", "limit", "failed"].indexOf(drow.modelData.state) >= 0; text: "resume"; implicitHeight: 34
+                            PlainButton { objectName: "kickDlStop_" + drow.modelData.id; visible: drow.modelData.state === "recording"; text: "stop"; implicitHeight: 34
+                                          onClicked: hop.downloads.stopRecording(drow.modelData.id) }
+                            PlainButton { objectName: "kickDlResume_" + drow.modelData.id; visible: drow.modelData.kind !== "recording" && ["paused", "waiting", "limit", "failed"].indexOf(drow.modelData.state) >= 0; text: "resume"; implicitHeight: 34
                                           onClicked: hop.downloads.resume(drow.modelData.id) }
                             PlainButton { objectName: "kickDlDelete_" + drow.modelData.id; text: "delete"; danger: true; implicitHeight: 34
                                           onClicked: hop.downloads.remove(drow.modelData.id) }

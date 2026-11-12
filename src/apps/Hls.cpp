@@ -70,6 +70,10 @@ HlsMedia parseHlsMedia(const QString &text, const QUrl &base)
             const QString v = l.mid(17);
             rangeLen = v.section(QLatin1Char('@'), 0, 0).toLongLong();
             rangeOff = v.contains(QLatin1Char('@')) ? v.section(QLatin1Char('@'), 1, 1).toLongLong() : nextOff;
+        } else if (l.startsWith(QLatin1String("#EXT-X-MEDIA-SEQUENCE:"))) {
+            m.firstSequence = l.mid(22).toLongLong();
+        } else if (l.startsWith(QLatin1String("#EXT-X-TARGETDURATION:"))) {
+            m.targetSeconds = l.mid(22).toDouble();
         } else if (l.startsWith(QLatin1String("#EXT-X-ENDLIST"))) {
             m.finished = true;
         } else if (!isTag(l)) {

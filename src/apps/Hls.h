@@ -29,6 +29,8 @@ struct HlsMedia {
     QList<HlsPart> parts;      // pieces to fetch and join, in order
     bool finished = false;     // #EXT-X-ENDLIST: a finished video (a live one is still growing)
     double seconds = 0;
+    qint64 firstSequence = 0;  // #EXT-X-MEDIA-SEQUENCE: the number of the first piece listed (a live playlist slides forward)
+    double targetSeconds = 0;  // #EXT-X-TARGETDURATION
     QString unsupported;       // "" or why this playlist cannot be downloaded (encrypted, ...)
 };
 

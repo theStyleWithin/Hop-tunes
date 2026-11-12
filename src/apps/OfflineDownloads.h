@@ -51,6 +51,12 @@ public:
     Q_INVOKABLE void pause(const QString &id);
     Q_INVOKABLE void resume(const QString &id);
     Q_INVOKABLE void remove(const QString &id);                  // cancels if running; deletes what was downloaded
+    // Recording a live stream, only when the person presses record (info: id, title, channel, url = the live playlist address,
+    // maxHeight). It follows the playlist and keeps each new piece from now on until stop, the end of the stream, the storage guard, or the
+    // app closing: it cannot be resumed, so what was recorded is kept as a finished item. "" = started, else one plain sentence.
+    Q_INVOKABLE QString startRecording(const QVariantMap &info);
+    Q_INVOKABLE void stopRecording(const QString &id) { finishRecording(id, QString()); }
+    void setPollIntervalMs(int minMs) { m_pollMinMs = minMs; }
 
 public slots:
     void appOpened();     // the Kick app opened: carry on with what was waiting for it
@@ -69,6 +75,11 @@ private:
         qint64 bytes = 0, estimate = 0;
         double seconds = 0;
         bool userPaused = false;
+        QUrl mediaUrl;                                // a recording: the quality playlist being followed
+        qint64 lastSeq = -1;                          // the last piece number kept
+        int pollFailures = 0;
+        bool streamEnded = false;                     // the playlist said ENDLIST
+        int pollDelayMs = 1000;
     };
     QString dirOf(const QString &id) const;
     QString metaPath(const QString &id) const { return dirOf(id) + QStringLiteral("/meta.json"); }
@@ -79,6 +90,9 @@ private:
     void fetchPart(const QString &id, int attempt);
     void fail(const QString &id, const QString &why, const QString &state = QStringLiteral("failed"));
     void fetchThumb(const QString &id);
+    void pollRecording(const QString &id, quint64 gen);
+    void recordPieces(const QString &id, quint64 gen, QList<HlsPart> queue, int attempt);
+    void finishRecording(QString id, const QString &note);
     void setState(Item &it, const QString &state, const QString &error = QString());
 
     AppNet *m_net;
@@ -86,6 +100,9 @@ private:
     QHash<QString, Item> m_items;
     QStringList m_order;                              // newest first
     QString m_running;
+    QString m_recording;                              // the id of the recording in progress (one at a time, next to a download)
+    quint64 m_recGen = 0;
+    int m_pollMinMs = 800;
     quint64 m_gen = 0;                                // a stale answer (after pause, remove, close) is ignored
     bool m_enabled = true;
     int m_retryMs = 1500;

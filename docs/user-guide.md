@@ -196,6 +196,14 @@ list of what you have: **play** it from your device, **pause**, **resume** or **
 pauses them and opening it again carries on. If the limit is reached or the drive is nearly full a download stops and says why; nothing is deleted. Only
 finished streams can be downloaded; recording a live stream comes later. These are personal copies for watching offline: please respect the streamer's and Kick's rules.
 
+### Recording a live stream
+
+On a live channel's page press **● record** to keep the stream from that moment on. A red bar shows the time and size; press **stop** when you have enough.
+It also stops by itself when the stream ends, when your offline storage limit is reached or the drive is nearly full (what was recorded is kept),
+and when you close the Kick app (recording only runs while the app is open). Recordings appear in the **downloads** page and play from your device.
+Quality follows the 480p / 720p / best choice on the past streams and clips tabs (720p by default). Recording starts from now: there is no rewind, and a
+piece lost to a network drop stays lost. A long recording is large: watch the storage meter. Personal copies only.
+
 ### Kick offline storage
 
 In **settings → apps settings → kick offline storage** you choose how much room Kick may use for things kept offline (downloaded past streams, clips and

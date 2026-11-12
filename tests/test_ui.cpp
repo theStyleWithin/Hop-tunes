@@ -51,6 +51,7 @@ class FakeKick : public NetTransport {
 public:
     QList<QUrl> asked;
     int aborted = 0;
+    int livePolls = 0;
     static QByteArray pngBytes()
     {
         QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(90, 60, 160));
@@ -94,6 +95,15 @@ public:
             r.body = QJsonDocument(QJsonObject{{"clips", QJsonArray{QJsonObject{{"id", "clip_abc"}, {"title", "a funny moment"}, {"duration", 30},
                 {"clip_url", "https://clips.kick.com/clips/ab/clip_abc/playlist.m3u8"}, {"thumbnail_url", "https://clips.kick.com/clips/ab/clip_abc/thumbnail.webp"},
                 {"views", 5000}, {"created_at", "2026-11-01T10:00:00Z"}}}}}).toJson();
+        }
+        else if (url.host().endsWith("live-video.net")) {          // a live stream: a sliding playlist that gains a piece at each look
+            if (url.path() == "/live/master.m3u8") r.body = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1500000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p/playlist.m3u8\n";
+            else if (url.path().endsWith("/playlist.m3u8")) {
+                const int k = livePolls++;
+                QByteArray t = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0.04\n#EXT-X-MEDIA-SEQUENCE:" + QByteArray::number(k) + "\n";
+                for (int i = 0; i < 4; ++i) t += "#EXTINF:2.0,\n" + QByteArray::number(k + i) + ".ts\n";
+                r.body = t;
+            } else r.body = QByteArray(3000, 'L');
         }
         else if (url.path().endsWith("/master.m3u8"))
             r.body = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1500000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p60/playlist.m3u8\n";
@@ -2451,6 +2461,55 @@ private slots:
         w->setProperty("view", QStringLiteral("collection"));
     }
 
+    // The record button: only on a live channel, never by itself; recording shows a red bar and a stop button; the result is in the downloads.
+    void aLiveStreamCanBeRecordedAndStopped()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        OfflineDownloads *dl = m_app->downloads();
+        struct Restore { App *app; KickClient *k; ~Restore() { app->downloads()->reload(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); k->clearBlocked(); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_gamehopper") && item("kickCard_gamehopper")->isVisible());
+        QVERIFY(click("kickCard_gamehopper"));                                         // the one live channel in the fixture (no stream address, so no player starts)
+        QTRY_VERIFY(item("kickRecordRow") && item("kickRecordRow")->isVisible());
+        QVERIFY(item("kickRecordButton")->isVisible() && !item("kickRecordingBar")->isVisible());
+        QVERIFY(click("kickRecordButton"));                                            // nothing to record from: said plainly, nothing started
+        QCOMPARE(dl->count(), 0);
+        QVERIFY(!dl->busy());
+        // a recording (started with an address, as the button does) shows the bar, and stop keeps what there is
+        QCOMPARE(dl->startRecording({{"id", "rec-ui"}, {"title", "developer stream"}, {"channel", "gamehopper"}, {"url", "https://a1.playback.live-video.net/live/master.m3u8"}, {"maxHeight", 720}}), QString());
+        QTRY_VERIFY(item("kickRecordingBar")->isVisible());
+        QVERIFY(item("kickRecordingBar")->property("text").toString().startsWith("recording"));
+        QVERIFY(!item("kickRecordButton")->isVisible() && item("kickStopRecord")->isVisible());
+        QTRY_VERIFY(dl->item("rec-ui").value("doneParts").toInt() >= 2);
+        shot("kick-recording");
+        QVERIFY(click("kickStopRecord"));
+        QTRY_VERIFY(!item("kickRecordingBar")->isVisible());
+        QTRY_VERIFY(item("kickRecordButton")->isVisible());
+        QCOMPARE(dl->item("rec-ui").value("state").toString(), QString("done"));
+        QVERIFY(QFileInfo(dl->videoPath("rec-ui")).size() >= 6000);
+        // it is in the downloads like the rest, and plays from disk
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickDownloadsButton"));
+        QTRY_VERIFY(item("kickDl_rec-ui") && item("kickDl_rec-ui")->isVisible());
+        QVERIFY(item("kickDlState_rec-ui")->property("text").toString().startsWith("ready"));
+        QVERIFY(item("kickDlPlay_rec-ui")->property("enabled").toBool());
+        dl->remove("rec-ui");
+        QTRY_VERIFY(!dl->has("rec-ui"));
+        QTest::keyClick(w, Qt::Key_Escape);                                            // out of downloads, then out of the app
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
     // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played
     // from disk; deleting removes them.
     void pastStreamsAndClipsCanBeDownloadedListedAndPlayedFromDisk()
@@ -2516,6 +2575,10 @@ private slots:
         dl->remove("clip_abc");
         QTRY_VERIFY(item("kickDownloadsEmpty") && item("kickDownloadsEmpty")->isVisible());
         for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 #endif
 
