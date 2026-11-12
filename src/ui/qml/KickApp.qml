@@ -256,7 +256,7 @@ FocusScope {
                     Label { text: modelData[1]; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
                 }
             }
-            Label { text: "what is sent: what you ask for (a channel name, a search) and your internet address, like any visitor. no hop-tunes details, no cookies, nothing is kept after you close the app. you never need a kick account to watch, and hop-tunes never follows or subscribes for you on kick: your follow and block lists stay on this computer."
+            Label { text: "what is sent: what you ask for (a channel name, a search) and your internet address, like any visitor. while the app is open it also asks kick twice a minute or so whether its servers are up (the same list and channel pages anyone can load, nothing about you) to show a green, yellow or red light. no hop-tunes details, no cookies, nothing is kept after you close the app. you never need a kick account to watch, and hop-tunes never follows or subscribes for you on kick: your follow and block lists stay on this computer."
                     color: Theme.text2; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.topMargin: 4
                     font { family: Theme.font; pixelSize: Theme.fs(15) } }
             RowLayout {
@@ -706,7 +706,7 @@ FocusScope {
                         anchors.fill: parent
                         fullscreen: root.videoFullscreen
                         onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
-                        url: root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
+                        url: root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.health !== "down" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
                         onRetryRequested: { if ((kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug) }
                     }
                     Rectangle {
@@ -1150,14 +1150,29 @@ FocusScope {
         Timer { id: undoTimer; interval: 8000 }
     }
 
+    // red: Kick's servers are not answering. Nothing live can be watched or loaded, but what is already on this device still works.
+    Rectangle {
+        objectName: "kickDown"
+        anchors { fill: parent; topMargin: 30 }
+        z: 5; color: Theme.bg
+        visible: !!kick && root.allowed && kick.health === "down" && (root.page === "browse" || root.page === "watch")
+        ColumnLayout {
+            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 24 } spacing: 12
+            Label { text: "kick looks down"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(26); weight: Font.Light } }
+            Label { text: "its servers are not answering, so no live stream can be watched right now. your downloads and recordings still play. hop-tunes keeps checking and picks the streams up again, with fresh results, as soon as kick answers."
+                    color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+            PlainButton { objectName: "kickDownDownloads"; text: "open my downloads"; primary: true; onClicked: root.page = "downloads" }
+        }
+    }
+
     // the honest bar: what is connected (no button here on purpose: a stray tap must not cut the connection)
     RowLayout {
         objectName: "kickStatusBar"
         anchors { left: parent.left; right: parent.right; top: parent.top } height: 26
         visible: !!kick && root.allowed
         spacing: 10
-        Rectangle { width: 8; height: 8; radius: 4; color: "#53fc18" }
+        Rectangle { objectName: "kickHealthDot"; width: 8; height: 8; radius: 4; color: !kick ? Theme.dim : kick.health === "good" ? "#53fc18" : kick.health === "slow" ? "#f5c518" : kick.health === "down" ? "#ff4d4d" : Theme.dim }
         Label { objectName: "kickContacted"; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
-                text: "connected to " + (kick && kick.contacted.length > 0 ? kick.contacted.join(" · ") : "kick.com when you ask for something") }
+                text: (kick ? kick.healthText + " · " : "") + "connected to " + (kick && kick.contacted.length > 0 ? kick.contacted.join(" · ") : "kick.com when you ask for something") }
     }
 }

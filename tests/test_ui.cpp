@@ -52,6 +52,7 @@ public:
     QList<QUrl> asked;
     int aborted = 0;
     int livePolls = 0;
+    int failMode = 0;                    // 0 fine, 1 only the list server fails, 2 everything fails (a 503)
     int signInPolls = 0;
     static QByteArray pngBytes()
     {
@@ -83,6 +84,7 @@ public:
     {
         asked << url;
         NetReply r; r.status = 200;
+        if (failMode == 2 || (failMode == 1 && url.host() == "web.kick.com")) { r.status = 503; r.error = QStringLiteral("the site answered 503"); done(r); return; }
         if (url.host() == "web.kick.com") r.body = list();
         else if (url.path() == "/api/search") {
             const QString w = QUrlQuery(url).queryItemValue("searched_word", QUrl::FullyDecoded).toLower();
@@ -2370,6 +2372,63 @@ private slots:
         QTRY_VERIFY(!m_app->gateway()->isOpen("kick"));
         // tidy up for the tests after this one
         kick->clearBlocked(); kick->unfollow("alpha");
+        m_app->setAppNetAllowed("kick", false);
+        m_app->setAppsEnabled(false);
+        QVERIFY(click("subTab_music"));
+    }
+
+    // The status bar's light shows how Kick's servers are doing: green, yellow when something is wrong, red when it is down. Red covers the
+    // live streams (nothing can be watched) but the downloads stay reachable, and when Kick answers again the list comes back by itself.
+    void kickHealthLightShowsGreenYellowRedAndRecovers()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        kick->setHealthInterval(100);
+        struct Restore {
+            QWindow *w; App *app; KickClient *k;
+            ~Restore() { k->setHealthInterval(60000); k->clearBlocked(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps") && item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        auto dot = [this] { return item("kickHealthDot")->property("color").value<QColor>(); };
+        QTRY_COMPARE(kick->health(), QString("good"));
+        QTRY_COMPARE(dot(), QColor("#53fc18"));
+        QVERIFY(item("kickContacted")->property("text").toString().startsWith("kick is up"));
+        QVERIFY(item("kickDown") == nullptr || !item("kickDown")->isVisible());
+        shot("kick-health-green");
+        // something is wrong: yellow, the list is still there
+        ft->failMode = 1;
+        QTRY_COMPARE_WITH_TIMEOUT(kick->health(), QString("slow"), 5000);
+        QTRY_COMPARE(dot(), QColor("#f5c518"));
+        QVERIFY(item("kickContacted")->property("text").toString().contains("slow or partly down"));
+        QVERIFY(item("kickCard_alpha")->isVisible());
+        shot("kick-health-yellow");
+        // down: red, a cover over the streams, no way to watch, but the downloads are one tap away
+        ft->failMode = 2;
+        QTRY_COMPARE_WITH_TIMEOUT(kick->health(), QString("down"), 5000);
+        QTRY_COMPARE(dot(), QColor("#ff4d4d"));
+        QTRY_VERIFY(item("kickDown") && item("kickDown")->isVisible());
+        QVERIFY(item("kickDown")->property("z").toReal() > 0);
+        shot("kick-health-red");
+        QVERIFY(click("kickDownDownloads"));
+        QTRY_VERIFY(item("kickDownloads") && item("kickDownloads")->isVisible());
+        QTRY_VERIFY(!item("kickDown")->isVisible());                                 // the downloads page is not covered
+        // Kick answers again: the cover goes, the list is asked for again, and the light turns green
+        const int before = ft->asked.size();
+        ft->failMode = 0;
+        QTRY_VERIFY_WITH_TIMEOUT(kick->health() != QString("down"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(ft->asked.size() > before, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(kick->health(), QString("good"), 5000);
+        QTRY_COMPARE(dot(), QColor("#53fc18"));
+        QVERIFY(!item("kickDown")->isVisible());
         m_app->setAppNetAllowed("kick", false);
         m_app->setAppsEnabled(false);
         QVERIFY(click("subTab_music"));

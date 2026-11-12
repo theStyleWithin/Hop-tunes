@@ -3,6 +3,8 @@
 
 #include "net/AppNet.h"
 
+#include <QTimer>
+
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -54,6 +56,8 @@ class KickClient : public QObject {
     Q_PROPERTY(QString query READ query NOTIFY filtersChanged)                    // a search is showing when not empty
     Q_PROPERTY(QStringList contacted READ contacted NOTIFY contactedChanged)      // the sites reached since the app was opened
     Q_PROPERTY(bool connected READ isOpen NOTIFY openChanged)
+    Q_PROPERTY(QString health READ health NOTIFY healthChanged)               // Kick's servers as seen from here: "" (not known yet) | "good" | "slow" (yellow) | "down" (red)
+    Q_PROPERTY(QString healthText READ healthText NOTIFY healthChanged)
     // What the chat beside the stream is: "off" (the start), "pretend" (Hop-tunes' made-up chat, nobody in it is real) or "kick" (Kick's own
     // live chat). Kick's chat is only for someone who chose to sign in to Kick; without that the choice is no chat or the pretend one.
     Q_PROPERTY(QString chatMode READ chatMode WRITE setChatMode NOTIFY chatModeChanged)
@@ -111,6 +115,13 @@ public:
     QString query() const { return m_query; }
     QStringList contacted() const { return m_net->contacted(kApp); }
     bool isOpen() const { return m_open; }
+    QString health() const { return m_health; }
+    QString healthText() const;
+    // How often the health check asks while Kick looks fine (half as often again when it does not). Tests shorten it.
+    void setHealthInterval(int ms) { m_healthMs = qMax(50, ms); }
+    // Three tiny questions in a row that all fail = red; any trouble in the last three = yellow; otherwise green.
+    static int classifyHealth(const NetReply &r, qint64 ms);                    // 0 fine, 1 slow or refusing, 2 not answering
+    static QString healthFrom(const QList<int> &lastOutcomes);
     QString chatMode() const { return m_chatMode; }
     void setChatMode(const QString &mode);
     bool signedIn() const { return m_signedIn; }      // optional: nothing needs it to watch. Signing in only lets you import your follow list.
@@ -189,6 +200,7 @@ public:
     Q_INVOKABLE static QString viewersText(int n);             // 12400 -> "12.4k"
 
 signals:
+    void healthChanged();
     void streamsChanged();
     void categoriesChanged();
     void categoryResultsChanged();
@@ -217,6 +229,16 @@ private:
     void begin() { ++m_pending; emit loadingChanged(); }
     void end() { if (m_pending > 0) --m_pending; emit loadingChanged(); }
     bool ready();
+    void healthNoted(int outcome);               // one more result: updates the light, and picks the list up again when Kick comes back
+    void healthSchedule();
+    void healthProbe();
+
+    // the health light
+    QString m_health;
+    QList<int> m_healthLast;
+    int m_healthMs = 60000;
+    quint64 m_healthGen = 0;
+    QTimer *m_healthTimer = nullptr;
 
     AppNet *m_net;
     bool m_open = false;

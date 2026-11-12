@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **Kick: a health light.** The dot in the status bar is now green when Kick is up, yellow when it is slow or partly down, red when it is not answering. While the app is open it asks Kick two tiny questions (the list and a channel page, nothing about you) about once a minute, more often when something looks wrong. When it is red nothing live can be loaded or watched (a cover says so, with a button to your downloads), your downloads and recordings keep playing, and as soon as Kick answers again the list (and an open channel) refreshes by itself. The permission card says so up front.
+
 ### Changed
 - **Kick: no disconnect button.** The yellow "disconnect" button in the status bar is gone, so a stray tap can no longer cut the connection. The bar still shows what is connected; taking the permission back in settings → apps settings → kick still closes it.
 

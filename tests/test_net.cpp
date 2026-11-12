@@ -232,6 +232,78 @@ private slots:
         QVERIFY(!first.toString().contains("after="));
     }
 
+    void healthLightRulesAreGreenYellowRed()
+    {
+        auto reply = [](int status) { NetReply r; r.status = status; return r; };
+        QCOMPARE(KickClient::classifyHealth(reply(200), 100), 0);
+        QCOMPARE(KickClient::classifyHealth(reply(404), 100), 0);          // kick answered, even if only to say no
+        QCOMPARE(KickClient::classifyHealth(reply(200), 6000), 1);         // very slow
+        QCOMPARE(KickClient::classifyHealth(reply(429), 100), 1);          // refusing for now
+        QCOMPARE(KickClient::classifyHealth(reply(403), 100), 1);
+        QCOMPARE(KickClient::classifyHealth(reply(503), 100), 2);
+        QCOMPARE(KickClient::classifyHealth(reply(0), 100), 2);            // nothing came back
+        QCOMPARE(KickClient::healthFrom({}), QString());
+        QCOMPARE(KickClient::healthFrom({0}), QString("good"));
+        QCOMPARE(KickClient::healthFrom({0, 0, 0}), QString("good"));
+        QCOMPARE(KickClient::healthFrom({0, 1, 0}), QString("slow"));
+        QCOMPARE(KickClient::healthFrom({2}), QString("slow"));            // one failure is only yellow
+        QCOMPARE(KickClient::healthFrom({2, 2}), QString("slow"));
+        QCOMPARE(KickClient::healthFrom({2, 2, 2}), QString("down"));
+        QCOMPARE(KickClient::healthFrom({2, 2, 0}), QString("slow"));      // the first good answer after red is already yellow
+    }
+
+    void healthLightGoesYellowThenRedThenPicksTheListUpAgain()
+    {
+        fresh();
+        KickClient k(&net);
+        k.setHealthInterval(100);
+        int mode = 0;                                                       // 0 all fine, 1 the list server fails, 2 everything fails
+        ft->handler = [&mode](const QUrl &u) {
+            NetReply bad; bad.status = 503; bad.error = QStringLiteral("the site answered 503");
+            if (mode == 2 || (mode == 1 && u.host() == "web.kick.com")) return bad;
+            if (u.host() == "web.kick.com") return ok(streamsJson({"alpha", "bravo"}, "", 9000, {}));
+            return ok("{\"data\":[]}");
+        };
+        auto realListAsks = [this] { int n = 0; for (const QUrl &u : ft->asked) if (u.host() == "web.kick.com" && u.toString().contains("limit=36")) ++n; return n; };
+        auto realAsks = [this] { int n = 0; for (const QUrl &u : ft->asked) { const bool probe = (u.host() == "web.kick.com" && u.toString().contains("limit=1")) || u.path() == "/api/v2/channels/gamehopper"; if (!probe) ++n; } return n; };
+        QSignalSpy changed(&k, &KickClient::healthChanged);
+        QCOMPARE(k.health(), QString());
+        k.open();
+        QTRY_COMPARE(k.health(), QString("good"));                          // the first list already says so
+        QTRY_COMPARE(k.streams().size(), 2);
+        QCOMPARE(k.healthText(), QString("kick is up"));
+        // part of kick fails: yellow, and things still work
+        mode = 1;
+        QTRY_COMPARE_WITH_TIMEOUT(k.health(), QString("slow"), 5000);
+        QVERIFY(k.error().isEmpty() || !k.error().contains("looks down"));
+        // everything fails: red, nothing new is loaded, and what was on screen stays
+        mode = 2;
+        QTRY_COMPARE_WITH_TIMEOUT(k.health(), QString("down"), 5000);
+        QVERIFY(k.error().contains("looks down"));
+        QVERIFY(!k.loading());
+        const int before = realAsks();
+        k.refresh(); k.loadMore(); k.openChannel(QStringLiteral("alpha"));
+        QTest::qWait(60);
+        QCOMPARE(realAsks(), before);                                       // not one real request while it is red (only the health checks)
+        QCOMPARE(k.streams().size(), 2);
+        // it keeps checking, and when kick answers again it refreshes the list by itself
+        const int listsBefore = realListAsks();
+        mode = 0;
+        QTRY_VERIFY_WITH_TIMEOUT(k.health() != QString("down"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(realListAsks() > listsBefore, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(k.health(), QString("good"), 5000);
+        QTRY_COMPARE(k.streams().size(), 2);
+        QVERIFY(!k.error().contains("looks down"));
+        QVERIFY(changed.size() >= 4);
+        // closing the app stops the checking and clears the light
+        k.close();
+        QCOMPARE(k.health(), QString());
+        const int asked = ft->asked.size();
+        QTest::qWait(300);
+        QCOMPARE(ft->asked.size(), asked);
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+    }
+
     void showMoreAsksForTheNextPageOnlyWhenAsked()
     {
         fresh();

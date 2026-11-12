@@ -2,6 +2,7 @@
 #include "apps/KickClient.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QRandomGenerator>
 #include <QSet>
 #include <QTimer>
@@ -184,7 +185,94 @@ bool KickClient::ready()
 {
     if (!m_open) return false;
     if (!m_net->allowed(kApp)) { setError(QStringLiteral("this app is not allowed to use the internet (settings > apps)")); return false; }
+    if (m_health == QLatin1String("down")) {
+        setError(QStringLiteral("kick looks down right now. nothing new is loaded until it answers again; your downloads still play"));
+        return false;
+    }
     return true;
+}
+
+// ---- the health light ------------------------------------------------------------------------------------
+// While the app is open it asks two tiny questions of Kick's own servers (the list and a channel page, never anything of yours) every
+// minute, and more often while something looks wrong. The first list the app loads counts too, so the light is there at once.
+
+QString KickClient::healthText() const
+{
+    if (m_health == QLatin1String("good")) return QStringLiteral("kick is up");
+    if (m_health == QLatin1String("slow")) return QStringLiteral("kick is slow or partly down");
+    if (m_health == QLatin1String("down")) return QStringLiteral("kick looks down");
+    return QStringLiteral("checking kick");
+}
+
+int KickClient::classifyHealth(const NetReply &r, qint64 ms)
+{
+    if (r.status == 0 || r.status >= 500) return 2;                 // nothing came back, or kick itself failed
+    if (r.status == 429 || r.status == 403 || ms > 5000) return 1;  // refusing for now, or very slow
+    return 0;                                                       // (a 404 means kick answered)
+}
+
+QString KickClient::healthFrom(const QList<int> &last)
+{
+    if (last.isEmpty()) return QString();
+    if (last.size() >= 3 && std::all_of(last.begin(), last.end(), [](int o) { return o == 2; })) return QStringLiteral("down");
+    return std::any_of(last.begin(), last.end(), [](int o) { return o != 0; }) ? QStringLiteral("slow") : QStringLiteral("good");
+}
+
+void KickClient::healthNoted(int outcome)
+{
+    if (!m_open) return;
+    m_healthLast.append(outcome);
+    while (m_healthLast.size() > 3) m_healthLast.removeFirst();
+    const QString now = healthFrom(m_healthLast), was = m_health;
+    if (now != was) {
+        m_health = now;
+        emit healthChanged();
+        if (was == QLatin1String("down") && ready()) {            // kick is back: pick up where we were, with fresh results
+            setError(QString());
+            refresh();
+            if (!m_channel.isEmpty() && !m_channel.value(QStringLiteral("slug")).toString().isEmpty()) openChannel(m_channel.value(QStringLiteral("slug")).toString());
+        } else if (now == QLatin1String("down")) {
+            ++m_listGen; ++m_channelGen;                             // whatever is still on its way is not going to be used
+            m_pending = 0; emit loadingChanged();
+            setError(QStringLiteral("kick looks down right now. nothing new is loaded until it answers again; your downloads still play"));
+        }
+    }
+    healthSchedule();
+}
+
+void KickClient::healthSchedule()
+{
+    if (!m_open) return;
+    if (!m_healthTimer) {
+        m_healthTimer = new QTimer(this);
+        m_healthTimer->setSingleShot(true);
+        connect(m_healthTimer, &QTimer::timeout, this, &KickClient::healthProbe);
+    }
+    const int div = m_health == QLatin1String("down") ? 4 : (m_health == QLatin1String("slow") ? 2 : 1);
+    m_healthTimer->start(qMax(25, m_healthMs / div));
+}
+
+void KickClient::healthProbe()
+{
+    if (!m_open || !m_net->allowed(kApp)) return;
+    const quint64 gen = m_healthGen;
+    struct Tally { int outcome = 0; int failed = 0; int pending = 2; };
+    auto t = std::make_shared<Tally>();
+    auto timer = std::make_shared<QElapsedTimer>();
+    timer->start();
+    NetLimits lim; lim.maxBody = 512 * 1024; lim.timeoutMs = 8000;
+    auto done = [this, gen, t, timer](NetReply r) {
+        if (gen != m_healthGen) return;
+        const int o = classifyHealth(r, timer->elapsed());
+        t->outcome = qMax(t->outcome, o);
+        if (o == 2) ++t->failed;
+        if (--t->pending > 0) return;
+        healthNoted(t->failed >= 2 ? 2 : (t->failed == 1 ? 1 : t->outcome));
+    };
+    QUrl list(QStringLiteral("https://web.kick.com/api/v1/livestreams"));
+    QUrlQuery q; q.addQueryItem(QStringLiteral("limit"), QStringLiteral("1")); list.setQuery(q);
+    m_net->get(kApp, list, done, lim);
+    m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + QLatin1String(kDeveloperSlug)), done, lim);
 }
 
 void KickClient::setError(const QString &e)
@@ -199,7 +287,10 @@ void KickClient::open()
     if (m_open) return;
     m_open = true;
     m_net->open(kApp);
-    emit openChanged();
+    ++m_healthGen;
+    m_healthLast.clear(); m_health.clear();
+    emit openChanged(); emit healthChanged();
+    healthSchedule();
     setError(QString());
     if (!ready()) return;
     requestCategories();
@@ -211,13 +302,15 @@ void KickClient::close()
 {
     if (!m_open) return;
     m_open = false;
-    ++m_listGen; ++m_channelGen;
+    ++m_listGen; ++m_channelGen; ++m_healthGen;
+    if (m_healthTimer) m_healthTimer->stop();
+    m_healthLast.clear(); m_health.clear();
     m_net->close(kApp);
     m_pending = 0;
     m_followChecks = 0;
     m_streams.clear(); m_raw.clear(); m_next.clear(); m_channel.clear(); m_status.clear(); m_searchChannels.clear();
     m_query.clear();
-    emit loadingChanged(); emit streamsChanged(); emit channelChanged(); emit listsChanged(); emit filtersChanged(); emit openChanged();
+    emit loadingChanged(); emit streamsChanged(); emit channelChanged(); emit listsChanged(); emit filtersChanged(); emit openChanged(); emit healthChanged();
 }
 
 void KickClient::refresh()
@@ -254,6 +347,7 @@ void KickClient::requestList(bool more)
         end();
         QVariantList got;
         QString next;
+        if (m_healthLast.isEmpty()) healthNoted(r.status == 0 || r.status >= 500 ? 2 : 0);   // the first list tells us how Kick is, at once
         if (!r.error.isEmpty()) { setError(r.error); return; }
         if (!parseLivestreams(r.body, &got, &next)) { setError(QStringLiteral("kick answered, but not in a form this version understands")); return; }
         m_next = next;
