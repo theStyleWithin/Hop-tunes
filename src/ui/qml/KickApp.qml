@@ -1155,6 +1155,7 @@ FocusScope {
                         objectName: "kickLocalPretendChat"
                         visible: kick.chatMode === "pretend"
                         Layout.fillWidth: true; Layout.fillHeight: true
+                        Layout.minimumWidth: visible ? 120 : 0; Layout.minimumHeight: visible ? 120 : 0   // (a size that changes with it, so the column always lays it out when "pretend" is chosen)
                         look: hop.videoChatLook
                         readonly property var dl: root.dlById[root.playId]
                         seed: "kick|download|" + root.playId
