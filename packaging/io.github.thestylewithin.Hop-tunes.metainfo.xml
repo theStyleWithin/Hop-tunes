@@ -82,6 +82,18 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.9.0" date="2026-11-12">
+      <description>
+        <p>Giving power back to the ordinary: apps inside Hop-tunes, and Kick as the first one.</p>
+        <ul>
+          <li>A new apps tab (off until you switch it on in Settings): small programs that are part of Hop-tunes and open inside its window.</li>
+          <li>Kick, the first app: browse live streams in a wide menu and watch one, with a follow list and a block list that stay on your computer. Nothing plays until you pick a stream, and no Kick account is needed.</li>
+          <li>Kick asks before it uses the internet, lists exactly which sites it contacts, connects only while it is open, and every connection goes through one gateway.</li>
+          <li>Chat beside the stream is none or a made-up pretend chat; Kick's own chat is planned for people who choose to sign in.</li>
+          <li>Flatpak: the network permission is added (used only by the Kick app).</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.8.0" date="2026-11-06">
       <description>
         <p>Cover Pinball, and Notesy the mascot as the new app icon.</p>
