@@ -2084,6 +2084,56 @@ private slots:
         m_app->setGameSetting(QStringLiteral("game"), QStringLiteral("albumfall"));
     }
 
+    // Apps: a tab of its own next to the other collection tabs (desktop), glass tiles, and an app opens inside the window
+    void appsTabHoldsGlassTilesAndAppsOpenInsideTheWindow()
+    {
+        auto *w = window();
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QVERIFY(item("subTab_music") && item("subTab_videos") && item("subTab_apps"));
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
+        QQuickItem *tile = item("appTile_sample");
+        QVERIFY(tile && tile->isVisible());
+        QVERIFY(tile->width() >= 100 && tile->height() > tile->width());       // a glass square with its name under it
+        shot("apps-tab");
+        QVERIFY(click("appTile_sample"));
+        QObject *host = item("appHost");
+        QVERIFY(host);
+        QTRY_VERIFY(host->property("active").toBool());
+        QTRY_VERIFY(item("sampleApp") && item("sampleApp")->isVisible());
+        QVERIFY(m_app->player()->isPlaying());                                  // the music plays on inside an app
+        QVERIFY(!item("appsView")->isVisible() || host->property("visible").toBool());
+        shot("apps-open");
+        // Esc leaves the app and lands on the apps tab; the back button of the phone does the same
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!host->property("active").toBool());
+        QVERIFY(item("appsView")->isVisible());
+        QVERIFY(click("appTile_sample"));
+        QTRY_VERIFY(host->property("active").toBool());
+        QVariant r;
+        QVERIFY(QMetaObject::invokeMethod(w, "goBack", Q_RETURN_ARG(QVariant, r)));
+        QTRY_VERIFY(!host->property("active").toBool());
+        QVERIFY(click("appTile_sample"));
+        QTRY_VERIFY(host->property("active").toBool());
+        w->setProperty("view", QStringLiteral("now playing"));                 // leaving the collection closes it
+        QTRY_VERIFY(!host->property("active").toBool());
+        // phones: no apps tab yet
+        const QSize before = w->size();
+        w->setProperty("view", QStringLiteral("collection"));
+        w->setProperty("forceMobile", true);
+        w->resize(412, 880);
+        QTRY_COMPARE(w->width(), 412);
+        QTRY_VERIFY(!item("subTab_apps")->isVisible());
+        QVERIFY(item("pillTab_apps") == nullptr);
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        QTRY_VERIFY(item("subTab_music")->isVisible());
+        QVERIFY(click("subTab_music"));
+    }
+
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
     void aConnectedControllerOpensNowPlayingWhenASongStarts()
     {

@@ -12,7 +12,7 @@ Item {
     signal addVideoCategoryFolderRequested(string category)
     signal addSectionFolderRequested(string kind)
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
-    property string collectionTab: "music"   // music | videos | pictures | audiobooks | ebooks | podcasts (spec §4.1)
+    property string collectionTab: "music"   // music | videos | pictures | audiobooks | ebooks | podcasts | apps (spec §4.1; apps: desktop only for now)
     function showArtists() { mode = "artists"; collectionTab = "music" }
 
     TrackMenu {
@@ -27,6 +27,14 @@ Item {
         onAccepted: function (name) { var k = hop.createPlaylist(name, pendingPaths); pendingPaths = []; if (k) hop.selectPlaylist(k) }
     }
     // Fixing artist names the scan got wrong: merge into another artist, rename, drag an album onto an artist.
+    // an app opened from the apps tab runs inside this page, over the tabs; leaving the collection closes it
+    AppHost {
+        id: appHost
+        anchors.fill: parent
+        z: 50
+        onLeave: root.collectionTab = "apps"
+    }
+    onVisibleChanged: if (!visible) appHost.close()
     MergeArtistDialog {
         id: mergeDialog
         onDone: function (text, undo) { root.say(text, undo) }
@@ -119,6 +127,7 @@ Item {
     // One step back for the phone's back button. Anything open (a picture, a book, an album) closes first, then the
     // song / album / artist panes step back, then another tab returns to music. At the top of music nothing happens.
     function goBack() {
+        if (appHost.active) { appHost.close(); return }
         if (pictureViewer.visible) { pictureViewer.close(); return }
         if (ebookReader.visible) { ebookReader.close(); return }
         if (root.collectionTab !== "music") {
@@ -205,6 +214,16 @@ Item {
                                           font { family: Theme.font; pixelSize: Theme.fs(22) } }
                     background: Item {}
                 }
+            }
+            AbstractButton {   // apps: small apps that are part of Hop-tunes (desktop for now)
+                id: appsTab
+                visible: !root.phone
+                objectName: "subTab_apps"
+                hoverEnabled: true
+                onClicked: root.collectionTab = "apps"
+                contentItem: Label { text: "apps"; color: root.collectionTab === "apps" ? Theme.accent : (appsTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: Theme.fs(22) } }
+                background: Item {}
             }
             Item { visible: !root.phone; Layout.preferredWidth: 20 }
             // instant search (spec §4.2)
@@ -363,6 +382,12 @@ Item {
                 Layout.fillWidth: true; Layout.fillHeight: true
                 Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
             }
+        }
+        AppsView {
+            visible: root.collectionTab === "apps" && !root.phone
+            onOpenApp: function (id) { appHost.open(id) }
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
         }
         Item { objectName: "scanSpacer"; visible: root.phone && root.scanningEmpty; Layout.fillHeight: true }
 
