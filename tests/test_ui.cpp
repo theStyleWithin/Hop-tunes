@@ -77,7 +77,7 @@ public:
                                           {"thumbnail", QJsonObject{{"url", "https://stream.kick.com/thumbnails/dev.jpg"}}}};
         return QJsonDocument(o).toJson();
     }
-    void get(const QUrl &url, const QByteArray &, const QByteArray &, Done done) override
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, NetLimits, Done done) override
     {
         asked << url;
         NetReply r; r.status = 200;

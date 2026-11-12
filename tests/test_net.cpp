@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
+#include "apps/Hls.h"
 #include "apps/KickClient.h"
+#include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
 #include "apps/WebpDecode.h"
 #include "net/AppNet.h"
@@ -25,12 +27,13 @@ public:
     QList<QUrl> asked;
     QList<QByteArray> agents;
     int aborted = 0;
-    void get(const QUrl &url, const QByteArray &ua, const QByteArray &, Done done) override
+    int delayMs = 0;
+    void get(const QUrl &url, const QByteArray &ua, const QByteArray &, NetLimits, Done done) override
     {
         asked << url;
         agents << ua;
         NetReply r = handler ? handler(url) : NetReply{};
-        QTimer::singleShot(0, this, [done, r] { done(r); });
+        QTimer::singleShot(delayMs, this, [done, r] { done(r); });
     }
     void abortAll() override { ++aborted; }
 };
@@ -579,6 +582,8 @@ private slots:
         QVERIFY(o.available());
         o.setProfileId("../../etc");                                               // a profile id never walks out of the folder
         QVERIFY(!o.folder().contains(".."));
+    }
+
     // Kick's pictures are all WebP: they must be readable without Qt's optional WebP plugin (not in the Android app or every Linux install)
     void webpPicturesAreReadWithoutQtsPlugin()
     {
@@ -592,6 +597,238 @@ private slots:
         QVERIFY(decodeWebp(QByteArray("not a picture at all")).isNull());     // garbage and truncated files are refused, never a crash
         QVERIFY(decodeWebp(webp.left(20)).isNull());
         QVERIFY(decodeWebp(QByteArray()).isNull());
+    }
+    // ---- HLS playlists (how Kick serves past streams and clips) ----
+    void hlsMasterAndMediaPlaylistsAreRead()
+    {
+        const QString master = "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"x\",VALUE=\"y\"\n"
+            "#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID=\"720p60\",NAME=\"720p60\",AUTOSELECT=YES,DEFAULT=YES\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3484773,CODECS=\"avc1.4D401F,mp4a.40.2\",RESOLUTION=1280x720,VIDEO=\"720p60\",FRAME-RATE=60.000\n720p60/playlist.m3u8\n"
+            "#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID=\"1080p60\",NAME=\"1080p60\",AUTOSELECT=YES,DEFAULT=YES\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=6812668,CODECS=\"avc1.4D402A,mp4a.40.2\",RESOLUTION=1920x1080,VIDEO=\"1080p60\",FRAME-RATE=60.000\n1080p60/playlist.m3u8\n"
+            "#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID=\"160p30\",NAME=\"160p\",AUTOSELECT=YES,DEFAULT=YES\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=230000,CODECS=\"avc1.4D401F,mp4a.40.2\",RESOLUTION=284x160,VIDEO=\"160p30\"\n160p30/playlist.m3u8\n";
+        const QUrl base("https://stream.kick.com/a/b/media/hls/master.m3u8");
+        const auto vs = parseHlsMaster(master, base);
+        QCOMPARE(vs.size(), 3);
+        QCOMPARE(vs[0].height, 1080);                                       // best first
+        QCOMPARE(vs[0].name, QString("1080p60"));
+        QCOMPARE(vs[0].url, QUrl("https://stream.kick.com/a/b/media/hls/1080p60/playlist.m3u8"));
+        QCOMPARE(vs[1].height, 720);
+        QCOMPARE(chooseHlsVariant(vs, 0)->height, 1080);
+        QCOMPARE(chooseHlsVariant(vs, 720)->height, 720);
+        QCOMPARE(chooseHlsVariant(vs, 900)->height, 720);                    // the best that fits
+        QCOMPARE(chooseHlsVariant(vs, 100)->height, 160);                    // none fits: the smallest there is
+        QVERIFY(parseHlsMaster("not a playlist", base).isEmpty());
+        QVERIFY(chooseHlsVariant({}, 0) == nullptr);
+
+        const QString media = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:13\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
+            "#EXT-X-PROGRAM-DATE-TIME:2026-11-12T06:57:13.649Z\n#EXTINF:10.000,\n0.ts\n#EXTINF:10.000,\n1.ts\n#EXTINF:3.500,\n2.ts\n#EXT-X-ENDLIST\n";
+        const auto m = parseHlsMedia(media, QUrl("https://stream.kick.com/a/b/media/hls/1080p60/playlist.m3u8"));
+        QVERIFY(m.unsupported.isEmpty() && m.finished);
+        QCOMPARE(m.parts.size(), 3);
+        QCOMPARE(m.parts[2].url, QUrl("https://stream.kick.com/a/b/media/hls/1080p60/2.ts"));
+        QVERIFY(qAbs(m.seconds - 23.5) < 0.001);
+        QVERIFY(!parseHlsMedia(media.left(media.indexOf("#EXT-X-ENDLIST")), base).finished);   // a live one is not finished
+
+        // a clip: one file cut into byte ranges is fetched as the whole file
+        const QString clip = "#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-TARGETDURATION:2\n#EXT-X-BYTERANGE:1000@0\n#EXTINF:2.000,\n2701.ts\n"
+            "#EXT-X-BYTERANGE:500@1000\n#EXTINF:2.000,\n2701.ts\n#EXT-X-BYTERANGE:250\n#EXTINF:1.000,\n2701.ts\n#EXT-X-ENDLIST\n";
+        const auto c = parseHlsMedia(clip, QUrl("https://clips.kick.com/clips/ed/clip_1/playlist.m3u8"));
+        QVERIFY(c.finished && c.unsupported.isEmpty());
+        QCOMPARE(c.parts.size(), 1);
+        QCOMPARE(c.parts[0].url, QUrl("https://clips.kick.com/clips/ed/clip_1/2701.ts"));
+        QCOMPARE(c.parts[0].bytes, qint64(1750));
+        QVERIFY(qAbs(c.seconds - 5.0) < 0.001);
+
+        // encrypted or fragmented-mp4 videos are refused plainly, and junk is not a playlist
+        QVERIFY(parseHlsMedia("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:2,\na.ts\n#EXT-X-ENDLIST\n", base).unsupported.contains("encrypted"));
+        QVERIFY(!parseHlsMedia("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2,\na.m4s\n#EXT-X-ENDLIST\n", base).unsupported.isEmpty());
+        QVERIFY(!parseHlsMedia("<html>nope</html>", base).unsupported.isEmpty());
+        QVERIFY(!parseHlsMedia("#EXTM3U\n#EXT-X-ENDLIST\n", base).unsupported.isEmpty());
+    }
+
+    // ---- downloads of finished streams and clips ----
+private:
+    struct Rig {
+        QTemporaryDir tmp;
+        OfflineStore store;
+        std::unique_ptr<OfflineDownloads> dl;
+        qint64 free = qint64(100) * 1024 * 1024 * 1024;
+        int partRequests = 0;
+        int failParts = 0;                 // this many part requests fail before they work again
+        bool endlist = true;
+        QString secondsEach = "10";
+        QString bandwidth = "1000000";
+    };
+    static QByteArray partBytes(int i) { return QByteArray(3000 + i * 10, char('a' + i)); }
+    void rig(Rig &r, int parts = 6)
+    {
+        fresh();
+        r.store.setDefaultBase(r.tmp.filePath("offline"));
+        r.store.setProfileId("p1");
+        r.store.setFreeProbe([&r](const QString &) { return r.free; });
+        r.dl = std::make_unique<OfflineDownloads>(&net, &r.store);
+        r.dl->setRetryDelayMs(5);
+        ft->delayMs = 15;
+        connect(&net, &AppNet::opened, r.dl.get(), &OfflineDownloads::appOpened);
+        connect(&net, &AppNet::closed, r.dl.get(), &OfflineDownloads::appClosed);
+        ft->handler = [&r, parts](const QUrl &u) -> NetReply {
+            const QString path = u.path();
+            if (path.endsWith("master.m3u8"))
+                return ok("#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=" + r.bandwidth.toUtf8() + ",RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p60/playlist.m3u8\n"
+                          "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=9000000,RESOLUTION=1920x1080,VIDEO=\"1080p60\"\n1080p60/playlist.m3u8\n");
+            if (path.endsWith("720p60/playlist.m3u8") || path.endsWith("1080p60/playlist.m3u8")) {
+                QByteArray t = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:13\n";
+                for (int i = 0; i < parts; ++i) t += "#EXTINF:" + r.secondsEach.toUtf8() + ",\n" + QByteArray::number(i) + ".ts\n";
+                if (r.endlist) t += "#EXT-X-ENDLIST\n";
+                return ok(t);
+            }
+            if (path.endsWith(".ts")) {
+                ++r.partRequests;
+                if (r.failParts > 0) { --r.failParts; NetReply e; e.error = "could not connect"; return e; }
+                return ok(partBytes(path.section('/', -1).section('.', 0, 0).toInt()));
+            }
+            if (path.endsWith("thumb.webp")) return ok(QByteArray("not an image"));
+            NetReply e; e.status = 404; e.error = "the site answered 404"; return e;
+        };
+    }
+    static QVariantMap streamInfo(const QString &id = "s1")
+    {
+        return {{"id", id}, {"kind", "stream"}, {"title", "A long stream"}, {"channel", "alpha"},
+                {"thumb", "https://images.kick.com/video_thumbnails/x/thumb.webp"}, {"url", "https://stream.kick.com/a/b/media/hls/master.m3u8"}, {"maxHeight", 720}};
+    }
+    static QByteArray allParts(int n) { QByteArray b; for (int i = 0; i < n; ++i) b += partBytes(i); return b; }
+    static QByteArray readAll(const QString &p) { QFile f(p); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); }
+
+private slots:
+    void downloadJoinsTheVideoIntoTheOfflineFolder()
+    {
+        Rig r; rig(r);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        const QVariantMap it = r.dl->item("s1");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        QCOMPARE(it.value("quality").toString(), QString("720p60"));                       // the wish was up to 720
+        QCOMPARE(it.value("doneParts").toInt(), 6);
+        QCOMPARE(readAll(r.dl->videoPath("s1")), allParts(6));                            // every piece, in order, once
+        QVERIFY(r.dl->videoPath("s1").startsWith(r.store.folder()));                      // inside the offline folder
+        QCOMPARE(it.value("bytes").toLongLong(), qint64(allParts(6).size()));
+        QVERIFY(!r.dl->busy());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString("you already have this one"));
+        // it survives a restart (a new manager reads the folder)
+        r.store.refresh();
+        QCOMPARE(r.store.usedBytes() >= allParts(6).size(), true);
+        OfflineDownloads again(&net, &r.store);
+        again.reload();
+        QCOMPARE(again.count(), 1);
+        QCOMPARE(again.item("s1").value("state").toString(), QString("done"));
+        QCOMPARE(again.item("s1").value("title").toString(), QString("A long stream"));
+    }
+    void downloadWaitsForTheAppAndStopsAtTheDrive()
+    {
+        Rig r; rig(r, 8);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        // the app closes in the middle: it waits, and carries on when the app opens again, without repeating or skipping a piece
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(r.partRequests >= 2, 5000);
+        net.close("kick");
+        QVERIFY(!r.dl->busy());
+        QCOMPARE(r.dl->item("s1").value("state").toString(), QString("waiting"));
+        const int sent = ft->asked.size();
+        QTest::qWait(100);
+        QCOMPARE(ft->asked.size(), sent);                                               // nothing is fetched while the app is closed
+        net.setAllowed("kick", true);
+        net.open("kick");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(readAll(r.dl->videoPath("s1")), allParts(8));
+
+        // the drive fills up in the middle: it stops with a plain reason and nothing is deleted; room again, resume, done
+        Rig q; rig(q, 8);
+        QSignalSpy fin2(q.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(q.dl->enqueue(streamInfo("s2")), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(q.partRequests >= 3, 5000);
+        q.free = 200LL * 1024 * 1024;                                                   // under the 1 GB the drive must keep free
+        QTRY_COMPARE_WITH_TIMEOUT(q.dl->item("s2").value("state").toString(), QString("limit"), 5000);
+        QVERIFY(q.dl->item("s2").value("error").toString().contains("drive"));
+        const int kept = q.dl->item("s2").value("doneParts").toInt();
+        QVERIFY(kept >= 3 && kept < 8);
+        QVERIFY(QFileInfo::exists(q.dl->videoPath("s2")));                              // what arrived is still there
+        q.free = 100LL * 1024 * 1024 * 1024;
+        q.dl->resume("s2");
+        QTRY_COMPARE_WITH_TIMEOUT(fin2.count(), 1, 5000);
+        QCOMPARE(readAll(q.dl->videoPath("s2")), allParts(8));
+    }
+    void downloadCanBePausedRetriesAndFailsPlainly()
+    {
+        Rig r; rig(r, 8);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(r.partRequests >= 2, 5000);
+        r.dl->pause("s1");
+        QCOMPARE(r.dl->item("s1").value("state").toString(), QString("paused"));
+        const int sent = ft->asked.size();
+        QTest::qWait(100);
+        QVERIFY(ft->asked.size() <= sent + 1);                                          // (a piece already on the way may still arrive, then nothing more)
+        r.dl->resume("s1");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(readAll(r.dl->videoPath("s1")), allParts(8));
+
+        // a piece that fails now and then is retried; one that keeps failing ends in a plain message, and starts over when asked again
+        Rig f; rig(f, 4);
+        f.failParts = 2;
+        QSignalSpy fin(f.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(f.dl->enqueue(streamInfo("s3")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(fin.count(), 1, 5000);
+        QCOMPARE(readAll(f.dl->videoPath("s3")), allParts(4));
+        Rig g; rig(g, 4);
+        g.failParts = 1000;
+        QCOMPARE(g.dl->enqueue(streamInfo("s4")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(g.dl->item("s4").value("state").toString(), QString("failed"), 5000);
+        QVERIFY(g.dl->item("s4").value("error").toString().contains("connect"));
+        g.failParts = 0;
+        QCOMPARE(g.dl->enqueue(streamInfo("s4")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(g.dl->item("s4").value("state").toString(), QString("done"), 5000);
+    }
+    void downloadRefusesWhatItCannotOrShouldNotTake()
+    {
+        Rig r; rig(r, 4);
+        r.endlist = false;                                                              // a stream that is still going
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(r.dl->item("s1").value("state").toString(), QString("failed"), 5000);
+        QVERIFY(r.dl->item("s1").value("error").toString().contains("not finished"));
+        QVERIFY(r.dl->videoPath("s1").isEmpty());
+        // too big for the limit: said before anything is fetched from the video host
+        Rig big; rig(big, 4);
+        big.store.setLimitMB(50);
+        big.secondsEach = "36000"; big.bandwidth = "8000000";                           // ~ 36 GB
+        QCOMPARE(big.dl->enqueue(streamInfo("s2")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(big.dl->item("s2").value("state").toString(), QString("limit"), 5000);
+        QVERIFY(big.dl->item("s2").value("error").toString().contains("limit"));
+        QCOMPARE(big.partRequests, 0);
+        // not an address Kick's app may use, and guests keep nothing
+        QVERIFY(!big.dl->enqueue({{"id", "x"}, {"url", "https://evil.example/m.m3u8"}}).isEmpty());
+        QVERIFY(!big.dl->enqueue({{"id", "x"}, {"url", "http://kick.com/m.m3u8"}}).isEmpty());
+        big.dl->setEnabled(false);
+        QVERIFY(big.dl->enqueue(streamInfo("s9")).contains("guests"));
+    }
+    void deletingADownloadRemovesItsFilesAndOnlyThose()
+    {
+        Rig r; rig(r, 3);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QVERIFY(QFileInfo::exists(r.dl->videoPath("s1")));
+        const QString mine = r.store.folder() + "/keepme.txt";
+        { QFile f(mine); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("x"); }
+        r.dl->remove("s1");
+        QVERIFY(!r.dl->has("s1"));
+        QVERIFY(!QFileInfo::exists(r.store.folder() + "/s1"));
+        QVERIFY(QFileInfo::exists(mine));                                               // a neighbour is never touched
+        r.store.refresh();
+        QVERIFY(r.store.usedBytes() <= 1);
     }
 };
 

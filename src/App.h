@@ -23,6 +23,7 @@
 #include "game/PinballGame.h"
 #ifdef HOPTUNES_NET_APPS
 #include "apps/KickClient.h"
+#include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
 #include "net/AppNet.h"
 #endif
@@ -154,6 +155,7 @@ class App : public QObject {
     // How video is shown: "window" (video with the movie's details and an up-next list), "theater" (a wide video
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
+    Q_PROPERTY(QObject *downloads READ downloadsObject CONSTANT)  // offline downloads of Kick streams and clips (null without the networked apps)
     Q_PROPERTY(QObject *offline READ offlineObject CONSTANT)    // the room set aside for offline Kick (null without the networked apps)
     Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
@@ -284,6 +286,16 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    QObject *downloadsObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_downloads;
+#else
+        return nullptr;
+#endif
+    }
+#ifdef HOPTUNES_NET_APPS
+    OfflineDownloads *downloads() { return &m_downloads; }   // for tests
+#endif
     QObject *offlineObject() {
 #ifdef HOPTUNES_NET_APPS
         return &m_offline;
@@ -581,6 +593,7 @@ private:
     AppNet m_appNet;
     KickClient m_kick{&m_appNet};
     OfflineStore m_offline;
+    OfflineDownloads m_downloads{&m_appNet, &m_offline};
 #endif
     QString m_videoComments = QStringLiteral("off");
     QString m_videoOrientation = QStringLiteral("auto");

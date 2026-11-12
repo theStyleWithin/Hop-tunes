@@ -86,6 +86,9 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_kick, &KickClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
     connect(&m_offline, &OfflineStore::edited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
     m_offline.setDefaultBase(Paths::dataDir() + QStringLiteral("/offline"));
+    connect(&m_appNet, &AppNet::opened, &m_downloads, [this](const QString &a) { if (a == QLatin1String("kick")) m_downloads.appOpened(); });
+    connect(&m_appNet, &AppNet::closed, &m_downloads, [this](const QString &a) { if (a == QLatin1String("kick")) m_downloads.appClosed(); });
+    connect(&m_offline, &OfflineStore::edited, &m_downloads, &OfflineDownloads::reload);   // another drive or folder: look there
 #endif
     connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
     connect(&m_audio, &AudioAnalyzer::beat, &m_musyNote, &MusyNoteGame::onBeat);
@@ -469,6 +472,8 @@ void App::activate(const QString &id, bool guest)
     m_kick.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("kick")).toObject());
     m_offline.setProfileId(guest ? QStringLiteral("guest") : m_profileId);
     m_offline.fromJson(guest ? QJsonObject{} : s.value(QStringLiteral("offline")).toObject());
+    m_downloads.setEnabled(!guest);
+    m_downloads.reload();
     m_appNet.setAllowed(QStringLiteral("kick"), m_netAllowed.contains(QStringLiteral("kick")));
 #endif
     emit appNetChanged();

@@ -30,7 +30,7 @@ public:
         m_nam.setCookieJar(new NoCookies);
         m_nam.setRedirectPolicy(QNetworkRequest::ManualRedirectPolicy);   // AppNet decides where redirects may go
     }
-    void get(const QUrl &url, const QByteArray &ua, const QByteArray &accept, Done done) override
+    void get(const QUrl &url, const QByteArray &ua, const QByteArray &accept, NetLimits limits, Done done) override
     {
         QNetworkRequest req(url);
         req.setRawHeader("User-Agent", ua);
@@ -39,13 +39,13 @@ public:
         req.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
         req.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
         req.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
-        req.setTransferTimeout(AppNet::kTimeoutMs);
+        req.setTransferTimeout(limits.timeoutMs);
         QNetworkReply *rep = m_nam.get(req);
         m_live.insert(rep);
-        QObject::connect(rep, &QNetworkReply::readyRead, rep, [rep] {
-            if (rep->bytesAvailable() > AppNet::kMaxBody) rep->abort();           // too much: stop
+        QObject::connect(rep, &QNetworkReply::readyRead, rep, [rep, limits] {
+            if (rep->bytesAvailable() > limits.maxBody) rep->abort();           // too much: stop
         });
-        QObject::connect(rep, &QNetworkReply::finished, rep, [this, rep, done] {
+        QObject::connect(rep, &QNetworkReply::finished, rep, [this, rep, done, limits] {
             m_live.remove(rep);
             NetReply r;
             r.status = rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -53,7 +53,7 @@ public:
             if (rep->error() == QNetworkReply::OperationCanceledError) r.error = QStringLiteral("stopped");
             else if (rep->error() == QNetworkReply::TimeoutError) r.error = QStringLiteral("kick did not answer in time");
             else if (rep->error() != QNetworkReply::NoError && r.status == 0) r.error = QStringLiteral("could not connect: ") + rep->errorString();
-            else r.body = rep->readAll().left(AppNet::kMaxBody);
+            else r.body = rep->readAll().left(limits.maxBody);
             if (r.error.isEmpty() && (r.status < 200 || r.status >= 400)) r.error = QStringLiteral("the site answered %1").arg(r.status);
             rep->deleteLater();
             done(std::move(r));
@@ -78,7 +78,7 @@ AppNet::~AppNet() = default;
 QStringList AppNet::hostsFor(const QString &app)
 {
     if (app == QLatin1String("kick"))
-        return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("stream.kick.com"), QStringLiteral("files.kick.com")};
+        return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("stream.kick.com"), QStringLiteral("files.kick.com"), QStringLiteral("clips.kick.com")};
     return {};
 }
 
@@ -118,6 +118,7 @@ void AppNet::open(const QString &app)
     m_open.insert(app);
     m_contacted[app].clear();
     emit contactedChanged(app);
+    emit opened(app);
 }
 
 void AppNet::close(const QString &app)
@@ -127,34 +128,35 @@ void AppNet::close(const QString &app)
     m_contacted[app].clear();
     if (m_transport) m_transport->abortAll();
     emit contactedChanged(app);
+    emit closed(app);
 }
 
 void AppNet::setTransport(std::unique_ptr<NetTransport> t) { m_transport = std::move(t); }
 
-void AppNet::get(const QString &app, const QUrl &url, std::function<void(NetReply)> done)
+void AppNet::get(const QString &app, const QUrl &url, std::function<void(NetReply)> done, NetLimits limits)
 {
     QString why;
     if (!m_allowed.contains(app)) { NetReply r; r.error = QStringLiteral("this app is not allowed to use the internet (settings > apps)"); done(r); return; }
     if (!m_open.contains(app)) { NetReply r; r.error = QStringLiteral("the app is not open"); done(r); return; }
     if (!urlAllowed(app, url, &why)) { NetReply r; r.error = why; done(r); return; }
     if (!m_transport) m_transport = std::make_unique<QtTransport>();
-    fetch(app, url, 0, m_epoch.value(app), std::move(done));
+    fetch(app, url, 0, m_epoch.value(app), limits, std::move(done));
 }
 
-void AppNet::fetch(const QString &app, const QUrl &url, int hops, quint64 epoch, std::function<void(NetReply)> done)
+void AppNet::fetch(const QString &app, const QUrl &url, int hops, quint64 epoch, NetLimits limits, std::function<void(NetReply)> done)
 {
     m_contacted[app].insert(url.host().toLower());
     emit contactedChanged(app);
     QPointer<AppNet> self(this);
-    m_transport->get(url, userAgent(), "application/json, image/*;q=0.8, */*;q=0.5",
-        [self, app, url, hops, epoch, done = std::move(done)](NetReply r) mutable {
+    m_transport->get(url, userAgent(), "application/json, image/*;q=0.8, */*;q=0.5", limits,
+        [self, app, url, hops, epoch, limits, done = std::move(done)](NetReply r) mutable {
             if (!self || self->m_epoch.value(app) != epoch) return;                 // the app was closed meanwhile: nothing is delivered
             if (r.status >= 300 && r.status < 400 && r.location.isValid()) {
                 const QUrl next = url.resolved(r.location);
                 QString why;
                 if (hops >= kMaxRedirects) { NetReply e; e.error = QStringLiteral("too many redirects"); done(e); return; }
                 if (!urlAllowed(app, next, &why)) { NetReply e; e.error = QStringLiteral("redirect refused: ") + why; done(e); return; }
-                self->fetch(app, next, hops + 1, epoch, std::move(done));
+                self->fetch(app, next, hops + 1, epoch, limits, std::move(done));
                 return;
             }
             done(std::move(r));
