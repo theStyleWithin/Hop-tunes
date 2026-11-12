@@ -2299,6 +2299,9 @@ private slots:
         QVERIFY(item("kickMore") == nullptr || !item("kickMore")->isVisible());   // (one page only in this fixture)
         for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
         QTRY_VERIFY(item("kickContacted") && item("kickContacted")->property("text").toString().contains("web.kick.com"));
+        // the connection bar sits at the top, right under the app's title bar, above the streams
+        QVERIFY(item("kickStatusBar")->mapToItem(item("kickApp"), QPointF(0, 0)).y() < 5);
+        QVERIFY(item("kickStatusBar")->mapToItem(item("kickApp"), QPointF(0, 0)).y() < item("kickBrowse")->mapToItem(item("kickApp"), QPointF(0, 0)).y());
         shot("kick-browse");
         QVERIFY(click("kickMature"));
         QTRY_VERIFY(item("kickCard_charlie") != nullptr);
@@ -2385,6 +2388,7 @@ private slots:
     {
         auto *w = window();
         auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
         m_app->gateway()->setTransport(std::move(fake));
         KickClient *kick = m_app->kickClient();
         const QSize before = w->size();
@@ -2421,16 +2425,22 @@ private slots:
         const qreal cardY = item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y();
         QVERIFY(click("appCollapse"));
         QTRY_VERIFY(!item("kickSearch")->isVisible());
-        QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() < cardY - 200);       // the streams moved up into the room
+        QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() < cardY - 100);          // the streams moved up into the room
+        const qreal upY = item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y();
         shot("phone-kick-curtain-up");
         QVERIFY(click("appCollapse"));
         QTRY_VERIFY(item("kickSearch")->isVisible());
-        QTRY_VERIFY(qAbs(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() - cardY) < 3);   // and back where it was
+        QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() > upY + 100);         // and back down again (the room is given back)
         QVERIFY(click("appCollapse"));                                                              // leave it pulled up: the search button brings it back (below)
         QTRY_VERIFY(!item("kickSearch")->isVisible());
         QVERIFY(click("kickCard_alpha"));
         QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
         QTRY_VERIFY(item("kickChannelState")->isVisible());
+        // the channel's header, tabs and record row are under the same curtain: pull it down to see them
+        QVERIFY(item("appCollapse")->isVisible());
+        QVERIFY(click("appCollapse"));
+        QTRY_VERIFY(item("kickFollowButton")->isVisible());
+        shot("phone-kick-watch-header");
         QVERIFY(click("kickChat_pretend"));
         QTRY_VERIFY(item("kickPretendChat")->isVisible());
         const QPointF stateTop = item("kickChannelState")->mapToItem(app, QPointF(0, 0));
@@ -2442,6 +2452,20 @@ private slots:
         QVERIFY(item("kickFollowButton")->mapToItem(app, QPointF(item("kickFollowButton")->width(), 0)).x() <= app->width() + 1);
         QVERIFY(item("kickBlockButton")->mapToItem(app, QPointF(item("kickBlockButton")->width(), 0)).x() <= app->width() + 1);
         QVERIFY(click("kickChat_off"));
+        // leaving the app (Android) lets the stream go; coming back asks Kick for the channel again (a fresh stream address, not "Demuxing failed")
+        {
+            auto channelAsks = [&] { int n = 0; for (const QUrl &u : ft->asked) if (u.path() == "/api/v2/channels/alpha") ++n; return n; };
+            const int asked = channelAsks();
+            QVERIFY(QMetaObject::invokeMethod(app, "setBackground", Q_ARG(QVariant, true)));
+            QVERIFY(app->property("inBackground").toBool());
+            QTest::qWait(100);
+            QCOMPARE(channelAsks(), asked);                                               // nothing is fetched while it is away
+            QVERIFY(QMetaObject::invokeMethod(app, "setBackground", Q_ARG(QVariant, false)));
+            QTRY_VERIFY(channelAsks() > asked);                                           // back: the channel is asked for again
+            QTRY_VERIFY(item("kickChannelState")->isVisible());
+        }
+        QVERIFY(click("appCollapse"));                                                    // up again: the chat and video get the room
+        QTRY_VERIFY(!item("kickFollowButton")->isVisible());
         // the bottom "search" button searches Kick while the Kick app is open (not the music), from any page of the app
         QVERIFY(item("navTab_search") && item("navTab_search")->isVisible());
         QVERIFY(click("navTab_search"));
@@ -2524,7 +2548,9 @@ private slots:
         QTRY_VERIFY(item("kickCard_gamehopper") && item("kickCard_gamehopper")->isVisible());
         QVERIFY(click("kickCard_gamehopper"));                                         // the one live channel in the fixture (no stream address, so no player starts)
         QTRY_VERIFY(item("kickRecordRow") && item("kickRecordRow")->isVisible());
-        QVERIFY(item("kickRecordButton")->isVisible() && !item("kickRecordingBar")->isVisible());
+        QVERIFY2(item("kickRecordButton")->isVisible() && !item("kickRecordingBar")->isVisible(),
+                 qPrintable(QStringLiteral("button %1 bar %2 count %3 active %4").arg(item("kickRecordButton")->isVisible()).arg(item("kickRecordingBar")->isVisible()).arg(dl->count())
+                            .arg(QString::fromUtf8(QJsonDocument::fromVariant(item("kickApp")->property("activeRecording")).toJson(QJsonDocument::Compact)))));
         QVERIFY(click("kickRecordButton"));                                            // nothing to record from: said plainly, nothing started
         QCOMPARE(dl->count(), 0);
         QVERIFY(!dl->busy());
@@ -2911,6 +2937,48 @@ private slots:
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 #endif
+
+    // Phones: press the mini player and slide it right to push it away (more room, e.g. for a stream's chat); the tab brings it back.
+    void miniPlayerCanBePushedAwayOnAPhoneAndBroughtBack()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size; ~Restore() { w->setProperty("miniHidden", false); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); } } restore{w, before};
+        w->setProperty("view", QStringLiteral("collection"));
+        w->setProperty("forceMobile", true);
+        w->resize(390, 844);
+        QTRY_COMPARE(w->width(), 390);
+        QQuickItem *mini = item("miniPlayer");
+        QTRY_VERIFY(mini && mini->isVisible());
+        auto center = [&] { return mini->mapToScene(QPointF(mini->width() / 2, mini->height() / 2)).toPoint(); };
+        // a short slide is not enough: it comes back
+        QPoint p = center();
+        QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, p);
+        for (int dx = 8; dx <= 40; dx += 8) QTest::mouseMove(w, p + QPoint(dx, 0), 10);
+        QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, p + QPoint(40, 0));
+        QTRY_COMPARE(mini->x(), 0.0);
+        QVERIFY(!w->property("miniHidden").toBool() && item("miniWrap")->isVisible());
+        // a long slide to the right pushes it away
+        p = center();
+        QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, p);
+        for (int dx = 10; dx <= 260; dx += 25) QTest::mouseMove(w, p + QPoint(dx, 0), 10);
+        QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, p + QPoint(260, 0));
+        QTRY_VERIFY(w->property("miniHidden").toBool());
+        QTRY_VERIFY(!item("miniWrap")->isVisible());
+        QTRY_VERIFY(item("miniPullTab") && item("miniPullTab")->isVisible());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));         // sliding did not open now playing
+        shot("phone-mini-pushed-away");
+        // the tab brings it back
+        QVERIFY(click("miniPullTab"));
+        QTRY_VERIFY(!w->property("miniHidden").toBool());
+        QTRY_VERIFY(item("miniWrap")->isVisible() && !item("miniPullTab")->isVisible());
+        // and on a computer it never hides: the slide does nothing there
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        QTRY_VERIFY(item("miniPlayer")->isVisible());
+        QVERIFY(!item("miniPullTab")->isVisible());
+    }
 
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
     void aConnectedControllerOpensNowPlayingWhenASongStarts()

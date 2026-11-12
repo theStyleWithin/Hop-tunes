@@ -17,6 +17,7 @@ Item {
     readonly property bool started: surface !== null && (url !== "" || file !== "")
     property string loadedUrl: ""
     property bool blocked: false
+    signal retryRequested()                      // "try again" after an error: the page asks Kick for a fresh stream address
 
     function startStream() {
         const want = local ? file : url
@@ -56,6 +57,13 @@ Item {
     Loader { id: qtLoader; anchors.fill: parent; active: hop.videoEngine === "qt" && (root.url !== "" || root.file !== ""); source: active ? "AndroidVideoSurface.qml" : ""; onLoaded: root.surfaceLoaded(item) }
     Component { id: mpvSurface; VideoSurface { objectName: "kickSurface" } }
 
+    PlainButton {
+        objectName: "kickPlayerRetry"
+        anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter; verticalCenterOffset: 56 }
+        visible: !root.local && root.url !== "" && root.error !== ""
+        text: "try again"; implicitHeight: 38
+        onClicked: root.retryRequested()
+    }
     Label {
         anchors.centerIn: parent
         width: parent.width - 40; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap

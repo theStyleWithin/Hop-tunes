@@ -198,6 +198,12 @@ Hop-tunes shows a 6-digit code and an address on kick.com. Open the address in y
 Kick). The session token Kick gives Hop-tunes is kept only in your profile on this device (a guest keeps it until the session ends) and is sent only to kick.com. **sign out**
 forgets it; the imported follows stay. This uses Kick's unofficial TV sign-in, so it may stop working if Kick changes it.
 
+### On a phone: more room
+
+Press the mini player at the bottom and slide it to the right to push it away; tap the little tab at the right edge to bring it back. The round arrow at the top right of the Kick app pulls
+the menu (and on a channel's page the header, tabs and record button) out of the way. If a stream stops with an error, press **try again**; after switching to another app and coming back
+the stream is asked for again automatically.
+
 ### Pulling the menu out of the way
 
 On the streams page, the round arrow at the top right of the Kick app pulls the search box, filters and categories up like a curtain, so the streams get the room; press it again and

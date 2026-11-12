@@ -13,8 +13,24 @@ FocusScope {
     property bool allowed: hop.appNetAllowed("kick")
     property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account | categories
     property bool disconnected: false
+    // Android: switching to another app pauses the phone's video player and the stream's address (it carries a time-limited token) goes stale,
+    // which showed "Demuxing failed" on coming back. So the stream is let go while the app is away and asked for again (with a fresh address) on return.
+    property bool inBackground: false
+    function setBackground(away) {
+        if (inBackground === away) return
+        inBackground = away
+        if (!away && page === "watch" && kick && (kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug)
+    }
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            if (Qt.platform.os !== "android") return          // on a computer a stream keeps playing when the window loses focus
+            const s = Qt.application.state
+            root.setBackground(s === Qt.ApplicationSuspended || s === Qt.ApplicationHidden)
+        }
+    }
     property bool collapsed: false               // the menu above the streams (search, filters, categories) is pulled up out of the way
-    readonly property bool collapsible: !!kick && allowed && !disconnected && page === "browse"
+    readonly property bool collapsible: !!kick && allowed && !disconnected && (page === "browse" || page === "watch")
     function toggleCollapse() { collapsed = !collapsed }
     property string watchTab: "live"             // live | past | clips (on the watch page)
     property string playId: ""                   // the downloaded video being played
@@ -262,7 +278,7 @@ FocusScope {
     // ------------------------------------------------------------------------------------------------------
     Item {
         id: live
-        anchors { fill: parent; bottomMargin: 30 }
+        anchors { fill: parent; topMargin: 30 }               // (the connection bar is above, right under the app's own title bar)
         visible: !!kick && root.allowed && !root.disconnected
 
         // ---- browse: an open, wide menu of live streams (nothing plays until you pick one) ----
@@ -274,13 +290,13 @@ FocusScope {
                 id: curtain
                 objectName: "kickCurtain"
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.collapsed ? 0 : controls.implicitHeight
+                property real reveal: root.collapsed ? 0 : 1          // 1 = fully down, 0 = pulled up; the height follows the content while it moves
+                Behavior on reveal { NumberAnimation { duration: Theme.reduceMotion ? 0 : 200; easing.type: Easing.InOutQuad } }
+                Layout.preferredHeight: controls.implicitHeight * reveal
                 clip: true
-                opacity: root.collapsed ? 0 : 1
+                opacity: reveal
                 enabled: !root.collapsed
-                visible: !root.collapsed || height > 1
-                Behavior on Layout.preferredHeight { NumberAnimation { duration: Theme.reduceMotion ? 0 : 200; easing.type: Easing.InOutQuad } }
-                Behavior on opacity { NumberAnimation { duration: Theme.reduceMotion ? 0 : 160 } }
+                visible: !root.collapsed || reveal > 0.01
                 ColumnLayout {
                     id: controls
                     width: parent.width; spacing: 12
@@ -489,14 +505,37 @@ FocusScope {
         }
 
         // ---- watch: the stream, with follow and block, and the chat ----
+        Flickable {   // on a phone the watch page scrolls when the video, the chat and the menu do not all fit
+            id: watchFlick
+            objectName: "kickWatch"
+            anchors.fill: parent; visible: root.page === "watch"; clip: true
+            contentWidth: width; contentHeight: Math.max(height, watch.implicitHeight)
+            interactive: root.phone && contentHeight > height + 1
+            boundsBehavior: Flickable.StopAtBounds
         GridLayout {
             id: watch
-            objectName: "kickWatch"
-            anchors.fill: parent; visible: root.page === "watch"; columns: root.phone ? 1 : 2; columnSpacing: 22; rowSpacing: 10
+            width: watchFlick.width; height: Math.max(watchFlick.height, root.phone ? watch.implicitHeight : 0)
+            columns: root.phone ? 1 : 2; columnSpacing: 22; rowSpacing: 10
             ColumnLayout {
                 Layout.fillWidth: true; Layout.fillHeight: !root.phone; spacing: 12
+                Item {   // the curtain over the channel's header, tabs and record row (pulled up by the arrow at the top right of the app)
+                    id: watchCurtain
+                    objectName: "kickWatchCurtain"
+                    Layout.fillWidth: true
+                    property real reveal: root.collapsed ? 0 : 1
+                    Behavior on reveal { NumberAnimation { duration: Theme.reduceMotion ? 0 : 200; easing.type: Easing.InOutQuad } }
+                    Layout.preferredHeight: watchControls.implicitHeight * reveal
+                    clip: true
+                    opacity: reveal
+                    enabled: !root.collapsed
+                    visible: !root.collapsed || reveal > 0.01
+                    ColumnLayout {
+                    id: watchControls
+                    width: parent.width; spacing: 12
+                GridLayout {
+                    columns: root.phone ? 1 : 2; columnSpacing: 12; rowSpacing: 8; Layout.fillWidth: true
                 RowLayout {
-                    spacing: 12; Layout.fillWidth: true
+                    spacing: 12; Layout.fillWidth: true; Layout.minimumWidth: 0
                     PlainButton { objectName: "kickBackToStreams"; text: root.phone ? "‹" : "‹ streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
                     Pic { visible: !root.phone; Layout.preferredWidth: 44; Layout.preferredHeight: 44; address: kick.channel.avatar || ""; round: true
                           backing: Qt.hsla(((kick.channel.slug || "a").charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
@@ -510,6 +549,9 @@ FocusScope {
                         }
                         Label { text: kick.channel.title || ""; color: Theme.text2; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     }
+                }
+                RowLayout {
+                    spacing: 8; Layout.fillWidth: root.phone
                     PlainButton { objectName: "kickFollowButton"; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 104 : -1
                                   text: kick.isFollowing(kick.channel.slug || "") ? "★ following" : "☆ follow"
                                   onClicked: kick.isFollowing(kick.channel.slug) ? kick.unfollow(kick.channel.slug) : kick.follow(kick.channel.slug) }
@@ -517,6 +559,7 @@ FocusScope {
                                   onClicked: root.addMenu("channels", ({ slug: kick.channel.slug }), kick.channel.slug || "", Qt.point(0, height)) }
                     PlainButton { objectName: "kickBlockButton"; text: "block"; danger: true; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 76 : -1
                                   onClicked: { const s = kick.channel.slug; root.lastBlocked = s; kick.block(s); undoTimer.restart(); root.goBack() } }
+                }
                 }
                 RowLayout {   // what to look at: the live stream, finished streams (to download), clips
                     spacing: 8; Layout.fillWidth: true
@@ -539,6 +582,8 @@ FocusScope {
                                   onClicked: hop.downloads.stopRecording(root.activeRecording.id) }
                     Label { Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight; color: !root.activeRecording && root.recordMessage !== "" ? Theme.danger : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
                             text: root.activeRecording ? "kept in your downloads when you stop" : (root.recordMessage !== "" ? root.recordMessage : "keeps this stream from now on, in your offline downloads") }
+                }
+                    }
                 }
                 ColumnLayout {   // finished streams and clips: pick one to download for offline viewing
                     id: library
@@ -620,7 +665,8 @@ FocusScope {
                     Layout.preferredHeight: root.phone ? width * 9 / 16 : -1
                     KickPlayer {
                         anchors.fill: parent
-                        url: root.page === "watch" && root.watchTab === "live" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
+                        url: root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
+                        onRetryRequested: { if ((kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug) }
                     }
                     Rectangle {
                         anchors.fill: parent; color: Theme.panel; border { width: 1; color: Theme.line }
@@ -640,6 +686,7 @@ FocusScope {
             ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
                 visible: root.watchTab === "live"
                 Layout.preferredWidth: root.phone ? -1 : 360; Layout.fillWidth: root.phone; Layout.fillHeight: true; spacing: 8
+                Layout.minimumHeight: root.phone ? 230 : 0                            // the chat is never squeezed to a sliver; the page scrolls instead
                 RowLayout {
                     spacing: 8
                     Label { text: "chat"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
@@ -665,6 +712,7 @@ FocusScope {
                 Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
                 Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
             }
+        }
         }
 
         // ---- categories: pick the chips under the search box (swap Kick's popular ones for what you care about) ----
@@ -1041,7 +1089,7 @@ FocusScope {
     // the honest bar: what is connected, and a way to cut it
     RowLayout {
         objectName: "kickStatusBar"
-        anchors { left: parent.left; right: parent.right; bottom: parent.bottom } height: 26
+        anchors { left: parent.left; right: parent.right; top: parent.top } height: 26
         visible: !!kick && root.allowed
         spacing: 10
         Rectangle { width: 8; height: 8; radius: 4; color: root.disconnected ? Theme.dim : "#53fc18" }

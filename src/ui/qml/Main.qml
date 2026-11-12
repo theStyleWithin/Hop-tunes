@@ -11,6 +11,7 @@ ApplicationWindow {
     // phones and tablets: bottom bar / side drawer (MobileNav.qml) instead of the desktop's top pivots
     property bool forceMobile: false   // tests and screenshots
     readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
+    property bool miniHidden: false                // the phone's mini player pushed away to the right for now
     readonly property bool tablet: Math.min(width, height) >= 600   // a phone turned sideways is still a phone
     Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
     readonly property int railWidth: !mobileNav || !tablet ? 0 : (hop.navStyle === "drawer" ? 240 : 84)
@@ -204,14 +205,56 @@ ApplicationWindow {
             PhoneProfile { onGo: function (v) { win.view = v } }
         }
 
-        MiniPlayer {
-            compact: win.mobileNav && !win.tablet
+        Item {   // the mini player; on a phone, press and slide it to the right to push it away (more room for the chat), tap the little tab to bring it back
+            id: miniWrap
+            objectName: "miniWrap"
+            readonly property bool compactBar: win.mobileNav && !win.tablet
             Layout.fillWidth: true
-            Layout.leftMargin: win.railWidth + (compact ? 12 : 0)
-            Layout.rightMargin: compact ? 12 : 0
-            Layout.bottomMargin: compact ? 6 : 0
-            visible: win.view !== "now playing"
-            onOpenNowPlaying: win.view = "now playing"
+            Layout.leftMargin: win.railWidth + (compactBar ? 12 : 0)
+            Layout.rightMargin: compactBar ? 12 : 0
+            Layout.bottomMargin: compactBar ? 6 : 0
+            implicitHeight: mini.implicitHeight
+            visible: win.view !== "now playing" && !(compactBar && win.miniHidden)
+            MiniPlayer {
+                id: mini
+                objectName: "miniPlayer"
+                width: parent.width; height: parent.height
+                compact: miniWrap.compactBar
+                onOpenNowPlaying: win.view = "now playing"
+                opacity: 1 - Math.min(0.6, Math.max(0, x) / Math.max(1, width))
+                DragHandler {
+                    id: miniDrag
+                    enabled: miniWrap.compactBar
+                    target: mini
+                    xAxis { enabled: true; minimum: 0 }
+                    yAxis.enabled: false
+                    onActiveChanged: {
+                        if (active) return
+                        if (mini.x > miniWrap.width * 0.3) slideOut.start()           // far enough: away it goes
+                        else slideBack.start()                                           // not far: it comes back
+                    }
+                }
+                NumberAnimation { id: slideBack; target: mini; property: "x"; to: 0; duration: Theme.reduceMotion ? 0 : 160; easing.type: Easing.OutCubic }
+                SequentialAnimation {
+                    id: slideOut
+                    NumberAnimation { target: mini; property: "x"; to: miniWrap.width + 24; duration: Theme.reduceMotion ? 0 : 160; easing.type: Easing.InCubic }
+                    ScriptAction { script: { win.miniHidden = true; mini.x = 0 } }
+                }
+            }
+        }
+        Item {   // the tab that brings a pushed-away mini player back
+            id: miniTab
+            objectName: "miniPullTab"
+            Layout.alignment: Qt.AlignRight
+            Layout.rightMargin: 12; Layout.bottomMargin: 6
+            implicitWidth: 44; implicitHeight: 40
+            visible: miniWrap.compactBar && win.miniHidden && win.view !== "now playing"
+            Rectangle { anchors.fill: parent; radius: 20; color: Theme.panel; border { width: 1; color: Theme.line } }
+            Icon { anchors.centerIn: parent; kind: "down"; ink: Theme.text2; width: 18; height: 18; rotation: 90 }      // pointing back to the left
+            TapHandler { onTapped: win.miniHidden = false }
+            DragHandler { xAxis { enabled: true; maximum: 0 } yAxis.enabled: false; onActiveChanged: if (!active && centroid.position.x < -20) win.miniHidden = false }
+            Accessible.role: Accessible.Button
+            Accessible.name: "show the player"
         }
         Item {   // room for the phone's bottom bar
             visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer" && win.view !== "now playing"
