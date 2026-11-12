@@ -169,7 +169,7 @@ of the watch page and the chat below it. The Android app carries the internet pe
 - **Allowing it.** The first time you open Kick it asks, and lists exactly which sites it will contact (kick.com, web.kick.com,
   images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
   You can take the permission back any time in **settings → apps settings → kick**. It uses the internet only while the app is open, and the bar at
-  the bottom shows what is connected, with a **disconnect** button. Nothing is kept on disk and no cookies are stored.
+  the bar at the top shows what is connected (there is deliberately no disconnect button, so a stray tap cannot cut it; take the permission back in settings). Nothing is kept on disk and no cookies are stored.
 - **Browsing.** Search, pick a category, sort by most viewers or featured, choose a language. Adult (18+) streams are hidden unless you tick
   **show 18+**. **show more** and **refresh** are buttons: Hop-tunes never loads more in the background.
 - **The developer's stream.** When the developer of Hop-tunes (gamehopper) is live, their stream takes the first card of the default feed, marked

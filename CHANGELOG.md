@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+- **Kick: no disconnect button.** The yellow "disconnect" button in the status bar is gone, so a stray tap can no longer cut the connection. The bar still shows what is connected; taking the permission back in settings → apps settings → kick still closes it.
+
 ### Fixed
 - **Kick stream pictures.** Kick sends every stream picture and profile picture as WebP, which Qt can only read through an optional plugin that the Android app (and some Linux installs) do not have, so the cards showed plain tiles. Hop-tunes now reads WebP itself (with libwebp), on desktop and, once the Android build carries it, on the phone.
 

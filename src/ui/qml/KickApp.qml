@@ -12,7 +12,6 @@ FocusScope {
     readonly property var kick: hop.kick
     property bool allowed: hop.appNetAllowed("kick")
     property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account | categories
-    property bool disconnected: false
     // Android: switching to another app pauses the phone's video player and the stream's address (it carries a time-limited token) goes stale,
     // which showed "Demuxing failed" on coming back. So the stream is let go while the app is away and asked for again (with a fresh address) on return.
     property bool inBackground: false
@@ -42,7 +41,7 @@ FocusScope {
         }
     }
     property bool collapsed: false               // the menu above the streams (search, filters, categories) is pulled up out of the way
-    readonly property bool collapsible: !!kick && allowed && !disconnected && (page === "browse" || page === "watch")
+    readonly property bool collapsible: !!kick && allowed && (page === "browse" || page === "watch")
     function toggleCollapse() { collapsed = !collapsed }
     property string watchTab: "live"             // live | past | clips (on the watch page)
     // phones: a tap on a stream asks first, so a fat finger while scrolling does not open one (settings can turn that off)
@@ -131,13 +130,13 @@ FocusScope {
     function openChannel(slug) { kick.openChannel(slug); watchTab = "live"; dlMessage = ""; recordMessage = ""; page = "watch" }
     // the phone's bottom "search" button, while this app is open: find a streamer here instead of searching the music
     function openSearch() {
-        if (!kick || !allowed || disconnected) return false
+        if (!kick || !allowed) return false
         if (page !== "browse") { page = "browse"; kick.closeChannel(); watchTab = "live" }
         collapsed = false                                                    // searching brings the menu back down
         searchBox.forceActiveFocus()
         return true
     }
-    readonly property bool searchActive: !!kick && allowed && !disconnected && page === "browse" && searchBox.activeFocus
+    readonly property bool searchActive: !!kick && allowed && page === "browse" && searchBox.activeFocus
     // "add to playlist": a menu of the playlists that can hold this (channels, clips or past streams); a tick means it is already in
     property var plChoices: []
     property var plEntry: ({})
@@ -263,7 +262,7 @@ FocusScope {
             RowLayout {
                 Layout.topMargin: 10; spacing: 12
                 PlainButton { objectName: "kickAllow"; text: hop.guest ? "allow for this session" : "allow for this profile"; primary: true
-                              onClicked: { hop.setAppNetAllowed("kick", true); root.allowed = true; root.disconnected = false; kick.open() } }
+                              onClicked: { hop.setAppNetAllowed("kick", true); root.allowed = true; kick.open() } }
                 PlainButton { objectName: "kickNotNow"; text: "not now"; onClicked: root.leave() }
                 Item { Layout.fillWidth: true }
             }
@@ -280,27 +279,13 @@ FocusScope {
         }
     }
 
-    Rectangle {   // after "disconnect"
-        objectName: "kickDisconnected"
-        visible: !!kick && root.allowed && root.disconnected
-        anchors.centerIn: parent; width: Math.min(parent.width - 40, 480); height: dc.implicitHeight + 48; color: Theme.panel; border { width: 1; color: Theme.line }
-        ColumnLayout {
-            id: dc
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 24 } spacing: 12
-            Label { text: "disconnected"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(26); weight: Font.Light } }
-            Label { text: "kick.com is not being contacted. nothing is loaded until you reconnect."; color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true
-                    font { family: Theme.font; pixelSize: Theme.fs(15) } }
-            PlainButton { objectName: "kickReconnect"; text: "reconnect"; primary: true; onClicked: { root.disconnected = false; root.page = "browse"; kick.open() } }
-        }
-    }
-
     // ------------------------------------------------------------------------------------------------------
     // the working app
     // ------------------------------------------------------------------------------------------------------
     Item {
         id: live
         anchors { fill: parent; topMargin: 30 }               // (the connection bar is above, right under the app's own title bar)
-        visible: !!kick && root.allowed && !root.disconnected
+        visible: !!kick && root.allowed
 
         // ---- browse: an open, wide menu of live streams (nothing plays until you pick one) ----
         ColumnLayout {
@@ -1165,20 +1150,14 @@ FocusScope {
         Timer { id: undoTimer; interval: 8000 }
     }
 
-    // the honest bar: what is connected, and a way to cut it
+    // the honest bar: what is connected (no button here on purpose: a stray tap must not cut the connection)
     RowLayout {
         objectName: "kickStatusBar"
         anchors { left: parent.left; right: parent.right; top: parent.top } height: 26
         visible: !!kick && root.allowed
         spacing: 10
-        Rectangle { width: 8; height: 8; radius: 4; color: root.disconnected ? Theme.dim : "#53fc18" }
+        Rectangle { width: 8; height: 8; radius: 4; color: "#53fc18" }
         Label { objectName: "kickContacted"; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
-                text: root.disconnected ? "not connected" : "connected to " + (kick && kick.contacted.length > 0 ? kick.contacted.join(" · ") : "kick.com when you ask for something") }
-        AbstractButton {
-            objectName: "kickDisconnect"; visible: !root.disconnected; focusPolicy: Qt.NoFocus
-            onClicked: { kick.close(); root.disconnected = true }
-            contentItem: Label { text: "disconnect"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(12); underline: true } }
-            background: Item {}
-        }
+                text: "connected to " + (kick && kick.contacted.length > 0 ? kick.contacted.join(" · ") : "kick.com when you ask for something") }
     }
 }

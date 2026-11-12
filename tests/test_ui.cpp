@@ -2346,17 +2346,10 @@ private slots:
         kick->block("bravo");
         QTRY_VERIFY(item("kickCard_bravo") == nullptr);
         QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("blocked").toArray().contains("bravo"));
-        // 4. disconnect drops everything and says so; reconnect asks again
-        QVERIFY(click("kickDisconnect"));
-        QTRY_VERIFY(item("kickDisconnected") && item("kickDisconnected")->isVisible());
-        QVERIFY(!m_app->gateway()->isOpen("kick"));
-        QVERIFY(ft->aborted >= 1);
-        const int sentAtCut = ft->asked.size();
-        QTest::qWait(300);
-        QCOMPARE(ft->asked.size(), sentAtCut);
-        QVERIFY(click("kickReconnect"));
-        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
-        QTRY_VERIFY(item("kickCard_bravo") == nullptr);                           // still blocked after reconnecting
+        // 4. the status bar only tells; there is no disconnect button to hit by accident
+        QVERIFY(item("kickContacted") != nullptr);
+        QVERIFY(item("kickDisconnect") == nullptr);
+        QVERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
         // 5. settings: the permission and the lists, and taking the permission back closes the app's connection
         w->setProperty("view", QStringLiteral("settings"));
         QTRY_VERIFY(item("kickNetChoice") != nullptr);
