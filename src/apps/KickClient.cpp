@@ -494,3 +494,8 @@ void KickClient::refreshFollowing()
 }
 
 } // namespace hop
+
+bool hop::KickClient::streamAllowed(const QString &url) const
+{
+    return hop::AppNet::streamUrlAllowed(QStringLiteral("kick"), QUrl(url));
+}

@@ -80,6 +80,7 @@ public:
     Q_INVOKABLE void search(const QString &text);  // "" goes back to the live list
     Q_INVOKABLE void openChannel(const QString &slugOrLink);   // fills `channel` (title, viewers, stream address, chat room)
     Q_INVOKABLE void closeChannel();
+    Q_INVOKABLE bool streamAllowed(const QString &url) const;   // the Qt Multimedia player (Android) asks before it opens a stream
     Q_INVOKABLE void refreshFollowing();           // one lookup per followed channel, only when asked
 
     // the two lists kept on this computer only

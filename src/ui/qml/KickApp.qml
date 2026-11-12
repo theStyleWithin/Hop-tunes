@@ -13,6 +13,7 @@ FocusScope {
     property bool allowed: hop.appNetAllowed("kick")
     property string page: "browse"               // browse | watch
     property bool disconnected: false
+    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
     property string lastBlocked: ""
     signal leave()
 
@@ -159,12 +160,12 @@ FocusScope {
             id: browse
             objectName: "kickBrowse"
             anchors.fill: parent; visible: root.page === "browse"; spacing: 12
-            RowLayout {
-                spacing: 10; Layout.fillWidth: true
+            GridLayout {
+                columns: root.phone ? 1 : 2; rowSpacing: 8; columnSpacing: 10; Layout.fillWidth: true
                 TextField {
                     id: searchBox
                     objectName: "kickSearch"
-                    Layout.fillWidth: true; implicitHeight: 42; selectByMouse: true
+                    Layout.fillWidth: true; implicitHeight: root.phone ? 46 : 42; selectByMouse: true
                     placeholderText: "search channels, or paste a kick.com link"
                     font { family: Theme.font; pixelSize: Theme.fs(16) } color: Theme.text; placeholderTextColor: Theme.dim
                     background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.border } }
@@ -173,6 +174,12 @@ FocusScope {
                         else kick.search(text)
                     }
                 }
+                Flow {   // sort, language, 18+, refresh: one row on a computer, wraps on a phone
+                    id: filters
+                    spacing: 10
+                    Layout.fillWidth: root.phone
+                    Layout.preferredWidth: root.phone ? -1 : childrenRect.width
+                    Layout.preferredHeight: childrenRect.height
                 AbstractButton {
                     objectName: "kickSort"; hoverEnabled: true; focusPolicy: Qt.NoFocus
                     onClicked: kick.sort = kick.sort === "viewers" ? "featured" : "viewers"
@@ -202,6 +209,7 @@ FocusScope {
                     background: Item {}
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
+                }
             }
             RowLayout {   // following: kept on this computer only
                 objectName: "kickFollowingRow"
@@ -275,7 +283,7 @@ FocusScope {
                             Rectangle {   // the card's menu
                                 objectName: "kickCardMenu_" + modelData.slug
                                 anchors { right: still.right; top: still.top; margins: 8 }
-                                width: 28; height: 24; radius: 4; color: Qt.rgba(0, 0, 0, 0.6); visible: hit.containsMouse || cardMenu.visible
+                                width: root.phone ? 40 : 28; height: root.phone ? 34 : 24; radius: 4; color: Qt.rgba(0, 0, 0, 0.6); visible: root.phone || hit.containsMouse || cardMenu.visible
                                 Label { anchors.centerIn: parent; text: "⋯"; color: "#fff"; font.pixelSize: 16 }
                                 MouseArea { anchors.fill: parent; onClicked: cardMenu.popup() }
                                 Menu {
@@ -319,34 +327,36 @@ FocusScope {
         }
 
         // ---- watch: the stream, with follow and block, and the chat ----
-        RowLayout {
+        GridLayout {
             id: watch
             objectName: "kickWatch"
-            anchors.fill: parent; visible: root.page === "watch"; spacing: 22
+            anchors.fill: parent; visible: root.page === "watch"; columns: root.phone ? 1 : 2; columnSpacing: 22; rowSpacing: 10
             ColumnLayout {
-                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
+                Layout.fillWidth: true; Layout.fillHeight: !root.phone; spacing: 12
                 RowLayout {
                     spacing: 12; Layout.fillWidth: true
-                    PlainButton { objectName: "kickBackToStreams"; text: "‹ streams"; implicitHeight: 36; onClicked: root.goBack() }
-                    Pic { Layout.preferredWidth: 44; Layout.preferredHeight: 44; address: kick.channel.avatar || ""; round: true
+                    PlainButton { objectName: "kickBackToStreams"; text: root.phone ? "‹" : "‹ streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                    Pic { visible: !root.phone; Layout.preferredWidth: 44; Layout.preferredHeight: 44; address: kick.channel.avatar || ""; round: true
                           backing: Qt.hsla(((kick.channel.slug || "a").charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
                     ColumnLayout {
-                        spacing: 0; Layout.fillWidth: true
-                        RowLayout { spacing: 10
-                            Label { objectName: "kickChannelName"; text: kick.channel.name || ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(22) } }
+                        spacing: 0; Layout.fillWidth: true; Layout.minimumWidth: 0
+                        RowLayout { spacing: 10; Layout.fillWidth: true
+                            Label { objectName: "kickChannelName"; text: kick.channel.name || ""; color: Theme.strong; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0
+                                    font { family: Theme.font; pixelSize: Theme.fs(22) } }
                             Pill { visible: kick.channel.live === true; text: "LIVE"; color: "#fff"; background: Rectangle { color: "#e5484d"; radius: 3 } }
-                            Label { visible: kick.channel.live === true; text: (kick.channel.viewersText || "") + " watching"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                            Label { visible: kick.channel.live === true && !root.phone; text: (kick.channel.viewersText || "") + " watching"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                         }
-                        Label { text: kick.channel.title || ""; color: Theme.text2; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+                        Label { text: kick.channel.title || ""; color: Theme.text2; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                     }
-                    PlainButton { objectName: "kickFollowButton"; implicitHeight: 36
+                    PlainButton { objectName: "kickFollowButton"; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 104 : -1
                                   text: kick.isFollowing(kick.channel.slug || "") ? "★ following" : "☆ follow"
                                   onClicked: kick.isFollowing(kick.channel.slug) ? kick.unfollow(kick.channel.slug) : kick.follow(kick.channel.slug) }
-                    PlainButton { objectName: "kickBlockButton"; text: "block"; danger: true; implicitHeight: 36
+                    PlainButton { objectName: "kickBlockButton"; text: "block"; danger: true; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 76 : -1
                                   onClicked: { const s = kick.channel.slug; root.lastBlocked = s; kick.block(s); undoTimer.restart(); root.goBack() } }
                 }
                 Item {
-                    Layout.fillWidth: true; Layout.fillHeight: true
+                    Layout.fillWidth: true; Layout.fillHeight: !root.phone
+                    Layout.preferredHeight: root.phone ? width * 9 / 16 : -1
                     KickPlayer {
                         anchors.fill: parent
                         url: root.page === "watch" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
@@ -367,7 +377,7 @@ FocusScope {
                 }
             }
             ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
-                Layout.preferredWidth: 360; Layout.fillHeight: true; spacing: 8
+                Layout.preferredWidth: root.phone ? -1 : 360; Layout.fillWidth: root.phone; Layout.fillHeight: true; spacing: 8
                 RowLayout {
                     spacing: 8
                     Label { text: "chat"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }

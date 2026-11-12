@@ -10,15 +10,20 @@ Item {
     id: root
     objectName: "kickPlayer"
     property string url: ""                      // the live stream's address ("" = nothing playing, no engine started)
-    readonly property var surface: mpvLoader.item ? mpvLoader.item : gstLoader.item
-    readonly property string error: surface ? String(surface.error) : ""
+    readonly property var surface: mpvLoader.item ? mpvLoader.item : (gstLoader.item ? gstLoader.item : qtLoader.item)
+    readonly property string error: blocked ? "that stream address is not one this app may open" : (surface ? String(surface.error) : "")
     readonly property bool started: surface !== null && url !== ""
     property string loadedUrl: ""
+    property bool blocked: false
 
     function startStream() {
         if (!surface || url === "" || loadedUrl === url) return
         loadedUrl = url
-        surface.openStream(url)
+        if (hop.videoEngine === "qt") {          // Android: Qt Multimedia plays the address itself, so it is checked here first
+            if (!hop.kick.streamAllowed(url)) { blocked = true; return }
+            blocked = false
+            surface.source = url
+        } else surface.openStream(url)
         surface.play()
     }
     onUrlChanged: {
@@ -39,6 +44,7 @@ Item {
     Rectangle { anchors.fill: parent; color: "black" }
     Loader { id: mpvLoader; anchors.fill: parent; active: hop.videoEngine === "mpv" && root.url !== ""; sourceComponent: mpvSurface; onLoaded: root.surfaceLoaded(item) }
     Loader { id: gstLoader; anchors.fill: parent; active: hop.videoEngine === "gstreamer" && root.url !== ""; source: active ? "GstVideoSurfaceView.qml" : ""; onLoaded: root.surfaceLoaded(item) }
+    Loader { id: qtLoader; anchors.fill: parent; active: hop.videoEngine === "qt" && root.url !== ""; source: active ? "AndroidVideoSurface.qml" : ""; onLoaded: root.surfaceLoaded(item) }
     Component { id: mpvSurface; VideoSurface { objectName: "kickSurface" } }
 
     Label {

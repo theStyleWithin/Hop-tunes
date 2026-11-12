@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
 #include "apps/KickClient.h"
+#include "apps/WebpDecode.h"
 #include "net/AppNet.h"
 
 #include <QDirIterator>
@@ -450,6 +451,20 @@ private slots:
         k.close();
         QVERIFY(k.streams().isEmpty());
         QVERIFY(!net.isOpen("kick"));
+    }
+    // Kick's pictures are all WebP: they must be readable without Qt's optional WebP plugin (not in the Android app or every Linux install)
+    void webpPicturesAreReadWithoutQtsPlugin()
+    {
+        if (!webpDecoderBuilt()) QSKIP("built without libwebp");
+        const QByteArray webp = QByteArray::fromBase64("UklGRkoAAABXRUJQVlA4ID4AAAAwAwCdASogABIAPjEYikOiIaEUBAAgAwSygDsAfgAAQZQQAP70UR//+YJX5Bu1D//84i/OIvziL/zcAAAAAA==");        // 32x18, a red picture
+        const QImage img = decodeWebp(webp);
+        QVERIFY(!img.isNull());
+        QCOMPARE(img.size(), QSize(32, 18));
+        const QColor c = img.pixelColor(16, 9);
+        QVERIFY(c.red() > 170 && c.green() < 80 && c.blue() < 80);
+        QVERIFY(decodeWebp(QByteArray("not a picture at all")).isNull());     // garbage and truncated files are refused, never a crash
+        QVERIFY(decodeWebp(webp.left(20)).isNull());
+        QVERIFY(decodeWebp(QByteArray()).isNull());
     }
 };
 
