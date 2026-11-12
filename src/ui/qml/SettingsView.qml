@@ -97,6 +97,7 @@ Item {
     }
 
     Flickable {
+        objectName: "settingsFlick"
         id: settingsFlick
         anchors.fill: parent
         contentHeight: col.implicitHeight + 40
@@ -526,6 +527,24 @@ Item {
                 onPicked: function (v) { hop.appsEnabled = v === "appsOn" }
             }
         }
+        SRow {   // the little description that pops up on an app's tile
+            objectName: "appHintsRow"
+            visible: hop.appsEnabled
+            spacing: 16
+            Label { text: "descriptions"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "appHintsChoice"
+                options: [["hintsOn", "show"], ["hintsOff", "hide"]]
+                value: hop.appHints ? "hintsOn" : "hintsOff"
+                onPicked: function (v) { hop.appHints = v === "hintsOn" }
+            }
+        }
+        Label {
+            visible: hop.appsEnabled
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "the short line that pops up when you hover over (or hold your finger on) an app's tile, like what kick is and that it uses the internet. hide it once you know your way around."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         Label {
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
             text: "apps are small programs that are part of hop-tunes and open inside its window. they are off until you switch them on here, so a fresh hop-tunes shows every other tab and stays exactly as quiet as before. an app that needs the internet says so and asks you first."
@@ -547,8 +566,72 @@ Item {
         Label {
             visible: hop.netAppsBuilt && hop.appsEnabled
             wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
-            text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
+            text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
+        SRow {   // phones: ask before opening a stream that was tapped
+            objectName: "kickAskRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact
+            spacing: 16
+            Label { text: "opening a stream"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "kickAskChoice"
+                options: [["kickAskYes", "ask first"], ["kickAskNo", "open right away"]]
+                value: hop.kick && hop.kick.askBeforeOpening ? "kickAskYes" : "kickAskNo"
+                onPicked: function (v) { hop.kick.askBeforeOpening = (v === "kickAskYes") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "on a phone, tapping a stream in the kick app asks \u201cwatch this stream?\u201d first, so a slip of the finger while you scroll does not open one."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
+        SRow {   // only English streams, always (also on the streams page)
+            objectName: "kickEnglishRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
+            spacing: 16
+            Label { text: "kick language"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "kickEnglishChoice"
+                options: [["kickEngAll", "all languages"], ["kickEngOnly", "english only"]]
+                value: hop.kick && hop.kick.englishOnly ? "kickEngOnly" : "kickEngAll"
+                onPicked: function (v) { hop.kick.englishOnly = (v === "kickEngOnly") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "english only keeps the streams list to English streams, whatever else you choose there. it is saved in this profile. searching for a streamer by name, your follow list and your playlists are your own choices and are not filtered."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
+        ColumnLayout {   // the category chips under kick's search box: yours, or kick's popular ones
+            objectName: "kickCategoriesBox"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick
+            Layout.fillWidth: true; Layout.maximumWidth: 640; spacing: 6
+            RowLayout {
+                spacing: 12
+                Label { text: "kick categories"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+                Label { objectName: "kickCategoriesSummary"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                        text: hop.kick && hop.kick.categoriesCustom ? (hop.kick.chips.length === 0 ? "your own list: empty" : "your own list: " + hop.kick.chips.length + " categories") : "kick\u2019s popular ones" }
+            }
+            Repeater {
+                model: hop.kick && hop.kick.categoriesCustom ? hop.kick.chips : []
+                delegate: RowLayout {
+                    required property var modelData
+                    required property int index
+                    Layout.fillWidth: true; spacing: 6
+                    Label { text: modelData.name.toLowerCase(); color: Theme.text; Layout.fillWidth: true; elide: Text.ElideRight; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+                    Button { objectName: "kickCatSettingsUp_" + modelData.id; text: "up"; enabled: index > 0; onClicked: hop.kick.movePinnedCategory(modelData.id, -1) }
+                    Button { objectName: "kickCatSettingsDown_" + modelData.id; text: "down"; enabled: index < hop.kick.chips.length - 1; onClicked: hop.kick.movePinnedCategory(modelData.id, 1) }
+                    Button { objectName: "kickCatSettingsRemove_" + modelData.id; text: "remove"; onClicked: hop.kick.unpinCategory(modelData.id) }
+                }
+            }
+            Button { objectName: "kickCatSettingsReset"; visible: hop.kick && hop.kick.categoriesCustom; text: "back to kick\u2019s popular ones"; onClicked: hop.kick.resetCategories() }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                text: "these are the chips under the search box in the kick app (not a fan of one of kick\u2019s popular ones? swap it). to add a category, open the kick app and press edit at the end of the chips: finding categories needs the internet, so it only works inside the app. kept in this profile."
+            }
         }
         ColumnLayout {   // the kick lists
             objectName: "kickListsBox"
@@ -569,6 +652,81 @@ Item {
                 spacing: 10
                 Button { objectName: "kickClearBlocked"; visible: hop.kick && hop.kick.blocked.length > 0; text: "unblock everyone"; onClicked: hop.kick.clearBlocked() }
             }
+        }
+
+        ColumnLayout {   // offline kick: the room set aside for downloads and recordings (same idea as a posting limit: you choose it, any time)
+            id: offlineBox
+            objectName: "offlineBox"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.offline
+            Layout.fillWidth: true; Layout.maximumWidth: 640; spacing: 8
+            property string moveMsg: ""
+            Label { text: "kick offline storage"; color: Theme.text; Layout.topMargin: 8; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } }
+            Label {
+                objectName: "offlineSummary"
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: hop.offline && !hop.offline.available ? Theme.danger : Theme.text2
+                text: hop.offline ? hop.offline.summary : ""
+                font { family: Theme.font; pixelSize: Theme.fs(14) }
+            }
+            Rectangle {   // the meter
+                objectName: "offlineMeter"
+                Layout.fillWidth: true; height: 8; color: Theme.line; radius: 4
+                Rectangle { width: Math.max(hop.offline && hop.offline.usedBytes > 0 ? 4 : 0, parent.width * (hop.offline ? hop.offline.fraction : 0)); height: parent.height; radius: 4
+                            color: hop.offline && hop.offline.nearLimit ? Theme.danger : Theme.accent }
+            }
+            Label { text: "set aside up to:"; color: Theme.muted; Layout.topMargin: 6; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            RowLayout {
+                spacing: 10; Layout.fillWidth: true
+                TextField {
+                    id: limitEdit
+                    objectName: "offlineLimitEdit"
+                    Layout.preferredWidth: 110; implicitHeight: 42; selectByMouse: true
+                    inputMethodHints: Qt.ImhFormattedNumbersOnly
+                    validator: DoubleValidator { bottom: 0; decimals: 2; notation: DoubleValidator.StandardNotation }
+                    property bool useGB: hop.offline ? hop.offline.limitMB >= 1024 && hop.offline.limitMB % 1024 === 0 : true
+                    text: hop.offline ? String(useGB ? hop.offline.limitMB / 1024 : hop.offline.limitMB) : ""
+                    color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) }
+                    Accessible.name: "offline storage limit"
+                    background: Rectangle { color: Theme.panel; border { width: limitEdit.activeFocus ? 2 : 1; color: limitEdit.activeFocus ? Theme.accent : Theme.line } }
+                    onAccepted: offlineBox.applyLimit()
+                }
+                Choice {
+                    id: unitChoice
+                    objectName: "offlineUnit"
+                    options: [["offlineMB", "MB"], ["offlineGB", "GB"]]
+                    value: limitEdit.useGB ? "offlineGB" : "offlineMB"
+                    onPicked: function (v) { limitEdit.useGB = (v === "offlineGB") }
+                }
+                PlainButton { objectName: "offlineSetLimit"; text: "set limit"; implicitHeight: 42; onClicked: offlineBox.applyLimit() }
+            }
+            function applyLimit() {
+                const n = Number(limitEdit.text.replace(",", "."))
+                if (!(n > 0) || !hop.offline.setLimitMB(n * (limitEdit.useGB ? 1024 : 1))) offlineBox.moveMsg = "the smallest limit is 50 MB."
+                else offlineBox.moveMsg = ""
+            }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                text: "downloads and recordings in the kick app are kept in their own folder inside hop-tunes (not as loose video files). nothing is ever deleted to make room: at the limit, or when the drive is nearly full, new downloads pause and you decide. you can change the limit any time."
+            }
+            Label { text: "where it is kept:"; color: Theme.muted; Layout.topMargin: 6; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            Label {
+                objectName: "offlineWhere"
+                Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                text: hop.offline ? (hop.offline.location === "" ? "hop-tunes' own folder (" + hop.offline.folder + ")" : hop.offline.folder) : ""
+            }
+            RowLayout {
+                spacing: 10
+                PlainButton { objectName: "offlineChoose"; text: "choose a drive or folder"; implicitHeight: 42; onClicked: offlineFolder.open() }
+                PlainButton { objectName: "offlineDefault"; visible: hop.offline && hop.offline.location !== ""; text: "back to the default"; implicitHeight: 42
+                              onClicked: offlineBox.moveMsg = hop.offline.moveToLocation("") }
+            }
+            Label { objectName: "offlineMessage"; visible: offlineBox.moveMsg !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger; text: offlineBox.moveMsg
+                    font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            FolderPick {
+                id: offlineFolder
+                title: "choose where offline kick is kept"
+                onAccepted: offlineBox.moveMsg = hop.offlineMoveTo(selectedFolder)
+            }
+            Component.onCompleted: if (hop.offline) hop.offline.refresh()
         }
 
         // ---- music folders ---------------------------------------------------------

@@ -14,6 +14,10 @@ FocusScope {
     visible: active
     signal leave()
 
+    // an app can take over the phone's bottom "search" button while it is open (app.openSearch() returns true when it did)
+    readonly property bool canSearch: active && !!appLoader.item && appLoader.item.openSearch !== undefined
+    readonly property bool searching: canSearch && !!appLoader.item.searchActive
+    function search() { return canSearch && appLoader.item.openSearch() === true }
     function open(id) { appId = id; forceActiveFocus() }
     // Esc and the back button: the app steps back inside itself first (item.goBack() returns true when it did), then it closes
     function close() {
@@ -43,6 +47,21 @@ FocusScope {
         Label { text: root.names[root.appId] || root.appId; color: Theme.strong
                 font { family: Theme.font; pixelSize: Theme.fs(26); weight: Font.Light } }
         Item { Layout.fillWidth: true }
+        // an app can offer a "curtain": the arrow pulls the app's own menu up out of the way (more room for what is under it) and back down
+        AbstractButton {
+            objectName: "appCollapse"
+            visible: root.active && !!appLoader.item && appLoader.item.collapsible === true
+            implicitWidth: 44; implicitHeight: 44
+            hoverEnabled: true; focusPolicy: Qt.NoFocus
+            onClicked: appLoader.item.toggleCollapse()
+            Accessible.name: appLoader.item && appLoader.item.collapsed ? "show the menu" : "hide the menu"
+            background: Rectangle { radius: 22; color: "transparent"; border { width: 2; color: parent.hovered ? Theme.text : Theme.border } }
+            contentItem: Item {
+                Icon { anchors.centerIn: parent; kind: "down"; ink: Theme.text; width: 20; height: 20
+                       rotation: appLoader.item && appLoader.item.collapsed ? 0 : 180      // pointing up pulls it up; pointing down lets it drop back
+                       Behavior on rotation { NumberAnimation { duration: Theme.reduceMotion ? 0 : 180 } } }
+            }
+        }
     }
 
     // ---- the apps ----

@@ -27,8 +27,10 @@ Item {
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
         Accessible.name: app.name
-        ToolTip.visible: hovered && app.blurb !== ""
+        // the description pops up on hover (or a long look on a touch screen) and goes away by itself; settings > apps can hide it for good
+        ToolTip.visible: hop.appHints && hovered && !pressed && app.blurb !== ""
         ToolTip.delay: 600
+        ToolTip.timeout: Theme.compact ? 3500 : 12000
         ToolTip.text: app.blurb
         onClicked: root.openApp(app.id)
         Keys.onReturnPressed: clicked()

@@ -3,6 +3,10 @@
 
 #include "net/AppNet.h"
 
+#include <QTimer>
+
+#include <QHash>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 #include <QRegularExpression>
@@ -22,23 +26,49 @@ class KickClient : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList streams READ streams NOTIFY streamsChanged)           // what the grid shows (blocked and 18+ already left out)
     Q_PROPERTY(QVariantList categories READ categories NOTIFY categoriesChanged)  // {id, name, slug}
+    Q_PROPERTY(QVariantList chips READ chips NOTIFY categoriesChanged)                   // the category chips on the streams page: yours if you picked some, else Kick's popular ones
+    Q_PROPERTY(bool categoriesCustom READ categoriesCustom NOTIFY categoriesChanged)    // true once you changed them
+    Q_PROPERTY(QVariantList categoryResults READ categoryResults NOTIFY categoryResultsChanged)   // what a category search found: {id, name, mature}
+    Q_PROPERTY(bool categorySearching READ categorySearching NOTIFY categoryResultsChanged)
+    Q_PROPERTY(QVariantList gameStreams READ gameStreams NOTIFY streamsChanged)        // search: live streams playing a game or category that matches what was typed
+    Q_PROPERTY(QVariantList channelResults READ channelResults NOTIFY streamsChanged)  // search: channels whose name looks like it
+    Q_PROPERTY(QString searchScope READ searchScope WRITE setSearchScope NOTIFY filtersChanged)   // "all" | "streams" | "channels": what a search looks at
+    Q_PROPERTY(QString searchCategory READ searchCategory NOTIFY streamsChanged)    // when the search matched a game/category: its name (live streams of it come first)
+    Q_PROPERTY(QVariantList playlists READ playlists NOTIFY listsChanged)          // {id, name, kind, count, items}: channels, clips or past streams
     Q_PROPERTY(QVariantList following READ following NOTIFY listsChanged)         // {slug, name, avatar, live, viewers, checked}
     Q_PROPERTY(QStringList blocked READ blocked NOTIFY listsChanged)
+    Q_PROPERTY(QVariantList pastStreams READ pastStreams NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList clips READ clips NOTIFY libraryChanged)
+    Q_PROPERTY(QString libraryState READ libraryState NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList pastStreams READ pastStreams NOTIFY libraryChanged)
+    Q_PROPERTY(QVariantList clips READ clips NOTIFY libraryChanged)
+    Q_PROPERTY(QString libraryState READ libraryState NOTIFY libraryChanged)
     Q_PROPERTY(QVariantMap channel READ channel NOTIFY channelChanged)            // the channel being watched / looked at
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)
     Q_PROPERTY(bool hasMore READ hasMore NOTIFY streamsChanged)
     Q_PROPERTY(QString sort READ sort WRITE setSort NOTIFY filtersChanged)        // "viewers" | "featured"
-    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY filtersChanged)   // "" (all) or a code like "en"
+    Q_PROPERTY(QString language READ language WRITE setLanguage NOTIFY filtersChanged)   // "" (all) or a code like "en"; "en" whenever english only is on
+    Q_PROPERTY(bool askBeforeOpening READ askBeforeOpening WRITE setAskBeforeOpening NOTIFY filtersChanged)   // phones: tapping a stream asks first (fat fingers while scrolling); kept in the profile
+    Q_PROPERTY(bool englishOnly READ englishOnly WRITE setEnglishOnly NOTIFY filtersChanged)   // kept in the profile: only English streams, whatever else is chosen
     Q_PROPERTY(int categoryId READ categoryId WRITE setCategoryId NOTIFY filtersChanged) // 0 = all
     Q_PROPERTY(bool showMature READ showMature WRITE setShowMature NOTIFY filtersChanged)
     Q_PROPERTY(QString query READ query NOTIFY filtersChanged)                    // a search is showing when not empty
     Q_PROPERTY(QStringList contacted READ contacted NOTIFY contactedChanged)      // the sites reached since the app was opened
     Q_PROPERTY(bool connected READ isOpen NOTIFY openChanged)
+    Q_PROPERTY(QString health READ health NOTIFY healthChanged)               // Kick's servers as seen from here: "" (not known yet) | "good" | "slow" (yellow) | "down" (red)
+    Q_PROPERTY(QString healthText READ healthText NOTIFY healthChanged)
     // What the chat beside the stream is: "off" (the start), "pretend" (Hop-tunes' made-up chat, nobody in it is real) or "kick" (Kick's own
     // live chat). Kick's chat is only for someone who chose to sign in to Kick; without that the choice is no chat or the pretend one.
     Q_PROPERTY(QString chatMode READ chatMode WRITE setChatMode NOTIFY chatModeChanged)
     Q_PROPERTY(bool signedIn READ signedIn NOTIFY signedInChanged)
+    Q_PROPERTY(QString accountName READ accountName NOTIFY signedInChanged)
+    Q_PROPERTY(QString signInState READ signInState NOTIFY signInChanged)           // "" | "waiting" | "error"
+    Q_PROPERTY(QString signInCode READ signInCode NOTIFY signInChanged)             // the 6 digits to confirm on kick.com
+    Q_PROPERTY(QString signInUrl READ signInUrl NOTIFY signInChanged)               // the kick.com page to open (in the browser) to approve
+    Q_PROPERTY(QString signInMessage READ signInMessage NOTIFY signInChanged)
+    Q_PROPERTY(QString importMessage READ importMessage NOTIFY signInChanged)
+    Q_PROPERTY(bool importing READ importing NOTIFY signInChanged)
 public:
     static constexpr const char *kApp = "kick";
     static constexpr int kPageSize = 36;
@@ -52,14 +82,31 @@ public:
     QVariantList streams() const { return m_streams; }
     QVariantList categories() const { return m_categories; }
     QVariantList following() const;
+    QVariantList playlists() const;
+    QString searchCategory() const { return m_searchCategory; }
+    QVariantList gameStreams() const { return m_gameShown; }
+    QVariantList channelResults() const { return m_channelShown; }
+    QString searchScope() const { return m_searchScope; }
+    void setSearchScope(const QString &s);
+    QVariantList chips() const { return m_customCategories ? m_pinned : m_categories; }
+    bool categoriesCustom() const { return m_customCategories; }
+    QVariantList categoryResults() const { return m_categoryResults; }
+    bool categorySearching() const { return m_categorySearching; }
     QStringList blocked() const { return m_blocked; }
     QVariantMap channel() const { return m_channel; }
+    QVariantList pastStreams() const { return m_past; }     // finished broadcasts of the open channel (when asked for)
+    QVariantList clips() const { return m_clips; }
+    QString libraryState() const { return m_libraryState; } // "" | "loading" | a plain sentence when it could not be loaded
     bool loading() const { return m_pending > 0; }
     QString error() const { return m_error; }
     bool hasMore() const { return !m_next.isEmpty(); }
     QString sort() const { return m_sort; }
     void setSort(const QString &s);
-    QString language() const { return m_language; }
+    QString language() const { return m_englishOnly ? QStringLiteral("en") : m_language; }
+    bool englishOnly() const { return m_englishOnly; }
+    bool askBeforeOpening() const { return m_askBeforeOpening; }
+    void setAskBeforeOpening(bool on) { if (on == m_askBeforeOpening) return; m_askBeforeOpening = on; emit filtersChanged(); emit listsEdited(); }
+    void setEnglishOnly(bool on);
     void setLanguage(const QString &l);
     int categoryId() const { return m_categoryId; }
     void setCategoryId(int id);
@@ -68,9 +115,24 @@ public:
     QString query() const { return m_query; }
     QStringList contacted() const { return m_net->contacted(kApp); }
     bool isOpen() const { return m_open; }
+    QString health() const { return m_health; }
+    QString healthText() const;
+    // How often the health check asks while Kick looks fine (half as often again when it does not). Tests shorten it.
+    void setHealthInterval(int ms) { m_healthMs = qMax(50, ms); }
+    // Three tiny questions in a row that all fail = red; any trouble in the last three = yellow; otherwise green.
+    static int classifyHealth(const NetReply &r, qint64 ms);                    // 0 fine, 1 slow or refusing, 2 not answering
+    static QString healthFrom(const QList<int> &lastOutcomes);
     QString chatMode() const { return m_chatMode; }
     void setChatMode(const QString &mode);
-    bool signedIn() const { return m_signedIn; }      // optional; nothing needs it to watch (sign-in is a later step: false until then)
+    bool signedIn() const { return m_signedIn; }      // optional: nothing needs it to watch. Signing in only lets you import your follow list.
+    QString accountName() const { return m_accountName; }
+    QString signInState() const { return m_signInState; }
+    QString signInCode() const { return m_signInCode; }
+    QString signInUrl() const { return m_signInUrl; }
+    QString signInMessage() const { return m_signInMessage; }
+    QString importMessage() const { return m_importMessage; }
+    bool importing() const { return m_importing; }
+    void setSignInPollMs(int ms) { m_signInPollMs = ms; }   // tests
 
     // the app opens: the gateway opens and the first list is asked for. close() drops everything still on the way.
     Q_INVOKABLE void open();
@@ -80,7 +142,16 @@ public:
     Q_INVOKABLE void search(const QString &text);  // "" goes back to the live list
     Q_INVOKABLE void openChannel(const QString &slugOrLink);   // fills `channel` (title, viewers, stream address, chat room)
     Q_INVOKABLE void closeChannel();
+    Q_INVOKABLE void loadPastStreams();            // the open channel's finished broadcasts (only when asked)
+    Q_INVOKABLE void loadClips();                  // and its clips
     Q_INVOKABLE bool streamAllowed(const QString &url) const;   // the Qt Multimedia player (Android) asks before it opens a stream
+    // Optional sign-in, the way Kick's TV-link page works: Hop-tunes shows a 6-digit code and an address on kick.com; you approve it there
+    // (signed in to Kick in your own browser) and Hop-tunes is given a session token, kept only in this profile. Nothing needs it to
+    // watch; it only lets you import your follow list into the local follow list. Unofficial: Kick can change it.
+    Q_INVOKABLE void startSignIn();
+    Q_INVOKABLE void cancelSignIn();
+    Q_INVOKABLE void signOut();                    // forgets the token (the local follow list stays)
+    Q_INVOKABLE void importFollows();              // reads who you follow on Kick once, and adds them to the local follow list
     Q_INVOKABLE void refreshFollowing();           // one lookup per followed channel, only when asked
 
     // the two lists kept on this computer only
@@ -89,9 +160,28 @@ public:
     Q_INVOKABLE bool isFollowing(const QString &slug) const { return m_following.contains(normalize(slug)); }
     Q_INVOKABLE bool block(const QString &slug);
     Q_INVOKABLE void unblock(const QString &slug);
+    // playlists, kept on this computer only (in the profile): "channels" holds channels, "clips" and "streams" hold clips / past streams
+    static constexpr int kMaxPlaylists = 50, kMaxItems = 500, kMaxNameLength = 60;
+    Q_INVOKABLE QString createPlaylist(const QString &name, const QString &kind);          // the new id, or "" (empty name, unknown kind, too many)
+    Q_INVOKABLE bool renamePlaylist(const QString &id, const QString &name);
+    Q_INVOKABLE bool deletePlaylist(const QString &id);
+    Q_INVOKABLE bool addToPlaylist(const QString &id, const QVariantMap &item);          // a channel: {slug}; a clip / past stream: {id, kind, title, channel, url, thumb, seconds}
+    Q_INVOKABLE bool removeFromPlaylist(const QString &id, const QString &key);          // key = the slug, or the clip / stream id
+    Q_INVOKABLE bool isInPlaylist(const QString &id, const QString &key) const;
+    Q_INVOKABLE QVariantList playlistsHolding(const QString &key) const;                 // ids of the playlists that have it (for "add to playlist" menus)
+    Q_INVOKABLE void refreshPlaylist(const QString &id);
+    // your own category chips (the ones under the search box), kept in the profile: swap Kick's popular ones for the games you care about
+    static constexpr int kMaxPinned = 24;
+    Q_INVOKABLE bool pinCategory(int id, const QString &name);                          // add one (at the end); false if it is already there or the list is full
+    Q_INVOKABLE void unpinCategory(int id);                                             // take one away (the first change copies Kick's popular ones to start from)
+    Q_INVOKABLE void movePinnedCategory(int id, int by);                                // -1 = earlier, +1 = later
+    Q_INVOKABLE void resetCategories();                                                 // back to Kick's popular ones
+    Q_INVOKABLE void searchCategories(const QString &text);                             // finds categories by name (only when asked; fills categoryResults)                                  // live dots for a channel playlist: one lookup each, only when asked
     Q_INVOKABLE bool isBlocked(const QString &slug) const { return m_blocked.contains(normalize(slug)); }
     Q_INVOKABLE void clearBlocked();
     QJsonObject listsJson() const;                 // saved with the profile
+    QJsonArray playlistsJson() const;
+    QJsonObject pinnedJson() const;
     void setListsJson(const QJsonObject &o);       // loaded with the profile
 
     // ---- the replies, as plain functions (unit-tested with fixtures) ----
@@ -99,15 +189,25 @@ public:
     static bool parseLivestreams(const QByteArray &json, QVariantList *out, QString *nextCursor);
     static bool parseCategories(const QByteArray &json, QVariantList *out);
     static bool parseSearch(const QByteArray &json, QVariantList *channels);
+    static bool parseSearchCategories(const QByteArray &json, QVariantList *out);
     static bool parseChannel(const QByteArray &json, QVariantMap *out);
-    static QString viewersText(int n);             // 12400 -> "12.4k"
+    static bool parsePastStreams(const QByteArray &json, QVariantList *out);   // finished ones only (the live one is the channel page)
+    static bool parseClips(const QByteArray &json, QVariantList *out);
+    // search results, closest name first: an exact name, then names that start with what was typed, then ones that contain it, then the
+    // nearest spellings (a typed word after the name, "lumiellevtuber" for "lumiellevt", still finds it); Kick's own order breaks ties
+    static void rankByName(QVariantList *channels, const QString &typed);
+    static int nameScore(const QString &typed, const QString &candidate);
+    Q_INVOKABLE static QString viewersText(int n);             // 12400 -> "12.4k"
 
 signals:
+    void healthChanged();
     void streamsChanged();
     void categoriesChanged();
+    void categoryResultsChanged();
     void listsChanged();      // the lists or what is known about them changed (also: live dots)
     void listsEdited();       // the person followed, unfollowed, blocked or unblocked someone: worth saving
     void channelChanged();
+    void libraryChanged();
     void loadingChanged();
     void errorChanged();
     void filtersChanged();
@@ -115,17 +215,30 @@ signals:
     void openChanged();
     void chatModeChanged();
     void signedInChanged();
+    void signInChanged();
 
 private:
     void requestList(bool more);
+    void requestSearch(const QString &word, quint64 gen, bool mayRetry);
+    void requestCategoryStreams(const QVariantList &categories, quint64 gen);
     void requestCategories();
     void requestDeveloper();
-    bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && m_language.isEmpty(); }
+    bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && (m_language.isEmpty() || m_englishOnly); }
     void applyFilters();
     void setError(const QString &e);
     void begin() { ++m_pending; emit loadingChanged(); }
     void end() { if (m_pending > 0) --m_pending; emit loadingChanged(); }
     bool ready();
+    void healthNoted(int outcome);               // one more result: updates the light, and picks the list up again when Kick comes back
+    void healthSchedule();
+    void healthProbe();
+
+    // the health light
+    QString m_health;
+    QList<int> m_healthLast;
+    int m_healthMs = 60000;
+    quint64 m_healthGen = 0;
+    QTimer *m_healthTimer = nullptr;
 
     AppNet *m_net;
     bool m_open = false;
@@ -133,15 +246,41 @@ private:
     quint64 m_listGen = 0, m_channelGen = 0;
     QString m_error;
     QVariantList m_raw;          // everything fetched for the current list, before blocked / 18+ are left out
-    QVariantList m_streams, m_categories, m_searchChannels;
+    QVariantList m_streams, m_categories, m_searchChannels, m_searchStreams;
+    QString m_searchCategory, m_searchScope = QStringLiteral("all");
+    QVariantList m_gameShown, m_channelShown;
     QString m_next, m_sort = QStringLiteral("viewers"), m_language, m_query;
     int m_categoryId = 0, m_emptyPages = 0;
+    bool m_englishOnly = false;
+    bool m_askBeforeOpening = true;
     bool m_showMature = false;
     QVariantMap m_channel;
+    QVariantList m_past, m_clips;
+    QString m_libraryState;
+    quint64 m_libraryGen = 0;
     QVariantMap m_dev;           // the developer's stream when it is live (else empty)
     QStringList m_following, m_blocked;
+    struct Playlist { QString id, name, kind; QVariantList items; };
+    QList<Playlist> m_playlists;
+    QVariantList m_pinned, m_categoryResults;
+    QHash<QString, QVariantMap> m_known;          // what has been seen of each channel (stream picture, avatar, name), so a picture is not lost when the list changes
+    void remember(const QVariantMap &channel);
+    void remember(const QVariantList &channels);
+    void lookupThumbs(const QStringList &slugs, quint64 gen);
+    bool m_customCategories = false, m_categorySearching = false;
+    quint64 m_categorySearchGen = 0;
+    bool channelInPlaylists(const QString &slug) const;
+    void refreshChannels(const QStringList &todo);
     QString m_chatMode = QStringLiteral("off");
     bool m_signedIn = false;
+    QString m_token, m_accountName, m_signInState, m_signInCode, m_signInUrl, m_signInUuid, m_signInMessage, m_importMessage;
+    bool m_importing = false;
+    int m_signInPollMs = 3000, m_signInPolls = 0, m_signInFailures = 0;
+    quint64 m_signInGen = 0;
+    void pollSignIn(quint64 gen);
+    void finishSignIn(const QString &token);
+    void importPage(quint64 gen, QString cursor, int page, QStringList slugs);
+    void setSignInState(const QString &state, const QString &message);
     QHash<QString, QVariantMap> m_status;   // slug -> {live, viewers, name, avatar, checked}
     int m_followChecks = 0;
 };

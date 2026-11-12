@@ -8,6 +8,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #ifdef Q_OS_ANDROID
+#include <QJniEnvironment>
 #include <QJniObject>
 #include <QCoreApplication>
 #include <QtCore/private/qandroidextras_p.h>
@@ -84,6 +85,11 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 #endif
 #ifdef HOPTUNES_NET_APPS
     connect(&m_kick, &KickClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    connect(&m_offline, &OfflineStore::edited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    m_offline.setDefaultBase(Paths::dataDir() + QStringLiteral("/offline"));
+    connect(&m_appNet, &AppNet::opened, &m_downloads, [this](const QString &a) { if (a == QLatin1String("kick")) m_downloads.appOpened(); });
+    connect(&m_appNet, &AppNet::closed, &m_downloads, [this](const QString &a) { if (a == QLatin1String("kick")) m_downloads.appClosed(); });
+    connect(&m_offline, &OfflineStore::edited, &m_downloads, &OfflineDownloads::reload);   // another drive or folder: look there
 #endif
     connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
     connect(&m_audio, &AudioAnalyzer::beat, &m_musyNote, &MusyNoteGame::onBeat);
@@ -457,6 +463,8 @@ void App::activate(const QString &id, bool guest)
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_appsEnabled = !guest && s.value(QStringLiteral("appsEnabled")).toBool(false);
     emit appsEnabledChanged();
+    m_appHints = guest || s.value(QStringLiteral("appHints")).toBool(true);
+    emit appHintsChanged();
     m_netAllowed.clear();
     if (!guest) {
         const QJsonObject net = s.value(QStringLiteral("appsNet")).toObject();
@@ -465,6 +473,10 @@ void App::activate(const QString &id, bool guest)
 #ifdef HOPTUNES_NET_APPS
     m_kick.close();
     m_kick.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("kick")).toObject());
+    m_offline.setProfileId(guest ? QStringLiteral("guest") : m_profileId);
+    m_offline.fromJson(guest ? QJsonObject{} : s.value(QStringLiteral("offline")).toObject());
+    m_downloads.setEnabled(!guest);
+    m_downloads.reload();
     m_appNet.setAllowed(QStringLiteral("kick"), m_netAllowed.contains(QStringLiteral("kick")));
 #endif
     emit appNetChanged();
@@ -628,12 +640,14 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
+    s.insert(QStringLiteral("appHints"), m_appHints);
     {
         QJsonObject net;
         for (const QString &a : m_netAllowed) net.insert(a, true);
         s.insert(QStringLiteral("appsNet"), net);
 #ifdef HOPTUNES_NET_APPS
         s.insert(QStringLiteral("kick"), m_kick.listsJson());
+        s.insert(QStringLiteral("offline"), m_offline.toJson());
 #endif
     }
     s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
@@ -1036,6 +1050,76 @@ QString App::unmerge(const QString &from, const QString &albumRef)
     if (!had) return QStringLiteral("nothing to split back");
     artistsChanged();
     return {};
+}
+
+bool App::pictureInPictureSupported() const
+{
+#ifdef Q_OS_ANDROID
+    return QJniObject::callStaticMethod<jboolean>("io/github/thestylewithin/hoptunes/HopActivity", "pipSupported", "()Z");
+#else
+    return false;
+#endif
+}
+
+void App::setPictureInPictureAllowed(bool on, int w, int h)
+{
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>("io/github/thestylewithin/hoptunes/HopActivity", "setPip", "(ZII)V", jboolean(on), jint(w), jint(h));
+#else
+    Q_UNUSED(on); Q_UNUSED(w); Q_UNUSED(h);
+#endif
+}
+
+bool App::enterPictureInPicture()
+{
+#ifdef Q_OS_ANDROID
+    return QJniObject::callStaticMethod<jboolean>("io/github/thestylewithin/hoptunes/HopActivity", "enterPipNow", "()Z");
+#else
+    return false;
+#endif
+}
+
+#ifdef Q_OS_ANDROID
+namespace {
+App *g_pipApp = nullptr;
+void jniPip(JNIEnv *, jclass, jboolean inPip)
+{
+    if (App *a = g_pipApp) QMetaObject::invokeMethod(a, [a, inPip] { a->setInPictureInPicture(inPip); }, Qt::QueuedConnection);
+}
+}
+#endif
+
+void App::registerPictureInPicture()
+{
+#ifdef Q_OS_ANDROID
+    g_pipApp = this;
+    QJniEnvironment env;
+    const JNINativeMethod methods[] = {{"nativePip", "(Z)V", reinterpret_cast<void *>(jniPip)}};
+    env.registerNativeMethods("io/github/thestylewithin/hoptunes/HopActivity", methods, 1);
+#endif
+}
+
+void App::setInPictureInPicture(bool on)
+{
+    if (on == m_inPip) return;
+    m_inPip = on;
+    emit inPictureInPictureChanged();
+}
+
+void App::setImmersive(bool on)
+{
+#ifdef Q_OS_ANDROID
+    QNativeInterface::QAndroidApplication::runOnAndroidMainThread([on] {
+        const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+        if (!activity.isValid()) return;
+        const QJniObject window = activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+        const QJniObject view = window.callObjectMethod("getDecorView", "()Landroid/view/View;");
+        const jint flags = on ? (0x1000 | 0x2 | 0x4 | 0x100 | 0x200 | 0x400) : 0;      // immersive sticky, no navigation bar, no status bar, laid out under them
+        view.callMethod<void>("setSystemUiVisibility", "(I)V", flags);
+    });
+#else
+    Q_UNUSED(on);
+#endif
 }
 
 void App::setGameScreen(bool on)
@@ -1885,6 +1969,14 @@ void App::setVideoViewStyle(const QString &style)
     m_videoViewStyle = s;
     saveProfileSettings();
     emit videoViewStyleChanged();
+}
+
+void App::setAppHints(bool on)
+{
+    if (on == m_appHints) return;
+    m_appHints = on;
+    saveProfileSettings();
+    emit appHintsChanged();
 }
 
 void App::setAppsEnabled(bool on)
@@ -2885,6 +2977,16 @@ void App::djTopUp()
         if (!recent.contains(t.path) && more.size() < 25) more.append(t);
     if (more.isEmpty()) more = smartMix(m_djSeed, m_library, m_stats, 25, ++m_djRound);
     m_player.enqueue(more);
+}
+
+QString App::offlineMoveTo(const QUrl &folder)
+{
+#ifdef HOPTUNES_NET_APPS
+    return m_offline.moveToLocation(Paths::folderPath(folder));
+#else
+    Q_UNUSED(folder);
+    return QStringLiteral("this build has no networked apps");
+#endif
 }
 
 } // namespace hop

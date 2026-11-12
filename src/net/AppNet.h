@@ -28,11 +28,26 @@ struct NetReply {
     QUrl location;             // for a redirect
 };
 
+// How much one answer may hold and how long it may take. The defaults suit pages and pictures; a download asks for more, for one video
+// segment at a time (the person chose to download, and the storage limit still applies).
+struct NetLimits {
+    qint64 maxBody = 8 * 1024 * 1024;
+    int timeoutMs = 15000;
+    qint64 rangeStart = -1;      // with rangeLength: ask only for this slice of the file (HTTP Range)
+    qint64 rangeLength = -1;
+    // Account requests only (sign-in and the follow list): a POST body and a few named headers. The gateway refuses these for any
+    // address that is not on the app's short account list (see AppNet::accountUrlAllowed), and never follows a redirect for them.
+    QByteArray method = "GET";
+    QByteArray body;
+    QList<QPair<QByteArray, QByteArray>> headers;
+    bool isAccount() const { return method != "GET" || !body.isEmpty() || !headers.isEmpty(); }
+};
+
 class NetTransport : public QObject {
 public:
     using Done = std::function<void(NetReply)>;
     explicit NetTransport(QObject *parent = nullptr) : QObject(parent) {}
-    virtual void get(const QUrl &url, const QByteArray &userAgent, const QByteArray &accept, Done done) = 0;
+    virtual void get(const QUrl &url, const QByteArray &userAgent, const QByteArray &accept, NetLimits limits, Done done) = 0;
     virtual void abortAll() = 0;
 };
 
@@ -50,6 +65,8 @@ public:
     static QStringList hostsFor(const QString &app);
     // the rules above for one address (without the permission): https, port, user info, host
     static bool urlAllowed(const QString &app, const QUrl &url, QString *why = nullptr);
+    // The few addresses where an app may send a body or headers (its optional sign-in): checked for every account request.
+    static bool accountUrlAllowed(const QString &app, const QUrl &url, QString *why = nullptr);
     // The video itself is fetched by the video engine (libmpv or GStreamer), not by this gateway: it may only be given an address of
     // the video host the app declared (https, standard port, no user name). Inside the engine the host cannot be enforced any further.
     static QStringList streamSuffixesFor(const QString &app);
@@ -67,16 +84,18 @@ public:
     QStringList contacted(const QString &app) const { QStringList l = m_contacted.value(app).values(); l.sort(); return l; }
 
     // GET one address for an app; `done` is called once, on the main thread, and never after close()
-    void get(const QString &app, const QUrl &url, std::function<void(NetReply)> done);
+    void get(const QString &app, const QUrl &url, std::function<void(NetReply)> done, NetLimits limits = {});
 
     // tests: answer from fixtures instead of the network
     void setTransport(std::unique_ptr<NetTransport> t);
 
 signals:
     void contactedChanged(const QString &app);
+    void opened(const QString &app);
+    void closed(const QString &app);
 
 private:
-    void fetch(const QString &app, const QUrl &url, int hops, quint64 epoch, std::function<void(NetReply)> done);
+    void fetch(const QString &app, const QUrl &url, int hops, quint64 epoch, NetLimits limits, std::function<void(NetReply)> done);
 
     std::unique_ptr<NetTransport> m_transport;
     QSet<QString> m_allowed, m_open;

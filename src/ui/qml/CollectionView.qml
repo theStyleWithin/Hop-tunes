@@ -34,6 +34,9 @@ Item {
         z: 50
         onLeave: root.collectionTab = "apps"
     }
+    readonly property bool appSearchable: appHost.canSearch
+    readonly property bool appSearching: appHost.searching
+    function appSearch() { return appHost.search() }
     onVisibleChanged: if (!visible) appHost.close()
     // switching apps off in settings takes the tab away (and an app that is open with it)
     Connections {
@@ -390,6 +393,7 @@ Item {
         }
         AppsView {
             visible: root.collectionTab === "apps" && hop.appsEnabled
+            enabled: !appHost.active                    // while an app is open the tiles under it hear nothing (and their pop-up descriptions go away)
             onOpenApp: function (id) { appHost.open(id) }
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18

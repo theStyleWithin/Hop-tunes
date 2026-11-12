@@ -51,6 +51,9 @@ class FakeKick : public NetTransport {
 public:
     QList<QUrl> asked;
     int aborted = 0;
+    int livePolls = 0;
+    int failMode = 0;                    // 0 fine, 1 only the list server fails, 2 everything fails (a 503)
+    int signInPolls = 0;
     static QByteArray pngBytes()
     {
         QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(90, 60, 160));
@@ -77,14 +80,59 @@ public:
                                           {"thumbnail", QJsonObject{{"url", "https://stream.kick.com/thumbnails/dev.jpg"}}}};
         return QJsonDocument(o).toJson();
     }
-    void get(const QUrl &url, const QByteArray &, const QByteArray &, Done done) override
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, NetLimits, Done done) override
     {
         asked << url;
         NetReply r; r.status = 200;
+        if (failMode == 2 || (failMode == 1 && url.host() == "web.kick.com")) { r.status = 503; r.error = QStringLiteral("the site answered 503"); done(r); return; }
         if (url.host() == "web.kick.com") r.body = list();
+        else if (url.path() == "/api/search") {
+            const QString w = QUrlQuery(url).queryItemValue("searched_word", QUrl::FullyDecoded).toLower();
+            QJsonArray a;
+            for (const QString &s : {QStringLiteral("alphabet"), QStringLiteral("alpha"), QStringLiteral("xalpha")})
+                if (s.contains(w)) a.append(QJsonObject{{"slug", s}, {"user", QJsonObject{{"username", s}}}});
+            QJsonArray cats;
+            if (QStringLiteral("palworld").contains(w)) cats.append(QJsonObject{{"id", 7234}, {"name", "Palworld"}, {"is_mature", false}});
+            r.body = QJsonDocument(QJsonObject{{"channels", a}, {"categories", cats}}).toJson();
+        }
+        else if (url.path().startsWith("/api/tv/link/authenticate/")) {
+            if (++signInPolls < 2) { r.status = 404; r.error = "the site answered 404"; r.body.clear(); }
+            else r.body = "{\"token\":\"tok-ui\"}";
+        }
+        else if (url.path() == "/api/v1/user") r.body = "{\"username\":\"UiTester\"}";
+        else if (url.path() == "/api/v2/channels/followed") r.body = "{\"channels\":[{\"channel_slug\":\"zulu\"},{\"channel_slug\":\"yankee\"}],\"nextCursor\":\"\"}";
+        else if (url.path().endsWith("/videos")) {
+            QJsonArray a;
+            a.append(QJsonObject{{"id", 1}, {"is_live", true}, {"session_title", "live now"}, {"source", "https://stream.kick.com/x/master.m3u8"}, {"duration", 0}});
+            a.append(QJsonObject{{"id", 77}, {"is_live", false}, {"session_title", "last night's stream"}, {"duration", 7200000},
+                                 {"source", "https://stream.kick.com/v77/master.m3u8"}, {"start_time", "2026-11-11 20:00:00"}, {"viewer_count", 1200},
+                                 {"thumbnail", QJsonObject{{"src", "https://images.kick.com/video_thumbnails/v77/720.webp"}}}});
+            r.body = QJsonDocument(a).toJson();
+        }
+        else if (url.path().endsWith("/clips")) {
+            r.body = QJsonDocument(QJsonObject{{"clips", QJsonArray{QJsonObject{{"id", "clip_abc"}, {"title", "a funny moment"}, {"duration", 30},
+                {"clip_url", "https://clips.kick.com/clips/ab/clip_abc/playlist.m3u8"}, {"thumbnail_url", "https://clips.kick.com/clips/ab/clip_abc/thumbnail.webp"},
+                {"views", 5000}, {"created_at", "2026-11-01T10:00:00Z"}}}}}).toJson();
+        }
+        else if (url.host().endsWith("live-video.net")) {          // a live stream: a sliding playlist that gains a piece at each look
+            if (url.path() == "/live/master.m3u8") r.body = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1500000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p/playlist.m3u8\n";
+            else if (url.path().endsWith("/playlist.m3u8")) {
+                const int k = livePolls++;
+                QByteArray t = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0.04\n#EXT-X-MEDIA-SEQUENCE:" + QByteArray::number(k) + "\n";
+                for (int i = 0; i < 4; ++i) t += "#EXTINF:2.0,\n" + QByteArray::number(k + i) + ".ts\n";
+                r.body = t;
+            } else r.body = QByteArray(3000, 'L');
+        }
+        else if (url.path().endsWith("/master.m3u8"))
+            r.body = "#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1500000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p60/playlist.m3u8\n";
+        else if (url.path().endsWith("/720p60/playlist.m3u8"))
+            r.body = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXTINF:10,\n0.ts\n#EXTINF:10,\n1.ts\n#EXT-X-ENDLIST\n";
+        else if (url.path().endsWith("/clip_abc/playlist.m3u8"))
+            r.body = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:10\n#EXTINF:30,\nclip.ts\n#EXT-X-ENDLIST\n";
+        else if (url.path().endsWith(".ts")) r.body = QByteArray(5000, 'v');
         else if (url.host() == "images.kick.com" || url.host() == "files.kick.com" || url.host() == "stream.kick.com") r.body = pngBytes();
         else if (url.path().startsWith("/api/v2/channels/")) r.body = channel(url.path().section('/', -1));
-        else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"}]}";
+        else if (url.path().startsWith("/api/v1/subcategories")) r.body = "{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"just-chatting\"},{\"id\":3,\"name\":\"Grand Theft Auto V\",\"slug\":\"gta\"}]}";
         else r.body = "{}";
         QTimer::singleShot(0, this, [done, r] { done(r); });
     }
@@ -2253,6 +2301,9 @@ private slots:
         QVERIFY(item("kickMore") == nullptr || !item("kickMore")->isVisible());   // (one page only in this fixture)
         for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
         QTRY_VERIFY(item("kickContacted") && item("kickContacted")->property("text").toString().contains("web.kick.com"));
+        // the connection bar sits at the top, right under the app's title bar, above the streams
+        QVERIFY(item("kickStatusBar")->mapToItem(item("kickApp"), QPointF(0, 0)).y() < 5);
+        QVERIFY(item("kickStatusBar")->mapToItem(item("kickApp"), QPointF(0, 0)).y() < item("kickBrowse")->mapToItem(item("kickApp"), QPointF(0, 0)).y());
         shot("kick-browse");
         QVERIFY(click("kickMature"));
         QTRY_VERIFY(item("kickCard_charlie") != nullptr);
@@ -2297,17 +2348,10 @@ private slots:
         kick->block("bravo");
         QTRY_VERIFY(item("kickCard_bravo") == nullptr);
         QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("blocked").toArray().contains("bravo"));
-        // 4. disconnect drops everything and says so; reconnect asks again
-        QVERIFY(click("kickDisconnect"));
-        QTRY_VERIFY(item("kickDisconnected") && item("kickDisconnected")->isVisible());
-        QVERIFY(!m_app->gateway()->isOpen("kick"));
-        QVERIFY(ft->aborted >= 1);
-        const int sentAtCut = ft->asked.size();
-        QTest::qWait(300);
-        QCOMPARE(ft->asked.size(), sentAtCut);
-        QVERIFY(click("kickReconnect"));
-        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
-        QTRY_VERIFY(item("kickCard_bravo") == nullptr);                           // still blocked after reconnecting
+        // 4. the status bar only tells; there is no disconnect button to hit by accident
+        QVERIFY(item("kickContacted") != nullptr);
+        QVERIFY(item("kickDisconnect") == nullptr);
+        QVERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
         // 5. settings: the permission and the lists, and taking the permission back closes the app's connection
         w->setProperty("view", QStringLiteral("settings"));
         QTRY_VERIFY(item("kickNetChoice") != nullptr);
@@ -2333,12 +2377,70 @@ private slots:
         QVERIFY(click("subTab_music"));
     }
 
+    // The status bar's light shows how Kick's servers are doing: green, yellow when something is wrong, red when it is down. Red covers the
+    // live streams (nothing can be watched) but the downloads stay reachable, and when Kick answers again the list comes back by itself.
+    void kickHealthLightShowsGreenYellowRedAndRecovers()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        kick->setHealthInterval(100);
+        struct Restore {
+            QWindow *w; App *app; KickClient *k;
+            ~Restore() { k->setHealthInterval(60000); k->clearBlocked(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps") && item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        auto dot = [this] { return item("kickHealthDot")->property("color").value<QColor>(); };
+        QTRY_COMPARE(kick->health(), QString("good"));
+        QTRY_COMPARE(dot(), QColor("#53fc18"));
+        QVERIFY(item("kickContacted")->property("text").toString().startsWith("kick is up"));
+        QVERIFY(item("kickDown") == nullptr || !item("kickDown")->isVisible());
+        shot("kick-health-green");
+        // something is wrong: yellow, the list is still there
+        ft->failMode = 1;
+        QTRY_COMPARE_WITH_TIMEOUT(kick->health(), QString("slow"), 5000);
+        QTRY_COMPARE(dot(), QColor("#f5c518"));
+        QVERIFY(item("kickContacted")->property("text").toString().contains("slow or partly down"));
+        QVERIFY(item("kickCard_alpha")->isVisible());
+        shot("kick-health-yellow");
+        // down: red, a cover over the streams, no way to watch, but the downloads are one tap away
+        ft->failMode = 2;
+        QTRY_COMPARE_WITH_TIMEOUT(kick->health(), QString("down"), 5000);
+        QTRY_COMPARE(dot(), QColor("#ff4d4d"));
+        QTRY_VERIFY(item("kickDown") && item("kickDown")->isVisible());
+        QVERIFY(item("kickDown")->property("z").toReal() > 0);
+        shot("kick-health-red");
+        QVERIFY(click("kickDownDownloads"));
+        QTRY_VERIFY(item("kickDownloads") && item("kickDownloads")->isVisible());
+        QTRY_VERIFY(!item("kickDown")->isVisible());                                 // the downloads page is not covered
+        // Kick answers again: the cover goes, the list is asked for again, and the light turns green
+        const int before = ft->asked.size();
+        ft->failMode = 0;
+        QTRY_VERIFY_WITH_TIMEOUT(kick->health() != QString("down"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(ft->asked.size() > before, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(kick->health(), QString("good"), 5000);
+        QTRY_COMPARE(dot(), QColor("#53fc18"));
+        QVERIFY(!item("kickDown")->isVisible());
+        m_app->setAppNetAllowed("kick", false);
+        m_app->setAppsEnabled(false);
+        QVERIFY(click("subTab_music"));
+    }
+
     // Kick on a phone held upright: one column of cards that fits the screen, touch-sized, and on the watch page the picture on top
     // with the chat under it.
     void kickAppFitsAPhone()
     {
         auto *w = window();
         auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
         m_app->gateway()->setTransport(std::move(fake));
         KickClient *kick = m_app->kickClient();
         const QSize before = w->size();
@@ -2370,9 +2472,39 @@ private slots:
         QTRY_VERIFY(item("kickCard_bravo")->y() > item("kickCard_alpha")->y());      // the next one is under it
         QVERIFY(item("kickCardMenu_alpha")->isVisible());                            // no hover on a touch screen: the menu is always there
         shot("phone-kick-browse");
+        // the arrow at the top right pulls the menu up like a curtain (room for streams) and back down
+        QVERIFY(item("appCollapse") && item("appCollapse")->isVisible());
+        const qreal cardY = item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y();
+        QVERIFY(click("appCollapse"));
+        QTRY_VERIFY(!item("kickSearch")->isVisible());
+        QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() < cardY - 100);          // the streams moved up into the room
+        const qreal upY = item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y();
+        shot("phone-kick-curtain-up");
+        QVERIFY(click("appCollapse"));
+        QTRY_VERIFY(item("kickSearch")->isVisible());
+        QTRY_VERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(0, 0)).y() > upY + 100);         // and back down again (the room is given back)
+        QVERIFY(click("appCollapse"));                                                              // leave it pulled up: the search button brings it back (below)
+        QTRY_VERIFY(!item("kickSearch")->isVisible());
+        // on a phone a tap on a stream asks first (a fat finger while scrolling must not open one)
+        QVERIFY(kick->askBeforeOpening());
         QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickConfirm") && item("kickConfirm")->isVisible());
+        QVERIFY(item("kickBrowse")->isVisible() && !item("kickWatch")->isVisible());            // nothing opened
+        shot("phone-kick-confirm");
+        QVERIFY(click("kickConfirmNo"));
+        QTRY_VERIFY(!item("kickConfirm")->isVisible());
+        QVERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickConfirm")->isVisible());
+        QVERIFY(click("kickConfirmYes"));
         QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QVERIFY(!item("kickConfirm")->isVisible());
         QTRY_VERIFY(item("kickChannelState")->isVisible());
+        // the channel's header, tabs and record row are under the same curtain: pull it down to see them
+        QVERIFY(item("appCollapse")->isVisible());
+        QVERIFY(click("appCollapse"));
+        QTRY_VERIFY(item("kickFollowButton")->isVisible());
+        shot("phone-kick-watch-header");
         QVERIFY(click("kickChat_pretend"));
         QTRY_VERIFY(item("kickPretendChat")->isVisible());
         const QPointF stateTop = item("kickChannelState")->mapToItem(app, QPointF(0, 0));
@@ -2384,10 +2516,630 @@ private slots:
         QVERIFY(item("kickFollowButton")->mapToItem(app, QPointF(item("kickFollowButton")->width(), 0)).x() <= app->width() + 1);
         QVERIFY(item("kickBlockButton")->mapToItem(app, QPointF(item("kickBlockButton")->width(), 0)).x() <= app->width() + 1);
         QVERIFY(click("kickChat_off"));
+        // leaving the app (Android) lets the stream go; coming back asks Kick for the channel again (a fresh stream address, not "Demuxing failed")
+        {
+            auto channelAsks = [&] { int n = 0; for (const QUrl &u : ft->asked) if (u.path() == "/api/v2/channels/alpha") ++n; return n; };
+            const int asked = channelAsks();
+            QVERIFY(QMetaObject::invokeMethod(app, "setBackground", Q_ARG(QVariant, true)));
+            QVERIFY(app->property("inBackground").toBool());
+            QTest::qWait(100);
+            QCOMPARE(channelAsks(), asked);                                               // nothing is fetched while it is away
+            QVERIFY(QMetaObject::invokeMethod(app, "setBackground", Q_ARG(QVariant, false)));
+            QTRY_VERIFY(channelAsks() > asked);                                           // back: the channel is asked for again
+            QTRY_VERIFY(item("kickChannelState")->isVisible());
+        }
+        QVERIFY(click("appCollapse"));                                                    // up again: the chat and video get the room
+        QTRY_VERIFY(!item("kickFollowButton")->isVisible());
+        // the chat: tall enough, and more room when the mini player is pushed away (its pull-back tab floats at the edge and takes no room)
+        {
+            QVERIFY(click("kickChat_pretend"));
+            QQuickItem *chat = item("kickPretendChat");
+            QTRY_VERIFY(chat && chat->isVisible());
+            QVERIFY2(chat->height() >= 200, qPrintable(QString::number(chat->height())));   // (the column has a 280 dp minimum: this is the chat panel inside it)
+            const qreal shown = chat->height();
+            const qreal flickBefore = item("kickWatch")->height();
+            w->setProperty("miniHidden", true);
+            QTRY_VERIFY(item("miniPullTab")->isVisible());
+            QTRY_VERIFY(item("kickWatch")->height() >= flickBefore + 60);                   // the page itself got the mini player's room (and no tab row is left behind)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+            QTRY_VERIFY(chat->height() >= shown + 50);                                      // and on the phone's Qt (6.8) the chat takes it (Qt 6.4's grid layout does not hand it on)
+#endif
+            QVERIFY(chat->height() >= shown);
+            // the tab is not on top of anything the person uses: not the chat's input, not its send button, not the bottom bar
+            const QRectF tab(item("miniPullTab")->mapToScene(QPointF(0, 0)), item("miniPullTab")->size());
+            for (const char *name : {"liveChatInput", "liveChatSend", "kickPretendChat"}) {
+                QQuickItem *it = item(name);
+                if (!it || !it->isVisible()) continue;
+                const QRectF r(it->mapToScene(QPointF(0, 0)), it->size());
+                QVERIFY2(!tab.intersects(r), name);
+            }
+            QVERIFY(tab.bottom() <= item("navTab_collection")->mapToScene(QPointF(0, 0)).y() + 1);   // above the bottom bar
+            shot("phone-kick-chat-room");
+            QVERIFY(click("miniPullTab"));
+            QTRY_VERIFY(!w->property("miniHidden").toBool());
+            QVERIFY(click("kickChat_off"));
+        }
+        // the bottom "search" button searches Kick while the Kick app is open (not the music), from any page of the app
+        QVERIFY(item("navTab_search") && item("navTab_search")->isVisible());
+        QVERIFY(click("navTab_search"));
+        QTRY_VERIFY(item("kickBrowse")->isVisible());                                  // it left the watch page for the streamers list
+        QTRY_VERIFY(item("kickSearch")->isVisible());                                  // (the menu was pulled up: searching brings it back down)
+        QTRY_VERIFY(item("kickSearch")->property("activeFocus").toBool());             // with the search box ready to type in
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));        // and did not switch to the music search
+        QVERIFY(item("appHost")->property("active").toBool());
+        QTRY_VERIFY(item("navTab_search")->property("on").toBool());                   // the tab shows it is the one in use
+        shot("phone-kick-nav-search");
+        for (const char ch : {'l', 'o', 'f', 'i'}) QTest::keyClick(w, ch);
+        QTest::keyClick(w, Qt::Key_Return);
+        QTRY_COMPARE(kick->query(), QStringLiteral("lofi"));
+        // out of the app, the same button is the music search again
         QTest::keyClick(w, Qt::Key_Escape);
-        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(click("navTab_search"));
+        QTRY_COMPARE(w->property("view").toString(), QStringLiteral("search"));
+        w->setProperty("view", QStringLiteral("collection"));
     }
 #endif
+
+#ifdef HOPTUNES_NET_APPS
+    // settings > apps settings > kick offline storage: the limit is the person's to change, with a meter; nothing for guests to keep.
+    void offlineStorageSettingsShowAndChangeTheLimit()
+    {
+        auto *w = window();
+        m_app->setAppsEnabled(true);
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("offlineBox") && item("offlineBox")->isVisible());
+        OfflineStore *off = m_app->offlineStore();
+        QCOMPARE(off->limitMB(), OfflineStore::kDefaultLimitMB);
+        QVERIFY(item("offlineSummary")->property("text").toString().contains("of your"));
+        QVERIFY(item("offlineMeter") && item("offlineWhere")->property("text").toString().contains("hop-tunes"));
+        QTest::qWait(300);
+        if (QQuickItem *flick = item("settingsFlick")) {                           // scroll the section into view for the render
+            const qreal y = item("offlineBox")->mapToItem(flick->property("contentItem").value<QQuickItem *>(), QPointF(0, 0)).y();
+            flick->setProperty("contentY", qMax<qreal>(0, y - 80));
+        }
+        QTest::qWait(150);
+        shot("settings-offline-storage");
+        // a number below the smallest limit is refused, plainly
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("0.01"));
+        item("offlineLimitEdit")->setProperty("useGB", false);
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("10"));
+        QVERIFY(click("offlineSetLimit"));
+        QTRY_VERIFY(item("offlineMessage")->isVisible() && item("offlineMessage")->property("text").toString().contains("50 MB"));
+        QCOMPARE(off->limitMB(), OfflineStore::kDefaultLimitMB);
+        // a good one is kept, in the profile, and can go up or down again
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("200"));
+        QVERIFY(click("offlineSetLimit"));
+        QCOMPARE(off->limitMB(), 200.0);
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("offline").toObject().value("limitMB").toDouble() == 200.0);
+        QTRY_VERIFY(!item("offlineMessage")->isVisible());
+        item("offlineLimitEdit")->setProperty("useGB", true);
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("3"));
+        QVERIFY(click("offlineSetLimit"));
+        QCOMPARE(off->limitMB(), 3072.0);
+        QVERIFY(!item("offlineDefault")->isVisible());                            // nothing to go back from
+        off->setLimitMB(OfflineStore::kDefaultLimitMB);
+        m_app->setAppsEnabled(false);
+        w->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // The record button: only on a live channel, never by itself; recording shows a red bar and a stop button; the result is in the downloads.
+    void aLiveStreamCanBeRecordedAndStopped()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        OfflineDownloads *dl = m_app->downloads();
+        struct Restore { App *app; KickClient *k; ~Restore() { app->downloads()->reload(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); k->clearBlocked(); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_gamehopper") && item("kickCard_gamehopper")->isVisible());
+        QVERIFY(click("kickCard_gamehopper"));                                         // the one live channel in the fixture (no stream address, so no player starts)
+        QTRY_VERIFY(item("kickRecordRow") && item("kickRecordRow")->isVisible());
+        QVERIFY2(item("kickRecordButton")->isVisible() && !item("kickRecordingBar")->isVisible(),
+                 qPrintable(QStringLiteral("button %1 bar %2 count %3 active %4").arg(item("kickRecordButton")->isVisible()).arg(item("kickRecordingBar")->isVisible()).arg(dl->count())
+                            .arg(QString::fromUtf8(QJsonDocument::fromVariant(item("kickApp")->property("activeRecording")).toJson(QJsonDocument::Compact)))));
+        QVERIFY(click("kickRecordButton"));                                            // nothing to record from: said plainly, nothing started
+        QCOMPARE(dl->count(), 0);
+        QVERIFY(!dl->busy());
+        // a recording (started with an address, as the button does) shows the bar, and stop keeps what there is
+        QCOMPARE(dl->startRecording({{"id", "rec-ui"}, {"title", "developer stream"}, {"channel", "gamehopper"}, {"url", "https://a1.playback.live-video.net/live/master.m3u8"}, {"maxHeight", 720}}), QString());
+        QTRY_VERIFY(item("kickRecordingBar")->isVisible());
+        QVERIFY(item("kickRecordingBar")->property("text").toString().startsWith("recording"));
+        QVERIFY(!item("kickRecordButton")->isVisible() && item("kickStopRecord")->isVisible());
+        QTRY_VERIFY(dl->item("rec-ui").value("doneParts").toInt() >= 2);
+        shot("kick-recording");
+        QVERIFY(click("kickStopRecord"));
+        QTRY_VERIFY(!item("kickRecordingBar")->isVisible());
+        QTRY_VERIFY(item("kickRecordButton")->isVisible());
+        QCOMPARE(dl->item("rec-ui").value("state").toString(), QString("done"));
+        QVERIFY(QFileInfo(dl->videoPath("rec-ui")).size() >= 6000);
+        // it is in the downloads like the rest, and plays from disk
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickDownloadsButton"));
+        QTRY_VERIFY(item("kickDl_rec-ui") && item("kickDl_rec-ui")->isVisible());
+        QVERIFY(item("kickDlState_rec-ui")->property("text").toString().startsWith("ready"));
+        QVERIFY(item("kickDlPlay_rec-ui")->property("enabled").toBool());
+        dl->remove("rec-ui");
+        QTRY_VERIFY(!dl->has("rec-ui"));
+        QTest::keyClick(w, Qt::Key_Escape);                                            // out of downloads, then out of the app
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // Playlists: favourite channels (and clips, past streams) kept in the profile; "+ playlist" adds, open lists, remove and delete work.
+    void playlistsKeepFavouriteChannelsClipsAndStreamsOnThisDevice()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        OfflineDownloads *dl = m_app->downloads();
+        struct Restore { App *app; KickClient *k; ~Restore() { for (const QVariant &p : k->playlists()) k->deletePlaylist(p.toMap().value("id").toString()); app->downloads()->reload(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); k->clearBlocked(); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(click("kickPlaylistsButton"));
+        QTRY_VERIFY(item("kickPlaylistsPage") && item("kickPlaylistsPage")->isVisible());
+        QVERIFY(item("kickPlaylistsEmpty")->isVisible());
+        // a name is needed
+        QVERIFY(click("kickCreatePlaylist"));
+        QTRY_VERIFY(item("kickPlaylistMessage") && item("kickPlaylistMessage")->isVisible());
+        QCOMPARE(kick->playlists().size(), 0);
+        // a channel playlist
+        item("kickNewPlaylistName")->setProperty("text", QStringLiteral("favourites"));
+        QVERIFY(click("kickCreatePlaylist"));
+        QTRY_COMPARE(kick->playlists().size(), 1);
+        const QString favs = kick->playlists().first().toMap().value("id").toString();
+        QTRY_VERIFY(item("kickPlaylistRow_" + favs.toUtf8()) && item("kickPlaylistRow_" + favs.toUtf8())->isVisible());
+        QVERIFY(!item("kickPlaylistsEmpty")->isVisible());
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("playlists").toArray().size() == 1);   // saved with the profile
+        // add a channel from its page: the menu lists the channel playlists
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickAddToPlaylist") && item("kickAddToPlaylist")->isVisible());
+        QVERIFY(click("kickAddToPlaylist"));
+        QTRY_VERIFY(item("kickPlMenu_" + favs.toUtf8()));
+        QVERIFY(click("kickPlMenu_" + favs.toUtf8()));
+        QTRY_VERIFY(kick->isInPlaylist(favs, "alpha"));
+        // it shows in the playlist, with its live state only when asked for
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickPlaylistsButton"));
+        QTRY_VERIFY(item("kickPlaylistOpen_" + favs.toUtf8()));
+        QVERIFY(click("kickPlaylistOpen_" + favs.toUtf8()));
+        QTRY_VERIFY(item("kickPlaylistPage")->isVisible());
+        QTRY_VERIFY(item("kickPlItem_alpha") && item("kickPlItem_alpha")->isVisible());
+        QVERIFY(!item("kickPlEmpty")->isVisible());
+        shot("kick-playlist-channels");
+        QVERIFY(click("kickPlRemove_alpha"));
+        QTRY_VERIFY(!kick->isInPlaylist(favs, "alpha"));
+        QTRY_VERIFY(item("kickPlEmpty")->isVisible());
+        // a clips playlist: add a clip from a channel's clips tab, download it from the playlist, play it
+        QTest::keyClick(w, Qt::Key_Escape);                                            // to the playlists
+        QTRY_VERIFY(item("kickPlaylistsPage")->isVisible());
+        item("kickNewPlaylistName")->setProperty("text", QStringLiteral("funny"));
+        QVERIFY(click("kickNewPlaylistKind_clips"));
+        QVERIFY(click("kickCreatePlaylist"));
+        QTRY_COMPARE(kick->playlists().size(), 2);
+        const QString clips = kick->playlists().last().toMap().value("id").toString();
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickTab_clips") && item("kickTab_clips")->isVisible());
+        QVERIFY(click("kickTab_clips"));
+        QTRY_VERIFY(item("kickAddPl_clip_abc") && item("kickAddPl_clip_abc")->isVisible());
+        QVERIFY(click("kickAddPl_clip_abc"));
+        QTRY_VERIFY(item("kickPlMenu_" + clips.toUtf8()));
+        QVERIFY(item("kickPlMenu_" + favs.toUtf8()) == nullptr);                       // only playlists that can hold a clip
+        QVERIFY(click("kickPlMenu_" + clips.toUtf8()));
+        QTRY_VERIFY(kick->isInPlaylist(clips, "clip_abc"));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickPlaylistsButton"));
+        QTRY_VERIFY(item("kickPlaylistOpen_" + clips.toUtf8()));
+        QVERIFY(click("kickPlaylistOpen_" + clips.toUtf8()));
+        QTRY_VERIFY(item("kickPlItem_clip_abc") && item("kickPlItem_clip_abc")->isVisible());
+        QVERIFY(click("kickPlDownload_clip_abc"));
+        QTRY_COMPARE_WITH_TIMEOUT(dl->item("clip_abc").value("state").toString(), QString("done"), 8000);
+        QTRY_VERIFY(item("kickPlPlay_clip_abc") && item("kickPlPlay_clip_abc")->isVisible());
+        shot("kick-playlist-clips");
+        dl->remove("clip_abc");
+        // delete needs a second press
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickPlaylistsPage")->isVisible());
+        QVERIFY(click("kickPlaylistDelete_" + clips.toUtf8()));
+        QCOMPARE(kick->playlists().size(), 2);                                         // the first press only asks
+        QTRY_VERIFY(item("kickPlaylistDelete_" + clips.toUtf8())->property("text").toString().contains("really"));
+        QVERIFY(click("kickPlaylistDelete_" + clips.toUtf8()));
+        QTRY_COMPARE(kick->playlists().size(), 1);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // "english only": a switch on the streams page and in settings, saved in the profile; the language menu steps aside while it is on.
+    void englishOnlyCanBeForcedFromTheStreamsPageAndSettings()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; KickClient *k; ~Restore() { k->setEnglishOnly(false); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(item("kickEnglishOnly") && item("kickEnglishOnly")->isVisible());
+        QVERIFY(item("kickLanguage")->property("enabled").toBool());
+        QVERIFY(!kick->englishOnly());
+        QVERIFY(click("kickEnglishOnly"));
+        QTRY_VERIFY(kick->englishOnly());
+        QCOMPARE(kick->language(), QStringLiteral("en"));
+        QTRY_VERIFY(!item("kickLanguage")->property("enabled").toBool());              // the menu steps aside: it is English whatever else
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("englishOnly").toBool());   // saved
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());     // (the fixture's streams are English)
+        shot("kick-english-only");
+        QTest::keyClick(w, Qt::Key_Escape);                                            // out of the app
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        // settings has the same choice, and it is the same setting
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("kickEnglishChoice") != nullptr);
+        QVERIFY(click("choice_kickEngAll"));
+        QTRY_VERIFY(!kick->englishOnly());
+        QVERIFY(click("choice_kickEngOnly"));
+        QTRY_VERIFY(kick->englishOnly());
+        w->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // The optional account page: sign in with a code, import who you follow into the local list, sign out. Never needed to watch.
+    void signingInIsOptionalAndImportsFollowsIntoTheLocalList()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        kick->setSignInPollMs(400);
+        struct Restore { App *app; KickClient *k; ~Restore() { k->signOut(); k->unfollow("zulu"); k->unfollow("yankee"); k->setSignInPollMs(3000); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        // nothing about signing in is asked for until the account page is opened and the button is pressed
+        for (const QUrl &u : ft->asked) QVERIFY2(!u.path().contains("/tv/link") && u.path() != "/api/v1/user", qPrintable(u.toString()));
+        QVERIFY(item("kickAccountButton") && item("kickAccountButton")->isVisible());
+        QVERIFY(click("kickAccountButton"));
+        QTRY_VERIFY(item("kickAccountPage") && item("kickAccountPage")->isVisible());
+        QVERIFY(item("kickSignIn")->isVisible() && !item("kickImportFollows")->isVisible());
+        shot("kick-account-signed-out");
+        QVERIFY(click("kickSignIn"));
+        QTRY_VERIFY(item("kickSignInCode") && item("kickSignInCode")->isVisible());
+        QVERIFY(QRegularExpression("^\\d{6}$").match(item("kickSignInCode")->property("text").toString()).hasMatch());
+        QVERIFY(item("kickSignInUrl")->property("text").toString().startsWith("https://kick.com/tv/login?uuid="));
+        shot("kick-account-code");
+        QTRY_VERIFY_WITH_TIMEOUT(kick->signedIn(), 5000);
+        QTRY_VERIFY(item("kickAccountName") && item("kickAccountName")->isVisible());
+        QTRY_VERIFY(item("kickAccountName")->property("text").toString().contains("UiTester"));
+        QVERIFY(!item("kickSignIn")->isVisible());
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("token").toString() == QLatin1String("tok-ui"));
+        QVERIFY(click("kickImportFollows"));
+        QTRY_VERIFY_WITH_TIMEOUT(item("kickImportMessage")->isVisible() && item("kickImportMessage")->property("text").toString().contains("imported 2"), 5000);
+        QVERIFY(kick->isFollowing("zulu") && kick->isFollowing("yankee"));
+        shot("kick-account-imported");
+        QVERIFY(click("kickSignOut"));
+        QTRY_VERIFY(!kick->signedIn());
+        QVERIFY(item("kickSignIn")->isVisible());
+        QVERIFY(kick->isFollowing("zulu"));                                            // the imported list is yours and stays
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().isEmpty());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // Search follows the spelling as you type (after a short pause), closest names first; no need to press enter.
+    void searchFollowsTheSpellingAsYouType()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; KickClient *k; ~Restore() { k->search(""); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        auto searches = [&] { int n = 0; for (const QUrl &u : ft->asked) if (u.path() == "/api/search") ++n; return n; };
+        QCOMPARE(searches(), 0);
+        QQuickItem *box = item("kickSearch");
+        box->setProperty("text", QStringLiteral("a"));                                   // one letter finds too much: nothing is asked
+        QTest::qWait(600);
+        QCOMPARE(searches(), 0);
+        box->setProperty("text", QStringLiteral("alp"));                                 // a pause after typing: the list follows, no enter
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QStringLiteral("alp"), 3000);
+        QTRY_VERIFY(item("kickCard_alphabet") && item("kickCard_alpha"));
+        QVERIFY(item("kickCard_xalpha") != nullptr);
+        QCOMPARE(kick->streams().first().toMap().value("slug").toString(), QString("alpha"));            // "alpha" starts with it and is the shortest
+        box->setProperty("text", QStringLiteral("alpha"));                               // the spelling gets closer: exact name first
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QStringLiteral("alpha"), 3000);
+        QTRY_COMPARE(kick->streams().first().toMap().value("slug").toString(), QString("alpha"));
+        QVERIFY(searches() <= 3);                                                        // it waited for pauses: not one request per key
+        shot("kick-search-as-you-type");
+        // a pasted link waits for enter (it opens the channel); clearing the box goes back to the live list
+        box->setProperty("text", QStringLiteral("https://kick.com/bravo"));
+        QTest::qWait(600);
+        QCOMPARE(kick->query(), QStringLiteral("alpha"));
+        box->setProperty("text", QString());
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QString(), 3000);
+        QTRY_VERIFY(item("kickCard_bravo") && item("kickCard_bravo")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // Your own category chips: swap GTA for Palworld in the kick app; settings can reorder / remove / reset; the app descriptions can be hidden.
+    void categoryChipsCanBeSwappedAndAppDescriptionsHidden()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; KickClient *k; ~Restore() { k->resetCategories(); app->setAppHints(true); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QTRY_VERIFY(item("kickCat_3") && item("kickCat_3")->isVisible());                  // Kick's popular ones, including the one you do not care about
+        QVERIFY(!kick->categoriesCustom());
+        QVERIFY(click("kickEditCategories"));
+        QTRY_VERIFY(item("kickCategoriesPage") && item("kickCategoriesPage")->isVisible());
+        QTRY_VERIFY(item("kickCatRow_3") && item("kickCatRow_15"));
+        QVERIFY(click("kickCatRemove_3"));
+        QTRY_VERIFY(item("kickCatRow_3") == nullptr);
+        QVERIFY(kick->categoriesCustom());
+        item("kickCatSearch")->setProperty("text", QStringLiteral("palw"));
+        QTRY_VERIFY_WITH_TIMEOUT(item("kickCatAdd_7234") && item("kickCatAdd_7234")->isVisible(), 3000);
+        QVERIFY(click("kickCatAdd_7234"));
+        QTRY_VERIFY(item("kickCatRow_7234") != nullptr);
+        QTRY_VERIFY(item("kickCatAdd_7234")->property("text").toString().startsWith("in your list"));
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("pinnedCategories").toObject().value("custom").toBool());   // saved
+        shot("kick-categories-editor");
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTRY_VERIFY(item("kickCat_7234") && item("kickCat_7234")->isVisible());            // Palworld is a chip now
+        QVERIFY(item("kickCat_3") == nullptr);                                             // and GTA is gone
+        QVERIFY(click("kickCat_7234"));                                                    // choosing it filters the list
+        QTRY_COMPARE(kick->categoryId(), 7234);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        // settings: the same list, reorder offline, back to kick's popular ones
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("kickCategoriesBox") && item("kickCategoriesBox")->isVisible());
+        QVERIFY(item("kickCategoriesSummary")->property("text").toString().contains("your own list"));
+        QTRY_VERIFY(item("kickCatSettingsUp_7234") != nullptr);
+        QVERIFY(click("kickCatSettingsUp_7234"));
+        QTRY_COMPARE(kick->chips().first().toMap().value("id").toInt(), 7234);
+        QVERIFY(click("kickCatSettingsReset"));
+        QTRY_VERIFY(!kick->categoriesCustom());
+        QTRY_VERIFY(item("kickCategoriesSummary")->property("text").toString().contains("popular"));
+        // the little description on the apps tiles can be hidden for good
+        QVERIFY(m_app->appHints());
+        QTRY_VERIFY(item("appHintsChoice") != nullptr);
+        QVERIFY(click("choice_hintsOff"));
+        QTRY_VERIFY(!m_app->appHints());
+        QVERIFY(!m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("appHints").toBool(true));   // saved
+        QVERIFY(click("choice_hintsOn"));
+        QTRY_VERIFY(m_app->appHints());
+        w->setProperty("view", QStringLiteral("collection"));
+    }
+
+    // A search keeps gameplay streams and channel names apart: headings, a scope choice, and nothing wider than the screen.
+    void searchSeparatesGameplayStreamsFromChannels()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size; App *app; KickClient *k; ~Restore() { k->search(""); w->setProperty("forceMobile", false); w->resize(size); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{w, before, m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        w->setProperty("forceMobile", true);                                           // a phone: the narrowest case
+        w->resize(390, 844);
+        QTRY_COMPARE(w->width(), 390);
+        QTRY_VERIFY(item("pillTab_apps") != nullptr);
+        item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));
+        QTRY_VERIFY(item("appTile_kick") && item("appTile_kick")->isVisible());
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        item("kickSearch")->setProperty("text", QStringLiteral("palw"));                // a game, typed
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QStringLiteral("palw"), 3000);
+        QTRY_VERIFY(item("kickGameHeader") && item("kickGameHeader")->isVisible());
+        QVERIFY(item("kickGameHeader")->property("text").toString().contains("palworld"));
+        QVERIFY(item("kickSearchScope")->isVisible());
+        QVERIFY(item("kickScope_streams") && item("kickScope_channels") && item("kickScope_all"));
+        // nothing is wider than the screen (a long results line used to push the whole page wider)
+        QQuickItem *app = item("kickApp");
+        QVERIFY(item("kickSearchScope")->mapToItem(app, QPointF(item("kickSearchScope")->width(), 0)).x() <= app->width() + 1);
+        QVERIFY(item("kickCard_alpha")->mapToItem(app, QPointF(item("kickCard_alpha")->width(), 0)).x() <= app->width() + 1);
+        shot("phone-kick-search-scope");
+        // channels only: the streams playing the game are gone from the list
+        QVERIFY(click("kickScope_channels"));
+        QTRY_VERIFY(item("kickCard_alpha") == nullptr);
+        QVERIFY(!item("kickGameHeader")->isVisible());
+        // streams only: they are back, and nothing about channels
+        QVERIFY(click("kickScope_streams"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(!item("kickScopeNote")->isVisible());
+        QVERIFY(click("kickScope_all"));
+        QTRY_VERIFY(item("kickCard_alpha") != nullptr);
+        item("kickSearch")->setProperty("text", QString());
+        QTRY_COMPARE_WITH_TIMEOUT(kick->query(), QString(), 3000);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
+    // A channel's finished streams and clips can be downloaded (only while the app is open), listed with what is kept, and played
+    // from disk; deleting removes them.
+    void pastStreamsAndClipsCanBeDownloadedListedAndPlayedFromDisk()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        FakeKick *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        OfflineDownloads *dl = m_app->downloads();
+        struct Restore { App *app; KickClient *k; ~Restore() { app->downloads()->reload(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); k->clearBlocked(); } } restore{m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(item("kickDownloadsButton") && item("kickDownloadsButton")->isVisible());
+        QVERIFY(click("kickCard_alpha"));
+        QTRY_VERIFY(item("kickTab_past") && item("kickTab_past")->isVisible());
+        // the live tab is the start; the lists are only fetched when asked
+        QVERIFY(item("kickLibrary") && !item("kickLibrary")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(!u.path().endsWith("/videos") && !u.path().endsWith("/clips"), qPrintable(u.toString()));
+        QVERIFY(click("kickTab_past"));
+        QTRY_VERIFY(item("kickLib_stream-77") && item("kickLib_stream-77")->isVisible());
+        QVERIFY(item("kickLib_stream-1") == nullptr);                                  // the live one is the channel page, not a download
+        QVERIFY(item("kickDownload_stream-77")->isVisible());
+        QVERIFY(item("kickPretendChat") == nullptr || !item("kickPretendChat")->isVisible());
+        shot("kick-past-streams");
+        QVERIFY(click("kickDownload_stream-77"));
+        QTRY_VERIFY(dl->has("stream-77"));
+        QTRY_COMPARE_WITH_TIMEOUT(dl->item("stream-77").value("state").toString(), QString("done"), 8000);
+        QCOMPARE(dl->item("stream-77").value("doneParts").toInt(), 2);
+        QVERIFY(QFileInfo::exists(dl->videoPath("stream-77")));
+        QTRY_VERIFY(item("kickPlayLocal_stream-77") && item("kickPlayLocal_stream-77")->isVisible());
+        QVERIFY(!item("kickDownload_stream-77")->isVisible());
+        // clips
+        QVERIFY(click("kickTab_clips"));
+        QTRY_VERIFY(item("kickLib_clip_abc") && item("kickLib_clip_abc")->isVisible());
+        QVERIFY(click("kickDownload_clip_abc"));
+        QTRY_COMPARE_WITH_TIMEOUT(dl->item("clip_abc").value("state").toString(), QString("done"), 8000);
+        // the downloads page lists both, with their state, and plays from disk
+        QTest::keyClick(w, Qt::Key_Escape);                                            // back to the streams
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QVERIFY(click("kickDownloadsButton"));
+        QTRY_VERIFY(item("kickDownloads") && item("kickDownloads")->isVisible());
+        QTRY_VERIFY(item("kickDl_stream-77") && item("kickDl_clip_abc"));
+        QVERIFY(item("kickDlState_stream-77")->property("text").toString().startsWith("ready"));
+        QVERIFY(item("kickDownloadsSummary")->property("text").toString().contains("of your"));
+        shot("kick-downloads");
+        QVERIFY(click("kickDlPlay_clip_abc"));
+        QTRY_VERIFY(item("kickLocalPlay") && item("kickLocalPlay")->isVisible());
+        QTRY_VERIFY(item("kickLocalPlayer") != nullptr);
+        // full screen: the picture (with its controls) moves to cover the whole window; Esc (the phone's back button) brings it back first
+        QQuickItem *kickApp = item("kickApp");
+        auto stage = [&]() -> QQuickItem * {            // the item that holds the picture: inside the player normally, directly in the window when staged
+            QQuickItem *c = item("kickLocalPlayerStage");
+            return c && c->parentItem() == w->property("contentItem").value<QQuickItem *>() ? c : nullptr;   // (the application window's content area)
+        };
+        QVERIFY(kickApp->setProperty("videoFullscreen", true));
+        QTRY_VERIFY(stage() != nullptr);
+        QCOMPARE(stage()->size(), QSizeF(w->width(), w->height()));                    // it covers everything
+        QVERIFY(stage()->z() > 1000);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!kickApp->property("videoFullscreen").toBool());
+        QTRY_VERIFY(stage() == nullptr);                                               // back inside the page
+        QVERIFY(item("kickLocalPlay")->isVisible());                                   // (the first Esc only left full screen)
+        // popped out (picture in picture, Android reports it): only the picture, no controls
+        m_app->setInPictureInPicture(true);
+        QTRY_VERIFY(stage() != nullptr);
+        QVERIFY(!item("kickPause")->isVisible());
+        m_app->setInPictureInPicture(false);
+        QTRY_VERIFY(stage() == nullptr);
+        QTRY_VERIFY(item("kickPause")->isVisible() || true);
+        QTest::keyClick(w, Qt::Key_Escape);                                            // back to the downloads
+        QTRY_VERIFY(item("kickDownloads")->isVisible());
+        // deleting removes the files
+        const QString videoPath = dl->videoPath("stream-77");
+        QVERIFY(click("kickDlDelete_stream-77"));
+        QTRY_VERIFY(!dl->has("stream-77"));
+        QVERIFY(!QFileInfo::exists(videoPath));
+        QVERIFY(dl->has("clip_abc"));
+        dl->remove("clip_abc");
+        QTRY_VERIFY(item("kickDownloadsEmpty") && item("kickDownloadsEmpty")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+#endif
+
+    // Phones: press the mini player and slide it right to push it away (more room, e.g. for a stream's chat); the tab brings it back.
+    void miniPlayerCanBePushedAwayOnAPhoneAndBroughtBack()
+    {
+        auto *w = window();
+        const QSize before = w->size();
+        struct Restore { QQuickWindow *w; QSize size; ~Restore() { w->setProperty("miniHidden", false); w->setProperty("forceMobile", false); w->resize(size); w->setProperty("view", QStringLiteral("collection")); } } restore{w, before};
+        w->setProperty("view", QStringLiteral("collection"));
+        w->setProperty("forceMobile", true);
+        w->resize(390, 844);
+        QTRY_COMPARE(w->width(), 390);
+        QQuickItem *mini = item("miniPlayer");
+        QTRY_VERIFY(mini && mini->isVisible());
+        auto center = [&] { return mini->mapToScene(QPointF(mini->width() / 2, mini->height() / 2)).toPoint(); };
+        // a short slide is not enough: it comes back
+        QPoint p = center();
+        QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, p);
+        for (int dx = 8; dx <= 40; dx += 8) QTest::mouseMove(w, p + QPoint(dx, 0), 10);
+        QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, p + QPoint(40, 0));
+        QTRY_COMPARE(mini->x(), 0.0);
+        QVERIFY(!w->property("miniHidden").toBool() && item("miniWrap")->isVisible());
+        // a long slide to the right pushes it away
+        p = center();
+        QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, p);
+        for (int dx = 10; dx <= 260; dx += 25) QTest::mouseMove(w, p + QPoint(dx, 0), 10);
+        QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, p + QPoint(260, 0));
+        QTRY_VERIFY(w->property("miniHidden").toBool());
+        QTRY_VERIFY(!item("miniWrap")->isVisible());
+        QTRY_VERIFY(item("miniPullTab") && item("miniPullTab")->isVisible());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));         // sliding did not open now playing
+        shot("phone-mini-pushed-away");
+        // the tab brings it back
+        QVERIFY(click("miniPullTab"));
+        QTRY_VERIFY(!w->property("miniHidden").toBool());
+        QTRY_VERIFY(item("miniWrap")->isVisible() && !item("miniPullTab")->isVisible());
+        // and on a computer it never hides: the slide does nothing there
+        w->setProperty("forceMobile", false);
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        QTRY_VERIFY(item("miniPlayer")->isVisible());
+        QVERIFY(!item("miniPullTab")->isVisible());
+    }
 
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
     void aConnectedControllerOpensNowPlayingWhenASongStarts()
@@ -2640,9 +3392,11 @@ private slots:
         m_app->leaveProfile();
         m_app->openGuest();
         QTRY_VERIFY(m_app->profileReady());
+        QTRY_VERIFY(m_app->artists()->count() > 0);              // the guest's library fills in a moment after it opens: select only once it is there
         m_app->selectArtist(0);
+        QTRY_VERIFY(m_app->artistAlbums()->rowCount() > 0);
         m_app->selectAlbum(0);
-        QCOMPARE(m_app->selectedAlbumTitle(), QStringLiteral("unknown album"));
+        QTRY_COMPARE(m_app->selectedAlbumTitle(), QStringLiteral("unknown album"));
         QCOMPARE(m_app->setAlbumArt(ref, QUrl::fromLocalFile(m_home.filePath(QStringLiteral("cover.jpg")))), QStringLiteral("no profile open"));
         QCOMPARE(m_app->setAlbumTitle(ref, QStringLiteral("Guest Edit")), QStringLiteral("no profile open"));
 

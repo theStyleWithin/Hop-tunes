@@ -9,7 +9,8 @@
     <application android:name="org.qtproject.qt.android.bindings.QtApplication" android:label="Hop-tunes" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:hardwareAccelerated="true" android:extractNativeLibs="true" android:allowBackup="false">
         <activity android:name="io.github.thestylewithin.hoptunes.HopActivity" android:label="Hop-tunes" android:exported="true"
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
-            android:launchMode="singleTop" android:screenOrientation="unspecified">
+            android:launchMode="singleTop" android:screenOrientation="unspecified"
+            android:supportsPictureInPicture="true" android:resizeableActivity="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

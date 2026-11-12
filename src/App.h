@@ -23,6 +23,8 @@
 #include "game/PinballGame.h"
 #ifdef HOPTUNES_NET_APPS
 #include "apps/KickClient.h"
+#include "apps/OfflineDownloads.h"
+#include "apps/OfflineStore.h"
 #include "net/AppNet.h"
 #endif
 #include "game/AudioAnalyzer.h"
@@ -153,10 +155,13 @@ class App : public QObject {
     // How video is shown: "window" (video with the movie's details and an up-next list), "theater" (a wide video
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
+    Q_PROPERTY(QObject *downloads READ downloadsObject CONSTANT)  // offline downloads of Kick streams and clips (null without the networked apps)
+    Q_PROPERTY(QObject *offline READ offlineObject CONSTANT)    // the room set aside for offline Kick (null without the networked apps)
     Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
     Q_PROPERTY(QStringList netAllowedApps READ netAllowedApps NOTIFY appNetChanged)   // the apps the person has allowed to use the internet
     Q_PROPERTY(QObject *appNetGateway READ gatewayObject CONSTANT)
+    Q_PROPERTY(bool appHints READ appHints WRITE setAppHints NOTIFY appHintsChanged)   // the one-line descriptions that pop up on the apps tiles (on at first, the person can hide them)
     Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString videoOrientation READ videoOrientation WRITE setVideoOrientation NOTIFY videoOrientationChanged)   // phones: how videos open, "portrait" | "auto" | "landscape"
@@ -189,6 +194,15 @@ public:
     PinballGame *pinball() { return &m_pinball; }
     // A game that wants the whole screen: on Android turned sideways with the system bars hidden (restored when it ends).
     Q_INVOKABLE void setGameScreen(bool on);
+    // Android: a stream's picture can pop out into a small window over the home screen (picture in picture) and fill the screen
+    Q_PROPERTY(bool inPictureInPicture READ inPictureInPicture NOTIFY inPictureInPictureChanged)
+    bool inPictureInPicture() const { return m_inPip; }
+    Q_INVOKABLE bool pictureInPictureSupported() const;
+    Q_INVOKABLE void setPictureInPictureAllowed(bool on, int w = 16, int h = 9);   // a stream is playing and may pop out (the home gesture does it)
+    Q_INVOKABLE bool enterPictureInPicture();                                      // pop it out now
+    Q_INVOKABLE void setImmersive(bool on);                                        // hide the phone's status and navigation bars (a full-screen picture)
+    void setInPictureInPicture(bool on);
+    void registerPictureInPicture();                                               // Android: connects the activity's "popped out" report to this object
     Gamepad *gamepad() { return &m_gamepad; }
     QVariantMap gameSettings() const;
     bool analysisSafeMode() const { return m_analysisSafeMode; }
@@ -282,6 +296,26 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    QObject *downloadsObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_downloads;
+#else
+        return nullptr;
+#endif
+    }
+#ifdef HOPTUNES_NET_APPS
+    OfflineDownloads *downloads() { return &m_downloads; }   // for tests
+#endif
+    QObject *offlineObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_offline;
+#else
+        return nullptr;
+#endif
+    }
+#ifdef HOPTUNES_NET_APPS
+    OfflineStore *offlineStore() { return &m_offline; }   // for tests
+#endif
     QObject *kickObject() {
 #ifdef HOPTUNES_NET_APPS
         return &m_kick;
@@ -314,6 +348,8 @@ public:
     Q_INVOKABLE bool appNetAllowed(const QString &app) const { return m_netAllowed.contains(app); }
     Q_INVOKABLE void setAppNetAllowed(const QString &app, bool on);
     bool appsEnabled() const { return m_appsEnabled; }
+    bool appHints() const { return m_appHints; }
+    void setAppHints(bool on);
     void setAppsEnabled(bool on);
     QString videoOrientation() const { return m_videoOrientation; }
     void setVideoOrientation(const QString &mode);
@@ -321,6 +357,7 @@ public:
     // Android: the system folder chooser (the Qt dialog has no usable Android version). The answer comes back
     // as androidFolderPicked(token, folder); a cancelled choice answers with an empty address.
     Q_INVOKABLE bool pickAndroidFolder(const QString &token);
+    Q_INVOKABLE QString offlineMoveTo(const QUrl &folder);   // settings > apps: keep offline kick on this drive or folder ("" = fine, else why not)
     // The diagnostic log (phones: settings > diagnostics), and copying text to the clipboard.
     Q_INVOKABLE QString diagLog() const;
     Q_INVOKABLE QString diagPreviousLog() const;
@@ -514,6 +551,8 @@ signals:
     void videoDetailChanged();
     void videoViewStyleChanged();
     void appsEnabledChanged();
+    void appHintsChanged();
+    void inPictureInPictureChanged();
     void appNetChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
@@ -563,10 +602,14 @@ private:
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
     bool m_appsEnabled = false;
+    bool m_appHints = true;
+    bool m_inPip = false;
     QSet<QString> m_netAllowed;
 #ifdef HOPTUNES_NET_APPS
     AppNet m_appNet;
     KickClient m_kick{&m_appNet};
+    OfflineStore m_offline;
+    OfflineDownloads m_downloads{&m_appNet, &m_offline};
 #endif
     QString m_videoComments = QStringLiteral("off");
     QString m_videoOrientation = QStringLiteral("auto");

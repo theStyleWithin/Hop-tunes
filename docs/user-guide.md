@@ -167,9 +167,9 @@ On an Android phone the app is the same (apps are switched on in **settings → 
 of the watch page and the chat below it. The Android app carries the internet permission for this; the video plays through Android's own player.
 
 - **Allowing it.** The first time you open Kick it asks, and lists exactly which sites it will contact (kick.com, web.kick.com,
-  images.kick.com, stream.kick.com, files.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
+  images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net) and what is sent (what you ask for and your internet address, like any visitor).
   You can take the permission back any time in **settings → apps settings → kick**. It uses the internet only while the app is open, and the bar at
-  the bottom shows what is connected, with a **disconnect** button. Nothing is kept on disk and no cookies are stored.
+  the bar at the top shows what is connected (there is deliberately no disconnect button, so a stray tap cannot cut it; take the permission back in settings). Its dot is a **health light** for Kick: green = up, yellow = slow or partly down, red = not answering. While the app is open it asks Kick two tiny questions (the stream list and one channel page, nothing about you) about once a minute, more often when something looks wrong. On red, live streams cannot be loaded or watched, your downloads still play, and Hop-tunes refreshes the results by itself once Kick answers again. Nothing is kept on disk and no cookies are stored.
 - **Browsing.** Search, pick a category, sort by most viewers or featured, choose a language. Adult (18+) streams are hidden unless you tick
   **show 18+**. **show more** and **refresh** are buttons: Hop-tunes never loads more in the background.
 - **The developer's stream.** When the developer of Hop-tunes (gamehopper) is live, their stream takes the first card of the default feed, marked
@@ -186,6 +186,93 @@ of the watch page and the chat below it. The Android app carries the internet pe
   why in plain words. Pictures are WebP: on Linux they need Qt's image-format plugins (`qt6-imageformats` on Arch, `qt6-image-formats-plugins`
   on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
   a stream does not play there, the message under the picture says so.
+
+On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
+leave the app and it is the music search again.
+
+### Signing in to Kick (optional) and importing your follows
+
+Nothing in the Kick app needs an account. If you want your Kick follows in Hop-tunes' own follow list, open **account** on the streams page and press **sign in with a code**:
+Hop-tunes shows a 6-digit code and an address on kick.com. Open the address in your browser (signed in to Kick) and approve it; Hop-tunes never sees your password. Then press
+**import my follows**: the channels you follow on Kick are added to your follow list on this device (channels you blocked here are skipped, and nothing is followed or changed on
+Kick). The session token Kick gives Hop-tunes is kept only in your profile on this device (a guest keeps it until the session ends) and is sent only to kick.com. **sign out**
+forgets it; the imported follows stay. This uses Kick's unofficial TV sign-in, so it may stop working if Kick changes it.
+
+### Opening a stream, full screen and the pop-out window (phone)
+
+Tapping a stream on a phone asks **watch this stream?** first, so a slip of the finger while you scroll does not open one (settings → apps settings → **opening a stream** can turn the question off).
+On the picture, the **full screen** button makes it fill the phone (the status and navigation bars hide), in portrait or landscape: turn the phone, or press **rotate** if your phone's own rotation is
+off; the back button leaves full screen. The **pop out** button (or leaving Hop-tunes with the home button or gesture while a stream or download is playing) turns the picture into a small window that floats over your
+home screen and other apps (Android's picture in picture): drag it anywhere, pinch to resize it a little, tap it to return to Hop-tunes. Android decides how small or large that window can be, and it only appears while something
+is playing. It needs Android 8 or newer.
+
+### On a phone: more room
+
+Press the mini player at the bottom and slide it to the right to push it away; tap the little tab at the right edge to bring it back. The round arrow at the top right of the Kick app pulls
+the menu (and on a channel's page the header, tabs and record button) out of the way. If a stream stops with an error, press **try again**; after switching to another app and coming back
+the stream is asked for again automatically.
+
+### Pulling the menu out of the way
+
+On the streams page, the round arrow at the top right of the Kick app pulls the search box, filters and categories up like a curtain, so the streams get the room; press it again and
+the menu comes back down. Searching with the phone's bottom search button also brings it back.
+
+### Streams playing a game versus channels
+
+Under the search box, **everything**, **streams playing it** and **channels** choose what the search shows. A game or category that matches what you typed brings up the live streams playing it (most viewers first); channels with a similar
+name are the other kind of answer. "Everything" shows both, streams first, with headings. Switching between them is instant (nothing new is asked of Kick) and the choice resets when you clear the search.
+
+### Searching for a game
+
+Type a game or category in the search box (for example "Palworld") and the live streams playing it come first, most viewers first, followed by channels with a similar name. Channels that are not
+live show their avatar. Pictures of streams, playlists and downloads stay: a download's picture is kept with it.
+
+### Searching, and your own categories
+
+Type a streamer's name in the search box and the list follows your spelling a moment after you pause (no enter needed), with the closest names first. If Kick finds nothing for a
+phrase like "name vtuber", Hop-tunes searches its longest word and still puts the closest name first. Pasting a kick.com link opens that channel when you press enter.
+
+The chips under the search box are Kick's popular categories. Press **edit** at the end of them (or open settings → apps settings → **kick categories**) to make them yours: take away the
+ones you do not care about, search for a game or category by name and add it, move them up and down, or go back to Kick's popular ones. Finding categories needs the internet, so adding
+works inside the Kick app; removing, moving and resetting also work from settings. The list is kept in your profile.
+
+### English only
+
+The **english only** switch next to the filters on the streams page (also in settings → apps settings → **kick language**) keeps the list to English streams. It is
+saved in your profile and wins over the language menu while it is on. Streams whose language Kick does not state are kept. Searching for a streamer by name, your
+follow list and your playlists are your own choices, so they are not filtered.
+
+### Playlists
+
+**playlists** on the streams page holds your own lists. Name one, choose what it holds (channels, clips or past streams) and press **create**. Then on a channel's page
+use **+ playlist** to put the channel in a channels list; on the clips and past streams tabs use **+ list** on a row. Open a playlist to go to a channel, to see who is live
+now (it only looks when you press **who's live now**), or to download and play the clips and streams in it. Playlists are saved with your profile on this device and are never sent anywhere
+(guests keep nothing). A streamer you blocked stays hidden in your playlists. Up to 50 playlists with up to 500 items each.
+
+### Downloading past streams and clips
+
+Open a channel in Kick and use the tabs **live**, **past streams** and **clips**. Pick a quality (480p, 720p or best), then press **download** on
+a finished stream or a clip; the list shows about how big it will be first (a long stream at 720p is several GB). Downloads are kept inside Hop-tunes' own
+offline folder (see below), not as loose video files, and count against your offline storage limit. The **downloads** button on the streams page opens the
+list of what you have: **play** it from your device, **pause**, **resume** or **delete** it. Downloads only run while the Kick app is open: leaving the app
+pauses them and opening it again carries on. If the limit is reached or the drive is nearly full a download stops and says why; nothing is deleted. Only
+finished streams can be downloaded; recording a live stream comes later. These are personal copies for watching offline: please respect the streamer's and Kick's rules.
+
+### Recording a live stream
+
+On a live channel's page press **● record** to keep the stream from that moment on. A red bar shows the time and size; press **stop** when you have enough.
+It also stops by itself when the stream ends, when your offline storage limit is reached or the drive is nearly full (what was recorded is kept),
+and when you close the Kick app (recording only runs while the app is open). Recordings appear in the **downloads** page and play from your device.
+Quality follows the 480p / 720p / best choice on the past streams and clips tabs (720p by default). Recording starts from now: there is no rewind, and a
+piece lost to a network drop stays lost. A long recording is large: watch the storage meter. Personal copies only.
+
+### Kick offline storage
+
+In **settings → apps settings → kick offline storage** you choose how much room Kick may use for things kept offline (downloaded past streams, clips and
+recordings: these arrive in later versions). Type a number, pick MB or GB and press **set limit**; you can change it whenever you like. The meter shows how
+much is used. When the limit is reached, or the drive is nearly full (Hop-tunes always leaves 1 GB free), new downloads pause and nothing is deleted:
+raise the limit or remove something yourself. **choose a drive or folder** keeps it somewhere else, for example a bigger drive: what is already stored is
+moved over, and if that drive is unplugged later Hop-tunes just says it is not available until it is back. It is saved with your profile (guests keep nothing).
 
 ## Playing music
 

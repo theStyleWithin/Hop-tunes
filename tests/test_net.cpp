@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
+#include "apps/Hls.h"
 #include "apps/KickClient.h"
+#include "apps/OfflineDownloads.h"
+#include "apps/OfflineStore.h"
 #include "apps/WebpDecode.h"
 #include "net/AppNet.h"
 
+#include <QBuffer>
 #include <QDirIterator>
+#include <QImage>
+#include <QNetworkProxyFactory>
+#include <QTemporaryDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -23,12 +30,17 @@ public:
     QList<QUrl> asked;
     QList<QByteArray> agents;
     int aborted = 0;
-    void get(const QUrl &url, const QByteArray &ua, const QByteArray &, Done done) override
+    int delayMs = 0;
+    NetLimits lastLimits;
+    QList<NetLimits> limitsAsked;
+    void get(const QUrl &url, const QByteArray &ua, const QByteArray &, NetLimits limits, Done done) override
     {
+        lastLimits = limits;
+        limitsAsked << limits;
         asked << url;
         agents << ua;
         NetReply r = handler ? handler(url) : NetReply{};
-        QTimer::singleShot(0, this, [done, r] { done(r); });
+        QTimer::singleShot(delayMs, this, [done, r] { done(r); });
     }
     void abortAll() override { ++aborted; }
 };
@@ -94,6 +106,13 @@ private slots:
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://kick.com.evil.example/"), &why));   // look-alike
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://notkick.com/"), &why));
         QVERIFY(!AppNet::urlAllowed("kick", QUrl("file:///etc/passwd"), &why));
+        // the video host family (live streams' playlists and pieces), and nothing that only looks like it
+        QVERIFY(AppNet::urlAllowed("kick", QUrl("https://fa72.us-west-2.playback.live-video.net/api/video/v1/x.m3u8?token=1"), &why));
+        QVERIFY(AppNet::urlAllowed("kick", QUrl("https://live-video.net/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("http://a.live-video.net/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://live-video.net.evil.example/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://evillive-video.net/x"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://a.live-video.net:8443/x"), &why));
         QVERIFY(!AppNet::urlAllowed("someapp", QUrl("https://kick.com/"), &why));             // an app with no declared sites
     }
 
@@ -211,6 +230,78 @@ private slots:
         const QUrl first = ft->asked.at(1);
         QVERIFY(first.toString().contains("limit=36") && first.toString().contains("sort=viewer_count_desc"));
         QVERIFY(!first.toString().contains("after="));
+    }
+
+    void healthLightRulesAreGreenYellowRed()
+    {
+        auto reply = [](int status) { NetReply r; r.status = status; return r; };
+        QCOMPARE(KickClient::classifyHealth(reply(200), 100), 0);
+        QCOMPARE(KickClient::classifyHealth(reply(404), 100), 0);          // kick answered, even if only to say no
+        QCOMPARE(KickClient::classifyHealth(reply(200), 6000), 1);         // very slow
+        QCOMPARE(KickClient::classifyHealth(reply(429), 100), 1);          // refusing for now
+        QCOMPARE(KickClient::classifyHealth(reply(403), 100), 1);
+        QCOMPARE(KickClient::classifyHealth(reply(503), 100), 2);
+        QCOMPARE(KickClient::classifyHealth(reply(0), 100), 2);            // nothing came back
+        QCOMPARE(KickClient::healthFrom({}), QString());
+        QCOMPARE(KickClient::healthFrom({0}), QString("good"));
+        QCOMPARE(KickClient::healthFrom({0, 0, 0}), QString("good"));
+        QCOMPARE(KickClient::healthFrom({0, 1, 0}), QString("slow"));
+        QCOMPARE(KickClient::healthFrom({2}), QString("slow"));            // one failure is only yellow
+        QCOMPARE(KickClient::healthFrom({2, 2}), QString("slow"));
+        QCOMPARE(KickClient::healthFrom({2, 2, 2}), QString("down"));
+        QCOMPARE(KickClient::healthFrom({2, 2, 0}), QString("slow"));      // the first good answer after red is already yellow
+    }
+
+    void healthLightGoesYellowThenRedThenPicksTheListUpAgain()
+    {
+        fresh();
+        KickClient k(&net);
+        k.setHealthInterval(100);
+        int mode = 0;                                                       // 0 all fine, 1 the list server fails, 2 everything fails
+        ft->handler = [&mode](const QUrl &u) {
+            NetReply bad; bad.status = 503; bad.error = QStringLiteral("the site answered 503");
+            if (mode == 2 || (mode == 1 && u.host() == "web.kick.com")) return bad;
+            if (u.host() == "web.kick.com") return ok(streamsJson({"alpha", "bravo"}, "", 9000, {}));
+            return ok("{\"data\":[]}");
+        };
+        auto realListAsks = [this] { int n = 0; for (const QUrl &u : ft->asked) if (u.host() == "web.kick.com" && u.toString().contains("limit=36")) ++n; return n; };
+        auto realAsks = [this] { int n = 0; for (const QUrl &u : ft->asked) { const bool probe = (u.host() == "web.kick.com" && u.toString().contains("limit=1")) || u.path() == "/api/v2/channels/gamehopper"; if (!probe) ++n; } return n; };
+        QSignalSpy changed(&k, &KickClient::healthChanged);
+        QCOMPARE(k.health(), QString());
+        k.open();
+        QTRY_COMPARE(k.health(), QString("good"));                          // the first list already says so
+        QTRY_COMPARE(k.streams().size(), 2);
+        QCOMPARE(k.healthText(), QString("kick is up"));
+        // part of kick fails: yellow, and things still work
+        mode = 1;
+        QTRY_COMPARE_WITH_TIMEOUT(k.health(), QString("slow"), 5000);
+        QVERIFY(k.error().isEmpty() || !k.error().contains("looks down"));
+        // everything fails: red, nothing new is loaded, and what was on screen stays
+        mode = 2;
+        QTRY_COMPARE_WITH_TIMEOUT(k.health(), QString("down"), 5000);
+        QVERIFY(k.error().contains("looks down"));
+        QVERIFY(!k.loading());
+        const int before = realAsks();
+        k.refresh(); k.loadMore(); k.openChannel(QStringLiteral("alpha"));
+        QTest::qWait(60);
+        QCOMPARE(realAsks(), before);                                       // not one real request while it is red (only the health checks)
+        QCOMPARE(k.streams().size(), 2);
+        // it keeps checking, and when kick answers again it refreshes the list by itself
+        const int listsBefore = realListAsks();
+        mode = 0;
+        QTRY_VERIFY_WITH_TIMEOUT(k.health() != QString("down"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(realListAsks() > listsBefore, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(k.health(), QString("good"), 5000);
+        QTRY_COMPARE(k.streams().size(), 2);
+        QVERIFY(!k.error().contains("looks down"));
+        QVERIFY(changed.size() >= 4);
+        // closing the app stops the checking and clears the light
+        k.close();
+        QCOMPARE(k.health(), QString());
+        const int asked = ft->asked.size();
+        QTest::qWait(300);
+        QCOMPARE(ft->asked.size(), asked);
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
     }
 
     void showMoreAsksForTheNextPageOnlyWhenAsked()
@@ -445,13 +536,142 @@ private slots:
         k.search("lofi");
         QTRY_COMPARE(firstSlug(k), QString("lofi_one"));
         QCOMPARE(k.streams().size(), 1);                                           // the nameless "bad name!" entry was dropped
-        QVERIFY(urls.last().contains("searched_word=lofi"));
+        bool searchedLofi = false;                                                 // (a live result may ask for its picture after the search itself)
+        for (const QString &u : urls) if (u.contains("searched_word=lofi")) searchedLofi = true;
+        QVERIFY(searchedLofi);
         k.search("");
         QTRY_COMPARE(firstSlug(k), QString("alpha"));
         k.close();
         QVERIFY(k.streams().isEmpty());
         QVERIFY(!net.isOpen("kick"));
     }
+    // ---- the room set aside for offline Kick ----
+    static void writeFile(const QString &path, qint64 bytes)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QByteArray(int(bytes), 'x'));
+    }
+    void offlineStoreKeepsALimitTheUserSets()
+    {
+        QTemporaryDir tmp;
+        OfflineStore o;
+        o.setDefaultBase(tmp.filePath("offline"));
+        o.setProfileId("p1");
+        o.setFreeProbe([](const QString &) { return qint64(100) * 1024 * 1024 * 1024; });
+        QCOMPARE(o.limitMB(), 5.0 * 1024);                                   // 5 GB to start with
+        QVERIFY(!o.setLimitMB(10));                                          // below the smallest limit: refused, nothing changes
+        QCOMPARE(o.limitMB(), 5.0 * 1024);
+        QVERIFY(!o.setLimitMB(-3));
+        QVERIFY(o.setLimitGB(2));
+        QCOMPARE(o.limitMB(), 2048.0);
+        QVERIFY(o.setLimitMB(50));                                           // down to the smallest, any time
+        QVERIFY(o.setLimitMB(80));
+        // used space is what is in the folder; the meter and the warning follow it
+        QCOMPARE(o.usedBytes(), qint64(0));
+        writeFile(o.folder() + "/a/one.ts", 30 * OfflineStore::kMB);
+        writeFile(o.folder() + "/two.ts", 30 * OfflineStore::kMB);
+        o.refresh();
+        QCOMPARE(o.usedBytes(), 60 * OfflineStore::kMB);
+        QVERIFY(!o.nearLimit() && !o.full());                                // 60 of 80 is 75%: no warning yet
+        writeFile(o.folder() + "/three.ts", 5 * OfflineStore::kMB);
+        o.refresh();
+        QVERIFY(o.nearLimit() && !o.full());                                 // 65 of 80 is 81%: the warning
+    }
+    void offlineStoreWarnsAndPausesButNeverDeletes()
+    {
+        QTemporaryDir tmp;
+        OfflineStore o;
+        o.setDefaultBase(tmp.filePath("offline"));
+        o.setProfileId("p1");
+        qint64 free = qint64(100) * 1024 * 1024 * 1024;
+        o.setFreeProbe([&free](const QString &) { return free; });
+        o.setLimitMB(100);
+        writeFile(o.folder() + "/x.ts", 85 * OfflineStore::kMB);
+        o.refresh();
+        QVERIFY(o.nearLimit() && !o.full());
+        QVERIFY(o.summary().contains("close to the limit"));
+        QString why;
+        QVERIFY(o.canStore(10 * OfflineStore::kMB, &why));                   // 95 of 100 fits
+        QVERIFY(why.isEmpty());
+        QVERIFY(!o.canStore(20 * OfflineStore::kMB, &why));                  // 105 of 100 does not
+        QVERIFY(why.contains("limit"));
+        writeFile(o.folder() + "/y.ts", 20 * OfflineStore::kMB);
+        o.refresh();
+        QVERIFY(o.full());
+        QVERIFY(o.summary().contains("paused"));
+        QVERIFY(QFileInfo::exists(o.folder() + "/x.ts") && QFileInfo::exists(o.folder() + "/y.ts"));   // nothing was deleted
+        // raising the limit lets things carry on
+        o.setLimitMB(500);
+        QVERIFY(o.canStore(10 * OfflineStore::kMB, &why));
+        // a nearly full drive pauses things too, whatever the limit
+        free = 500 * OfflineStore::kMB;
+        QVERIFY(!o.canStore(10 * OfflineStore::kMB, &why));
+        QVERIFY(why.contains("drive"));
+    }
+    void offlineStoreMovesToAnotherDriveAndSurvivesItBeingUnplugged()
+    {
+        QTemporaryDir tmp, usb;
+        OfflineStore o;
+        o.setDefaultBase(tmp.filePath("offline"));
+        o.setProfileId("p1");
+        o.setFreeProbe([](const QString &) { return qint64(100) * 1024 * 1024 * 1024; });
+        writeFile(o.folder() + "/s1/seg1.ts", 2 * OfflineStore::kMB);
+        writeFile(o.folder() + "/s1/seg2.ts", 3 * OfflineStore::kMB);
+        o.refresh();
+        QCOMPARE(o.usedBytes(), 5 * OfflineStore::kMB);
+        QSignalSpy edited(&o, &OfflineStore::edited);
+        QString why;
+        QVERIFY2(o.moveTo(usb.path(), &why), qPrintable(why));
+        QCOMPARE(edited.count(), 1);                                          // the setting is saved with the profile
+        QCOMPARE(o.location(), QDir::cleanPath(usb.path()));
+        QVERIFY(o.folder().startsWith(QDir::cleanPath(usb.path()) + "/Hop-tunes offline/"));
+        QVERIFY(QFileInfo::exists(o.folder() + "/s1/seg2.ts"));               // arrived
+        QVERIFY(!QFileInfo::exists(tmp.filePath("offline/p1")));              // and the old copy is gone
+        QCOMPARE(o.usedBytes(), 5 * OfflineStore::kMB);
+        // saved and restored
+        OfflineStore again;
+        again.setDefaultBase(tmp.filePath("offline"));
+        again.setProfileId("p1");
+        again.fromJson(o.toJson());
+        QCOMPARE(again.folder(), o.folder());
+        QCOMPARE(again.usedBytes(), 5 * OfflineStore::kMB);
+        // unplugged: unavailable, said plainly, nothing stored, no crash
+        QString gone = usb.path();
+        QDir(usb.path()).removeRecursively();
+        again.refresh();
+        QVERIFY(!again.available());
+        QVERIFY(again.summary().contains("not available"));
+        QVERIFY(!again.canStore(1, &why));
+        QCOMPARE(again.usedBytes(), qint64(0));
+        // not enough room on the new drive: refused, and nothing moved or lost
+        QTemporaryDir small;
+        OfflineStore o2;
+        o2.setDefaultBase(tmp.filePath("offline2"));
+        o2.setProfileId("p1");
+        o2.setFreeProbe([](const QString &) { return qint64(10) * OfflineStore::kMB; });
+        writeFile(o2.folder() + "/k.ts", 5 * OfflineStore::kMB);
+        o2.refresh();
+        QVERIFY(!o2.moveTo(small.path(), &why));
+        QVERIFY(why.contains("room"));
+        QVERIFY(QFileInfo::exists(o2.folder() + "/k.ts"));
+        QVERIFY(!o2.moveTo("/definitely/not/a/folder", &why));
+    }
+    void offlineStoreSettingsAreSafeAgainstJunk()
+    {
+        OfflineStore o;
+        o.setDefaultBase("/tmp/hop-offline-test");
+        o.fromJson(QJsonObject{{"limitMB", 3}, {"location", "/nope/never"}});     // too small: back to the default; a missing place is just unavailable
+        QCOMPARE(o.limitMB(), OfflineStore::kDefaultLimitMB);
+        QVERIFY(!o.available());
+        o.fromJson(QJsonObject{});
+        QCOMPARE(o.limitMB(), OfflineStore::kDefaultLimitMB);
+        QVERIFY(o.available());
+        o.setProfileId("../../etc");                                               // a profile id never walks out of the folder
+        QVERIFY(!o.folder().contains(".."));
+    }
+
     // Kick's pictures are all WebP: they must be readable without Qt's optional WebP plugin (not in the Android app or every Linux install)
     void webpPicturesAreReadWithoutQtsPlugin()
     {
@@ -465,6 +685,1146 @@ private slots:
         QVERIFY(decodeWebp(QByteArray("not a picture at all")).isNull());     // garbage and truncated files are refused, never a crash
         QVERIFY(decodeWebp(webp.left(20)).isNull());
         QVERIFY(decodeWebp(QByteArray()).isNull());
+    }
+    // ---- HLS playlists (how Kick serves past streams and clips) ----
+    void hlsMasterAndMediaPlaylistsAreRead()
+    {
+        const QString master = "#EXTM3U\n#EXT-X-SESSION-DATA:DATA-ID=\"x\",VALUE=\"y\"\n"
+            "#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID=\"720p60\",NAME=\"720p60\",AUTOSELECT=YES,DEFAULT=YES\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3484773,CODECS=\"avc1.4D401F,mp4a.40.2\",RESOLUTION=1280x720,VIDEO=\"720p60\",FRAME-RATE=60.000\n720p60/playlist.m3u8\n"
+            "#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID=\"1080p60\",NAME=\"1080p60\",AUTOSELECT=YES,DEFAULT=YES\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=6812668,CODECS=\"avc1.4D402A,mp4a.40.2\",RESOLUTION=1920x1080,VIDEO=\"1080p60\",FRAME-RATE=60.000\n1080p60/playlist.m3u8\n"
+            "#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID=\"160p30\",NAME=\"160p\",AUTOSELECT=YES,DEFAULT=YES\n"
+            "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=230000,CODECS=\"avc1.4D401F,mp4a.40.2\",RESOLUTION=284x160,VIDEO=\"160p30\"\n160p30/playlist.m3u8\n";
+        const QUrl base("https://stream.kick.com/a/b/media/hls/master.m3u8");
+        const auto vs = parseHlsMaster(master, base);
+        QCOMPARE(vs.size(), 3);
+        QCOMPARE(vs[0].height, 1080);                                       // best first
+        QCOMPARE(vs[0].name, QString("1080p60"));
+        QCOMPARE(vs[0].url, QUrl("https://stream.kick.com/a/b/media/hls/1080p60/playlist.m3u8"));
+        QCOMPARE(vs[1].height, 720);
+        QCOMPARE(chooseHlsVariant(vs, 0)->height, 1080);
+        QCOMPARE(chooseHlsVariant(vs, 720)->height, 720);
+        QCOMPARE(chooseHlsVariant(vs, 900)->height, 720);                    // the best that fits
+        QCOMPARE(chooseHlsVariant(vs, 100)->height, 160);                    // none fits: the smallest there is
+        QVERIFY(parseHlsMaster("not a playlist", base).isEmpty());
+        QVERIFY(chooseHlsVariant({}, 0) == nullptr);
+
+        const QString media = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:13\n#EXT-X-PLAYLIST-TYPE:EVENT\n"
+            "#EXT-X-PROGRAM-DATE-TIME:2026-11-12T06:57:13.649Z\n#EXTINF:10.000,\n0.ts\n#EXTINF:10.000,\n1.ts\n#EXTINF:3.500,\n2.ts\n#EXT-X-ENDLIST\n";
+        const auto m = parseHlsMedia(media, QUrl("https://stream.kick.com/a/b/media/hls/1080p60/playlist.m3u8"));
+        QVERIFY(m.unsupported.isEmpty() && m.finished);
+        QCOMPARE(m.parts.size(), 3);
+        QCOMPARE(m.parts[2].url, QUrl("https://stream.kick.com/a/b/media/hls/1080p60/2.ts"));
+        QVERIFY(qAbs(m.seconds - 23.5) < 0.001);
+        QVERIFY(!parseHlsMedia(media.left(media.indexOf("#EXT-X-ENDLIST")), base).finished);   // a live one is not finished
+
+        // a clip: one file cut into byte ranges is fetched as the whole file
+        const QString clip = "#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-TARGETDURATION:2\n#EXT-X-BYTERANGE:1000@0\n#EXTINF:2.000,\n2701.ts\n"
+            "#EXT-X-BYTERANGE:500@1000\n#EXTINF:2.000,\n2701.ts\n#EXT-X-BYTERANGE:250\n#EXTINF:1.000,\n2701.ts\n#EXT-X-ENDLIST\n";
+        const auto c = parseHlsMedia(clip, QUrl("https://clips.kick.com/clips/ed/clip_1/playlist.m3u8"));
+        QVERIFY(c.finished && c.unsupported.isEmpty());
+        QCOMPARE(c.parts.size(), 1);
+        QCOMPARE(c.parts[0].url, QUrl("https://clips.kick.com/clips/ed/clip_1/2701.ts"));
+        QCOMPARE(c.parts[0].bytes, qint64(1750));                              // three slices that follow each other: one request
+        QCOMPARE(c.parts[0].rangeStart, qint64(0));
+        QVERIFY(qAbs(c.seconds - 5.0) < 0.001);
+        // what real clips look like: many files, slices not in file order. Each stays its own slice, in the playlist's order (never a whole file)
+        const QString real = "#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-BYTERANGE:2099020@8449660\n#EXTINF:2.000,\n10585.ts\n"
+            "#EXT-X-BYTERANGE:2108232@0\n#EXTINF:2.000,\n10586.ts\n#EXT-X-BYTERANGE:1952380@3151256\n#EXTINF:2.000,\n10586.ts\n"
+            "#EXT-X-BYTERANGE:2024008@5103636\n#EXTINF:2.000,\n10586.ts\n#EXT-X-ENDLIST\n";
+        const auto rm = parseHlsMedia(real, QUrl("https://clips.kick.com/clips/e9/clip_x/playlist.m3u8"));
+        QCOMPARE(rm.parts.size(), 3);                                          // (the last two slices follow each other in 10586.ts, so they are one request)
+        QCOMPARE(rm.parts[0].rangeStart, qint64(8449660));
+        QCOMPARE(rm.parts[0].bytes, qint64(2099020));
+        QCOMPARE(rm.parts[1].url, QUrl("https://clips.kick.com/clips/e9/clip_x/10586.ts"));
+        QCOMPARE(rm.parts[1].rangeStart, qint64(0));
+        QCOMPARE(rm.parts[2].rangeStart, qint64(3151256));
+        QCOMPARE(rm.parts[2].bytes, qint64(1952380 + 2024008));
+
+        // encrypted or fragmented-mp4 videos are refused plainly, and junk is not a playlist
+        QVERIFY(parseHlsMedia("#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"k\"\n#EXTINF:2,\na.ts\n#EXT-X-ENDLIST\n", base).unsupported.contains("encrypted"));
+        QVERIFY(!parseHlsMedia("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4\"\n#EXTINF:2,\na.m4s\n#EXT-X-ENDLIST\n", base).unsupported.isEmpty());
+        QVERIFY(!parseHlsMedia("<html>nope</html>", base).unsupported.isEmpty());
+        QVERIFY(!parseHlsMedia("#EXTM3U\n#EXT-X-ENDLIST\n", base).unsupported.isEmpty());
+    }
+
+    // ---- downloads of finished streams and clips ----
+private:
+    struct Rig {
+        QTemporaryDir tmp;
+        OfflineStore store;
+        std::unique_ptr<OfflineDownloads> dl;
+        qint64 free = qint64(100) * 1024 * 1024 * 1024;
+        int partRequests = 0;
+        int failParts = 0;                 // this many part requests fail before they work again
+        bool endlist = true;
+        QString secondsEach = "10";
+        QString bandwidth = "1000000";
+    };
+    static QByteArray partBytes(int i) { return QByteArray(3000 + i * 10, char('a' + i)); }
+    void rig(Rig &r, int parts = 6)
+    {
+        fresh();
+        r.store.setDefaultBase(r.tmp.filePath("offline"));
+        r.store.setProfileId("p1");
+        r.store.setFreeProbe([&r](const QString &) { return r.free; });
+        r.dl = std::make_unique<OfflineDownloads>(&net, &r.store);
+        r.dl->setRetryDelayMs(5);
+        ft->delayMs = 15;
+        connect(&net, &AppNet::opened, r.dl.get(), &OfflineDownloads::appOpened);
+        connect(&net, &AppNet::closed, r.dl.get(), &OfflineDownloads::appClosed);
+        ft->handler = [&r, parts](const QUrl &u) -> NetReply {
+            const QString path = u.path();
+            if (path.endsWith("master.m3u8"))
+                return ok("#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=" + r.bandwidth.toUtf8() + ",RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p60/playlist.m3u8\n"
+                          "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=9000000,RESOLUTION=1920x1080,VIDEO=\"1080p60\"\n1080p60/playlist.m3u8\n");
+            if (path.endsWith("720p60/playlist.m3u8") || path.endsWith("1080p60/playlist.m3u8")) {
+                QByteArray t = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:13\n";
+                for (int i = 0; i < parts; ++i) t += "#EXTINF:" + r.secondsEach.toUtf8() + ",\n" + QByteArray::number(i) + ".ts\n";
+                if (r.endlist) t += "#EXT-X-ENDLIST\n";
+                return ok(t);
+            }
+            if (path.endsWith(".ts")) {
+                ++r.partRequests;
+                if (r.failParts > 0) { --r.failParts; NetReply e; e.error = "could not connect"; return e; }
+                return ok(partBytes(path.section('/', -1).section('.', 0, 0).toInt()));
+            }
+            if (path.endsWith("thumb.webp")) return ok(QByteArray("not an image"));
+            if (path.endsWith("thumb.png")) { QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(200, 60, 60)); QByteArray b; QBuffer buf(&b); buf.open(QIODevice::WriteOnly); im.save(&buf, "PNG"); return ok(b); }
+            NetReply e; e.status = 404; e.error = "the site answered 404"; return e;
+        };
+    }
+    static QVariantMap streamInfo(const QString &id = "s1")
+    {
+        return {{"id", id}, {"kind", "stream"}, {"title", "A long stream"}, {"channel", "alpha"},
+                {"thumb", "https://images.kick.com/video_thumbnails/x/thumb.webp"}, {"url", "https://stream.kick.com/a/b/media/hls/master.m3u8"}, {"maxHeight", 720}};
+    }
+    static QByteArray allParts(int n) { QByteArray b; for (int i = 0; i < n; ++i) b += partBytes(i); return b; }
+    static QByteArray readAll(const QString &p) { QFile f(p); return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray(); }
+
+private slots:
+    void downloadJoinsTheVideoIntoTheOfflineFolder()
+    {
+        Rig r; rig(r);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        const QVariantMap it = r.dl->item("s1");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        QCOMPARE(it.value("quality").toString(), QString("720p60"));                       // the wish was up to 720
+        QCOMPARE(it.value("doneParts").toInt(), 6);
+        QCOMPARE(readAll(r.dl->videoPath("s1")), allParts(6));                            // every piece, in order, once
+        QVERIFY(r.dl->videoPath("s1").startsWith(r.store.folder()));                      // inside the offline folder
+        QCOMPARE(it.value("bytes").toLongLong(), qint64(allParts(6).size()));
+        QVERIFY(!r.dl->busy());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString("you already have this one"));
+        // it survives a restart (a new manager reads the folder)
+        r.store.refresh();
+        QCOMPARE(r.store.usedBytes() >= allParts(6).size(), true);
+        OfflineDownloads again(&net, &r.store);
+        again.reload();
+        QCOMPARE(again.count(), 1);
+        QCOMPARE(again.item("s1").value("state").toString(), QString("done"));
+        QCOMPARE(again.item("s1").value("title").toString(), QString("A long stream"));
+    }
+    void downloadWaitsForTheAppAndStopsAtTheDrive()
+    {
+        Rig r; rig(r, 8);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        // the app closes in the middle: it waits, and carries on when the app opens again, without repeating or skipping a piece
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(r.partRequests >= 2, 5000);
+        net.close("kick");
+        QVERIFY(!r.dl->busy());
+        QCOMPARE(r.dl->item("s1").value("state").toString(), QString("waiting"));
+        const int sent = ft->asked.size();
+        QTest::qWait(100);
+        QCOMPARE(ft->asked.size(), sent);                                               // nothing is fetched while the app is closed
+        net.setAllowed("kick", true);
+        net.open("kick");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(readAll(r.dl->videoPath("s1")), allParts(8));
+
+        // the drive fills up in the middle: it stops with a plain reason and nothing is deleted; room again, resume, done
+        Rig q; rig(q, 8);
+        QSignalSpy fin2(q.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(q.dl->enqueue(streamInfo("s2")), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(q.partRequests >= 3, 5000);
+        q.free = 200LL * 1024 * 1024;                                                   // under the 1 GB the drive must keep free
+        QTRY_COMPARE_WITH_TIMEOUT(q.dl->item("s2").value("state").toString(), QString("limit"), 5000);
+        QVERIFY(q.dl->item("s2").value("error").toString().contains("drive"));
+        const int kept = q.dl->item("s2").value("doneParts").toInt();
+        QVERIFY(kept >= 3 && kept < 8);
+        QVERIFY(QFileInfo::exists(q.dl->videoPath("s2")));                              // what arrived is still there
+        q.free = 100LL * 1024 * 1024 * 1024;
+        q.dl->resume("s2");
+        QTRY_COMPARE_WITH_TIMEOUT(fin2.count(), 1, 5000);
+        QCOMPARE(readAll(q.dl->videoPath("s2")), allParts(8));
+    }
+    void downloadCanBePausedRetriesAndFailsPlainly()
+    {
+        Rig r; rig(r, 8);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(r.partRequests >= 2, 5000);
+        r.dl->pause("s1");
+        QCOMPARE(r.dl->item("s1").value("state").toString(), QString("paused"));
+        const int sent = ft->asked.size();
+        QTest::qWait(100);
+        QVERIFY(ft->asked.size() <= sent + 1);                                          // (a piece already on the way may still arrive, then nothing more)
+        r.dl->resume("s1");
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QCOMPARE(readAll(r.dl->videoPath("s1")), allParts(8));
+
+        // a piece that fails now and then is retried; one that keeps failing ends in a plain message, and starts over when asked again
+        Rig f; rig(f, 4);
+        f.failParts = 2;
+        QSignalSpy fin(f.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(f.dl->enqueue(streamInfo("s3")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(fin.count(), 1, 5000);
+        QCOMPARE(readAll(f.dl->videoPath("s3")), allParts(4));
+        Rig g; rig(g, 4);
+        g.failParts = 1000;
+        QCOMPARE(g.dl->enqueue(streamInfo("s4")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(g.dl->item("s4").value("state").toString(), QString("failed"), 5000);
+        QVERIFY(g.dl->item("s4").value("error").toString().contains("connect"));
+        g.failParts = 0;
+        QCOMPARE(g.dl->enqueue(streamInfo("s4")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(g.dl->item("s4").value("state").toString(), QString("done"), 5000);
+    }
+    void downloadRefusesWhatItCannotOrShouldNotTake()
+    {
+        Rig r; rig(r, 4);
+        r.endlist = false;                                                              // a stream that is still going
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(r.dl->item("s1").value("state").toString(), QString("failed"), 5000);
+        QVERIFY(r.dl->item("s1").value("error").toString().contains("not finished"));
+        QVERIFY(r.dl->videoPath("s1").isEmpty());
+        // too big for the limit: said before anything is fetched from the video host
+        Rig big; rig(big, 4);
+        big.store.setLimitMB(50);
+        big.secondsEach = "36000"; big.bandwidth = "8000000";                           // ~ 36 GB
+        QCOMPARE(big.dl->enqueue(streamInfo("s2")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(big.dl->item("s2").value("state").toString(), QString("limit"), 5000);
+        QVERIFY(big.dl->item("s2").value("error").toString().contains("limit"));
+        QCOMPARE(big.partRequests, 0);
+        // not an address Kick's app may use, and guests keep nothing
+        QVERIFY(!big.dl->enqueue({{"id", "x"}, {"url", "https://evil.example/m.m3u8"}}).isEmpty());
+        QVERIFY(!big.dl->enqueue({{"id", "x"}, {"url", "http://kick.com/m.m3u8"}}).isEmpty());
+        big.dl->setEnabled(false);
+        QVERIFY(big.dl->enqueue(streamInfo("s9")).contains("guests"));
+    }
+    void aClipOfSlicesIsFetchedAsSlicesNotWholeFiles()
+    {
+        Rig r; rig(r);
+        auto fileByte = [](int f, qint64 i) { return char((i * 7 + f) % 251); };
+        auto slice = [&](int f, qint64 start, qint64 len) { QByteArray b; for (qint64 i = 0; i < len; ++i) b.append(fileByte(f, start + i)); return b; };
+        bool shortAnswers = false;
+        auto inner = ft->handler;
+        ft->handler = [&, inner](const QUrl &u) -> NetReply {
+            const QString path = u.path();
+            if (path.endsWith("/clip_x/playlist.m3u8"))
+                return ok("#EXTM3U\n#EXT-X-VERSION:4\n#EXT-X-BYTERANGE:3000@7000\n#EXTINF:2,\na.ts\n#EXT-X-BYTERANGE:2500@0\n#EXTINF:2,\nb.ts\n"
+                          "#EXT-X-BYTERANGE:1000@4000\n#EXTINF:2,\nb.ts\n#EXT-X-BYTERANGE:500\n#EXTINF:1,\nb.ts\n#EXT-X-ENDLIST\n");
+            if (path.endsWith("/clip_x/a.ts") || path.endsWith("/clip_x/b.ts")) {
+                const int f = path.endsWith("a.ts") ? 1 : 2;
+                const NetLimits &l = ft->lastLimits;
+                if (l.rangeStart < 0) return ok(slice(f, 0, 12000));                      // a whole file: far more than the clip wants
+                NetReply s = ok(slice(f, l.rangeStart, shortAnswers ? l.rangeLength - 1 : l.rangeLength)); s.status = 206; return s;
+            }
+            return inner(u);
+        };
+        const QVariantMap info{{"id", "clip_x"}, {"kind", "clip"}, {"title", "c"}, {"channel", "alpha"}, {"url", "https://clips.kick.com/clips/ab/clip_x/playlist.m3u8"}};
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(info), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        // 3000 of a.ts from 7000, then b.ts 0..2500, then b.ts 4000..5000 and 5000..5500 as one slice (4000..5500)
+        const QByteArray expect = slice(1, 7000, 3000) + slice(2, 0, 2500) + slice(2, 4000, 1500);
+        QCOMPARE(readAll(r.dl->videoPath("clip_x")), expect);
+        int sliceRequests = 0, wholeFileRequests = 0;
+        for (int i = 0; i < ft->asked.size(); ++i) {
+            if (!ft->asked[i].path().endsWith(".ts")) continue;
+            if (ft->limitsAsked[i].rangeStart >= 0) ++sliceRequests; else ++wholeFileRequests;
+        }
+        QCOMPARE(sliceRequests, 3);                                                     // three slices
+        QCOMPARE(wholeFileRequests, 0);                                                 // and no whole file anywhere
+        // a slice that comes back the wrong size is not trusted: retried, then a plain failure, and nothing wrong is written
+        shortAnswers = true;
+        r.dl->remove("clip_x");
+        QCOMPARE(r.dl->enqueue(info), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(r.dl->item("clip_x").value("state").toString(), QString("failed"), 5000);
+        QVERIFY(r.dl->item("clip_x").value("error").toString().contains("wrong size"));
+        QVERIFY(readAll(r.dl->videoPath("clip_x")).isEmpty());
+    }
+
+    void deletingADownloadRemovesItsFilesAndOnlyThose()
+    {
+        Rig r; rig(r, 3);
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(streamInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QVERIFY(QFileInfo::exists(r.dl->videoPath("s1")));
+        const QString mine = r.store.folder() + "/keepme.txt";
+        { QFile f(mine); QVERIFY(f.open(QIODevice::WriteOnly)); f.write("x"); }
+        r.dl->remove("s1");
+        QVERIFY(!r.dl->has("s1"));
+        QVERIFY(!QFileInfo::exists(r.store.folder() + "/s1"));
+        QVERIFY(QFileInfo::exists(mine));                                               // a neighbour is never touched
+        r.store.refresh();
+        QVERIFY(r.store.usedBytes() <= 1);
+    }
+    // ---- recording a live stream ----
+private:
+    struct LiveRig { Rig *r; int polls = 0; int endAt = 1000; int failFrom = -1; };
+    static const QString liveMaster() { return "https://a1.playback.live-video.net/live/master.m3u8"; }
+    void liveRig(Rig &r, LiveRig &lv)
+    {
+        rig(r);
+        lv.r = &r;
+        r.dl->setPollIntervalMs(20);
+        auto inner = ft->handler;
+        ft->handler = [&lv, inner](const QUrl &u) -> NetReply {
+            const QString path = u.path();
+            if (path == "/live/master.m3u8")
+                return ok("#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=3000000,RESOLUTION=1280x720,VIDEO=\"720p60\"\n720p/playlist.m3u8\n");
+            if (path == "/live/720p/playlist.m3u8") {
+                const int k = lv.polls++;
+                if (lv.failFrom >= 0 && k >= lv.failFrom) { NetReply e; e.status = 404; e.error = "the site answered 404"; return e; }
+                QByteArray t = "#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:0.04\n#EXT-X-MEDIA-SEQUENCE:" + QByteArray::number(k) + "\n";
+                for (int i = 0; i < 4; ++i) t += "#EXTINF:2.0,\n" + QByteArray::number(k + i) + ".ts\n";
+                if (k >= lv.endAt) t += "#EXT-X-ENDLIST\n";
+                return ok(t);
+            }
+            return inner(u);
+        };
+    }
+    static QVariantMap recInfo(const QString &id = "rec-1")
+    {
+        return {{"id", id}, {"title", "live now"}, {"channel", "alpha"}, {"url", liveMaster()}, {"maxHeight", 720}};
+    }
+    static QByteArray partsFrom(int first, int last) { QByteArray b; for (int i = first; i <= last; ++i) b += partBytes(i); return b; }
+
+private slots:
+    void recordingFollowsTheLivePlaylistFromNowToTheEnd()
+    {
+        Rig r; LiveRig lv; liveRig(r, lv);
+        lv.endAt = 6;
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->startRecording(recInfo()), QString());
+        QCOMPARE(r.dl->item("rec-1").value("state").toString(), QString("recording"));
+        QVERIFY(r.dl->busy());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 6000);
+        const QVariantMap it = r.dl->item("rec-1");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        QCOMPARE(it.value("kind").toString(), QString("recording"));
+        QCOMPARE(it.value("error").toString(), QString("the stream ended"));
+        // from the live edge (the last three of the first window: 1, 2, 3), then every new piece once, in order, to the end (9)
+        QCOMPARE(readAll(r.dl->videoPath("rec-1")), partsFrom(1, 9));
+        QVERIFY(qAbs(it.value("seconds").toDouble() - 18.0) < 0.001);
+        QVERIFY(!r.dl->busy());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u), qPrintable(u.toString()));
+        // it is a finished item now: it survives a restart
+        OfflineDownloads again(&net, &r.store);
+        again.reload();
+        QCOMPARE(again.item("rec-1").value("state").toString(), QString("done"));
+    }
+    void recordingStopsWhenToldTheAppClosesOrTheDriveFills()
+    {
+        // stop: what was recorded is kept, and nothing more is fetched
+        Rig r; LiveRig lv; liveRig(r, lv);
+        QCOMPARE(r.dl->startRecording(recInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(r.dl->item("rec-1").value("doneParts").toInt() >= 4, 6000);
+        QVERIFY(r.dl->startRecording(recInfo("rec-2")).contains("already recording"));   // one at a time
+        r.dl->stopRecording("rec-1");
+        const QVariantMap it = r.dl->item("rec-1");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        QVERIFY(!r.dl->busy());
+        const int n = it.value("doneParts").toInt();
+        const int sent = ft->asked.size();
+        QTest::qWait(150);
+        QCOMPARE(ft->asked.size(), sent);
+        QCOMPARE(readAll(r.dl->videoPath("rec-1")), partsFrom(1, n));                   // whole pieces only, in order
+        // the app closes: it ends cleanly with a note
+        Rig a; LiveRig la; liveRig(a, la);
+        QCOMPARE(a.dl->startRecording(recInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(a.dl->item("rec-1").value("doneParts").toInt() >= 2, 6000);
+        net.close("kick");
+        QCOMPARE(a.dl->item("rec-1").value("state").toString(), QString("done"));
+        QVERIFY(a.dl->item("rec-1").value("error").toString().contains("closed"));
+        QVERIFY(!a.dl->busy());
+        // the drive nearly fills: stopped early with a plain reason, what there is stays
+        Rig d; LiveRig ld; liveRig(d, ld);
+        QCOMPARE(d.dl->startRecording(recInfo()), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(d.dl->item("rec-1").value("doneParts").toInt() >= 3, 6000);
+        d.free = 100LL * 1024 * 1024;
+        QTRY_COMPARE_WITH_TIMEOUT(d.dl->item("rec-1").value("state").toString(), QString("done"), 6000);
+        QVERIFY(d.dl->item("rec-1").value("error").toString().contains("stopped early"));
+        QVERIFY(QFileInfo(d.dl->videoPath("rec-1")).size() > 0);
+    }
+    void recordingNeedsTheAppAndAGoodAddressAndEndsWhenTheChannelGoesOffline()
+    {
+        Rig r; LiveRig lv; liveRig(r, lv);
+        QVERIFY(r.dl->startRecording({{"id", "x"}, {"url", "https://evil.example/live.m3u8"}}).contains("not one of the sites"));
+        QVERIFY(r.dl->startRecording({{"id", "x"}, {"url", "http://a.live-video.net/live.m3u8"}}).contains("secure"));
+        net.close("kick");
+        QVERIFY(r.dl->startRecording(recInfo()).contains("open the kick app"));
+        net.open("kick");
+        // the channel goes offline (the playlist answers errors): the recording ends, keeping what it has
+        lv.failFrom = 4;
+        QCOMPARE(r.dl->startRecording(recInfo()), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(r.dl->item("rec-1").value("state").toString(), QString("done"), 8000);
+        QCOMPARE(r.dl->item("rec-1").value("error").toString(), QString("the stream ended"));
+        QVERIFY(r.dl->item("rec-1").value("doneParts").toInt() >= 3);
+        // never online at all: no empty item is left pretending to be a recording
+        Rig n; LiveRig ln; liveRig(n, ln);
+        ln.failFrom = 0;
+        QCOMPARE(n.dl->startRecording(recInfo("rec-9")), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(n.dl->item("rec-9").value("state").toString(), QString("failed"), 8000);
+        QCOMPARE(n.dl->item("rec-9").value("doneParts").toInt(), 0);
+        n.dl->setEnabled(false);
+        QVERIFY(n.dl->startRecording(recInfo("rec-8")).contains("guests"));
+    }
+
+private slots:
+    // ---- playlists (kept on this computer, in the profile) ----
+    static QVariantMap clipItem(const QString &id = "clip_a", const QString &url = "https://clips.kick.com/clips/ab/clip_a/playlist.m3u8")
+    {
+        return {{"id", id}, {"kind", "clip"}, {"title", "a funny moment"}, {"channel", "alpha"}, {"url", url}, {"thumb", "https://clips.kick.com/x/thumbnail.webp"}, {"seconds", 30}};
+    }
+    static QVariantMap streamItem(const QString &id = "stream-1")
+    {
+        return {{"id", id}, {"kind", "stream"}, {"title", "last night"}, {"channel", "alpha"}, {"url", "https://stream.kick.com/a/master.m3u8"}, {"seconds", 7200}};
+    }
+private slots:
+    void playlistsHoldChannelsClipsAndStreamsWithTheirOwnRules()
+    {
+        fresh();
+        KickClient k(&net);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        QVERIFY(k.createPlaylist("", "channels").isEmpty());                         // a name is needed
+        QVERIFY(k.createPlaylist("x", "videos").isEmpty());                          // a known kind is needed
+        const QString favs = k.createPlaylist("  my favourites  " + QString(100, 'x'), "channels");
+        QVERIFY(!favs.isEmpty());
+        QCOMPARE(edited.count(), 1);                                                  // worth saving
+        QVariantMap pl = k.playlists().first().toMap();
+        QVERIFY(pl.value("name").toString().startsWith("my favourites"));
+        QCOMPARE(pl.value("name").toString().size(), int(KickClient::kMaxNameLength)); // long names are cut
+        QCOMPARE(pl.value("kind").toString(), QString("channels"));
+        // channels: names or links, normalised, never twice
+        QVERIFY(k.addToPlaylist(favs, {{"slug", "https://kick.com/NightOwl"}}));
+        QVERIFY(!k.addToPlaylist(favs, {{"slug", "nightowl"}}));
+        QVERIFY(!k.addToPlaylist(favs, {{"slug", "not a name!"}}));
+        QVERIFY(k.addToPlaylist(favs, {{"slug", "loudone"}}));
+        QVERIFY(k.isInPlaylist(favs, "NIGHTOWL"));
+        QCOMPARE(k.playlistsHolding("loudone").size(), 1);
+        QCOMPARE(k.playlists().first().toMap().value("count").toInt(), 2);
+        // a clip goes in a clips playlist, a stream in a streams one, and only addresses this app may use
+        const QString clips = k.createPlaylist("funny", "clips");
+        const QString streams = k.createPlaylist("long ones", "streams");
+        QVERIFY(k.addToPlaylist(clips, clipItem()));
+        QVERIFY(!k.addToPlaylist(clips, clipItem()));                                 // not twice
+        QVERIFY(!k.addToPlaylist(clips, streamItem()));                               // wrong kind
+        QVERIFY(!k.addToPlaylist(streams, clipItem("clip_b")));
+        QVERIFY(k.addToPlaylist(streams, streamItem()));
+        QVERIFY(!k.addToPlaylist(clips, clipItem("clip_c", "https://evil.example/c.m3u8")));
+        QVERIFY(!k.addToPlaylist(clips, clipItem("clip_d", "http://clips.kick.com/c.m3u8")));
+        QVERIFY(!k.addToPlaylist(favs, clipItem()));                                  // a channels playlist holds channels
+        QVERIFY(!k.addToPlaylist("nope", {{"slug", "x"}}));
+        // rename, remove, delete
+        QVERIFY(k.renamePlaylist(clips, "very funny"));
+        QVERIFY(!k.renamePlaylist(clips, "   "));
+        QVERIFY(!k.renamePlaylist("nope", "x"));
+        QVERIFY(k.removeFromPlaylist(favs, "loudone"));
+        QVERIFY(!k.removeFromPlaylist(favs, "loudone"));
+        QVERIFY(k.removeFromPlaylist(clips, "clip_a"));
+        QVERIFY(k.deletePlaylist(streams));
+        QVERIFY(!k.deletePlaylist(streams));
+        QCOMPARE(k.playlists().size(), 2);
+    }
+    void playlistsKeepWithinLimitsAndRespectBlocks()
+    {
+        fresh();
+        KickClient k(&net);
+        QString id;
+        for (int i = 0; i < KickClient::kMaxPlaylists; ++i) { id = k.createPlaylist(QString("p%1").arg(i), "channels"); QVERIFY(!id.isEmpty()); }
+        QVERIFY(k.createPlaylist("one too many", "channels").isEmpty());
+        QCOMPARE(k.playlists().size(), int(KickClient::kMaxPlaylists));
+        for (int i = 0; i < KickClient::kMaxItems; ++i) QVERIFY(k.addToPlaylist(id, {{"slug", QString("chan%1").arg(i)}}));
+        QVERIFY(!k.addToPlaylist(id, {{"slug", "onemore"}}));
+        // a blocked streamer stays hidden everywhere, and comes back when unblocked (the playlist keeps it)
+        KickClient b(&net);
+        const QString pl = b.createPlaylist("favs", "channels");
+        b.addToPlaylist(pl, {{"slug", "alpha"}}); b.addToPlaylist(pl, {{"slug", "bravo"}});
+        QCOMPARE(b.playlists().first().toMap().value("count").toInt(), 2);
+        b.block("alpha");
+        QCOMPARE(b.playlists().first().toMap().value("count").toInt(), 1);
+        QCOMPARE(b.playlists().first().toMap().value("items").toList().first().toMap().value("slug").toString(), QString("bravo"));
+        b.unblock("alpha");
+        QCOMPARE(b.playlists().first().toMap().value("count").toInt(), 2);
+    }
+    void playlistsSurviveSavingAndAreSafeAgainstJunk()
+    {
+        fresh();
+        KickClient k(&net);
+        const QString favs = k.createPlaylist("favs", "channels");
+        k.addToPlaylist(favs, {{"slug", "alpha"}}); k.addToPlaylist(favs, {{"slug", "bravo"}});
+        const QString clips = k.createPlaylist("clips", "clips");
+        k.addToPlaylist(clips, clipItem());
+        KickClient again(&net);
+        again.setListsJson(k.listsJson());
+        QCOMPARE(again.playlists().size(), 2);
+        QCOMPARE(again.playlists()[0].toMap().value("count").toInt(), 2);
+        QCOMPARE(again.playlists()[1].toMap().value("items").toList().first().toMap().value("title").toString(), QString("a funny moment"));
+        QVERIFY(again.isInPlaylist(favs, "bravo"));
+        // junk in the saved file: bad kinds, nameless, duplicate ids, other sites' addresses, wrong item shapes are all left out
+        QJsonArray bad;
+        bad.append(QJsonObject{{"id", "a"}, {"name", "ok"}, {"kind", "channels"}, {"items", QJsonArray{"x1", "x1", "not a name!", 5, QJsonObject{}}}});
+        bad.append(QJsonObject{{"id", "b"}, {"name", ""}, {"kind", "channels"}});
+        bad.append(QJsonObject{{"id", "c"}, {"name", "k"}, {"kind", "videos"}});
+        bad.append(QJsonObject{{"id", "a"}, {"name", "dup"}, {"kind", "channels"}});
+        bad.append(QJsonObject{{"id", "d"}, {"name", "clips"}, {"kind", "clips"}, {"items", QJsonArray{
+            QJsonObject{{"id", "ok"}, {"url", "https://clips.kick.com/a.m3u8"}}, QJsonObject{{"id", "evil"}, {"url", "https://evil.example/a.m3u8"}}, "string", QJsonObject{{"url", "https://clips.kick.com/z"}}}}});
+        bad.append("not even an object");
+        KickClient j(&net);
+        j.setListsJson(QJsonObject{{"playlists", bad}});
+        QCOMPARE(j.playlists().size(), 2);
+        QCOMPARE(j.playlists()[0].toMap().value("count").toInt(), 1);               // only "x1", once
+        QCOMPARE(j.playlists()[1].toMap().value("count").toInt(), 1);               // only the clip on Kick's own host
+        j.setListsJson(QJsonObject{{"playlists", "garbage"}});
+        QVERIFY(j.playlists().isEmpty());
+    }
+    void aChannelPlaylistShowsWhoIsLiveWhenAsked()
+    {
+        fresh();
+        ft->handler = [](const QUrl &u) -> NetReply {
+            if (u.path() == "/api/v2/channels/liveone") return ok(channelJson("liveone", true));
+            if (u.path() == "/api/v2/channels/quiet") return ok(channelJson("quiet", false));
+            NetReply e; e.status = 404; e.error = "the site answered 404"; return e;
+        };
+        KickClient k(&net);
+        k.open();
+        const QString id = k.createPlaylist("favs", "channels");
+        k.addToPlaylist(id, {{"slug", "liveone"}}); k.addToPlaylist(id, {{"slug", "quiet"}});
+        const int before = ft->asked.size();
+        QCOMPARE(k.playlists().first().toMap().value("items").toList().first().toMap().value("checked").toBool(), false);   // nothing is looked up by itself
+        QTest::qWait(50);
+        QCOMPARE(ft->asked.size(), before);
+        k.refreshPlaylist(id);
+        QTRY_VERIFY(k.playlists().first().toMap().value("items").toList().first().toMap().value("checked").toBool());
+        QTRY_VERIFY(k.playlists().first().toMap().value("items").toList().last().toMap().value("checked").toBool());
+        QCOMPARE(k.playlists().first().toMap().value("items").toList().first().toMap().value("live").toBool(), true);
+        QCOMPARE(k.playlists().first().toMap().value("items").toList().last().toMap().value("live").toBool(), false);
+    }
+
+private slots:
+private slots:
+    void englishOnlyKeepsTheStreamsListToEnglishAndIsSaved()
+    {
+        fresh();
+        QStringList urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.host() == "web.kick.com") {
+                QJsonArray a;
+                auto add = [&](const QString &slug, const QString &lang) {
+                    a.append(QJsonObject{{"id", 1}, {"title", slug}, {"viewer_count", 10},
+                                         {"channel", QJsonObject{{"slug", slug}, {"username", slug}}}, {"category", QJsonObject{{"id", 1}, {"name", "x"}}},
+                                         {"language", lang}, {"is_mature", false}});
+                };
+                add("english_one", "en"); add("japanese_one", "ja"); add("unlabelled", ""); add("english_two", "English");
+                return ok(QJsonDocument(QJsonObject{{"data", QJsonObject{{"livestreams", a}, {"pagination", QJsonObject{{"next_cursor", ""}}}}}}).toJson());
+            }
+            if (u.path() == "/api/v2/channels/gamehopper") {
+                QJsonObject o{{"slug", "gamehopper"}, {"user", QJsonObject{{"username", "gamehopper"}}}, {"chatroom", QJsonObject{{"id", 1}}}};
+                o["livestream"] = QJsonObject{{"session_title", "dev"}, {"viewer_count", 3}, {"language", "Japanese"}, {"is_mature", false}};
+                return ok(QJsonDocument(o).toJson());
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.open();
+        QTRY_VERIFY(k.streams().size() >= 4);
+        QStringList slugs;
+        for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        QVERIFY(slugs.contains("japanese_one"));                                      // everything, to start with
+        QVERIFY(k.language().isEmpty());
+        // english only: the list is asked for with language=en, and anything Kick says is not English is left out anyway
+        urls.clear();
+        k.setEnglishOnly(true);
+        QCOMPARE(edited.count(), 1);                                                   // saved with the profile
+        QCOMPARE(k.language(), QString("en"));
+        QTRY_VERIFY(!urls.isEmpty());
+        QVERIFY2(urls.first().contains("language=en"), qPrintable(urls.first()));
+        QTRY_VERIFY(k.streams().size() >= 3);
+        slugs.clear();
+        for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        QVERIFY(!slugs.contains("japanese_one"));
+        QVERIFY(slugs.contains("english_one") && slugs.contains("english_two") && slugs.contains("unlabelled"));   // unlabelled: nothing to go on
+        QVERIFY(!slugs.contains("gamehopper"));                                        // the developer's pinned card follows the same rule
+        QVERIFY(!k.streams().isEmpty() && k.streams().first().toMap().value("developer").toBool() == false);
+        // it survives saving and loading, and a language chosen by hand cannot override it
+        KickClient again(&net);
+        again.setListsJson(k.listsJson());
+        QVERIFY(again.englishOnly());
+        again.setLanguage("fr");
+        QCOMPARE(again.language(), QString("en"));
+        // off again: everything is back
+        k.setEnglishOnly(false);
+        QVERIFY(k.language().isEmpty());
+        QTRY_VERIFY(k.streams().size() >= 4);
+        slugs.clear();
+        for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        QVERIFY(slugs.contains("japanese_one"));
+    }
+
+private slots:
+    // ---- optional sign-in (TV link) and importing the follow list ----
+    static QByteArray headerOf(const NetLimits &l, const char *name)
+    {
+        for (const auto &h : l.headers) if (h.first.compare(name, Qt::CaseInsensitive) == 0) return h.second;
+        return {};
+    }
+private slots:
+    void accountRequestsAreOnlyForTheFewSignInAddresses()
+    {
+        QString why;
+        QVERIFY(AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/tv/link/authenticate/abc-123"), &why));
+        QVERIFY(AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/v1/user"), &why));
+        QVERIFY(AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/v2/channels/followed?cursor=2"), &why));
+        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("https://kick.com/api/v2/channels/alpha"), &why));       // an ordinary address: no body, no headers
+        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("https://web.kick.com/api/v1/user"), &why));             // only kick.com itself
+        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("https://evil.example/api/v1/user"), &why));
+        QVERIFY(!AppNet::accountUrlAllowed("kick", QUrl("http://kick.com/api/v1/user"), &why));
+        QVERIFY(!AppNet::accountUrlAllowed("someapp", QUrl("https://kick.com/api/v1/user"), &why));
+        // through the gateway: refused before anything is sent
+        fresh();
+        auto tryIt = [&](const QUrl &u, NetLimits l) { QString err; bool got = false; net.get("kick", u, [&](NetReply r) { err = r.error; got = true; }, l); for (int i = 0; i < 300 && !got; ++i) QTest::qWait(10); return got ? err : QStringLiteral("no answer"); };
+        NetLimits post; post.method = "POST"; post.body = "{}";
+        QVERIFY(!tryIt(QUrl("https://kick.com/api/v2/channels/alpha"), post).isEmpty());                          // a POST to an ordinary address
+        QCOMPARE(ft->asked.size(), 0);
+        NetLimits cookie; cookie.headers.append(qMakePair(QByteArray("Cookie"), QByteArray("a=b")));
+        QVERIFY(!tryIt(QUrl("https://kick.com/api/v1/user"), cookie).isEmpty());                                 // a header that is not on the list
+        NetLimits crlf; crlf.headers.append(qMakePair(QByteArray("Authorization"), QByteArray("Bearer x\r\nX-Evil: 1")));
+        QVERIFY(!tryIt(QUrl("https://kick.com/api/v1/user"), crlf).isEmpty());
+        NetLimits put; put.method = "PUT";
+        QVERIFY(!tryIt(QUrl("https://kick.com/api/v1/user"), put).isEmpty());
+        QCOMPARE(ft->asked.size(), 0);
+        NetLimits good; good.headers.append(qMakePair(QByteArray("Authorization"), QByteArray("Bearer x")));
+        ft->handler = [](const QUrl &) { return ok("{}"); };
+        QVERIFY(tryIt(QUrl("https://kick.com/api/v1/user"), good).isEmpty());
+        QCOMPARE(ft->asked.size(), 1);
+        // a redirect is never followed for an account request (the token would travel with it)
+        ft->handler = [](const QUrl &) { NetReply r; r.status = 302; r.location = QUrl("https://web.kick.com/elsewhere"); return r; };
+        QVERIFY(tryIt(QUrl("https://kick.com/api/v1/user"), good).contains("redirect"));
+        QCOMPARE(ft->asked.size(), 2);
+    }
+    void signingInWithACodeIsOptionalAndTheTokenStaysInTheProfile()
+    {
+        fresh();
+        int polls = 0;
+        QStringList urls;
+        QString uuid;
+        ft->handler = [&](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path().startsWith("/api/tv/link/authenticate/")) {
+                uuid = u.path().section('/', -1);
+                if (++polls < 3) { NetReply w; w.status = 404; w.error = "the site answered 404"; return w; }       // not approved yet
+                return ok("{\"token\":\"tok-SECRET-123\"}");
+            }
+            if (u.path() == "/api/v1/user") return ok("{\"username\":\"GamerOne\"}");
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.setSignInPollMs(10);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.open();
+        QVERIFY(!k.signedIn());
+        QVERIFY(k.signInState().isEmpty());                                              // nothing asks to sign in by itself
+        k.startSignIn();
+        QCOMPARE(k.signInState(), QString("waiting"));
+        QVERIFY(QRegularExpression("^\\d{6}$").match(k.signInCode()).hasMatch());
+        QVERIFY(k.signInUrl().startsWith("https://kick.com/tv/login?uuid="));
+        QVERIFY(k.signInUrl().contains("code=" + k.signInCode()));
+        QTRY_VERIFY_WITH_TIMEOUT(k.signedIn(), 5000);
+        QCOMPARE(polls, 3);
+        QCOMPARE(k.signInState(), QString());
+        QTRY_COMPARE(k.accountName(), QString("GamerOne"));
+        QVERIFY(uuid.size() >= 32 && k.signInUrl().isEmpty());                          // the code is used up
+        // how it asked: a POST with the code, the page's own Origin / Referer, and no token yet
+        int pollIndex = -1;
+        for (int i = 0; i < ft->asked.size(); ++i) if (ft->asked[i].path().startsWith("/api/tv/link/authenticate/")) { pollIndex = i; break; }
+        QVERIFY(pollIndex >= 0);
+        const NetLimits poll = ft->limitsAsked[pollIndex];
+        QCOMPARE(poll.method, QByteArray("POST"));
+        QVERIFY(poll.body.contains("\"key\""));
+        QCOMPARE(headerOf(poll, "Origin"), QByteArray("https://kick.com"));
+        QVERIFY(headerOf(poll, "Authorization").isEmpty());
+        QCOMPARE(headerOf(ft->limitsAsked.last(), "Authorization"), QByteArray("Bearer tok-SECRET-123"));    // the identity lookup carries it
+        for (const QString &u : urls) QVERIFY2(!u.contains("SECRET"), qPrintable(u));                          // never in an address
+        // saved with the profile and restored; sign out forgets it
+        QVERIFY(edited.count() >= 1);
+        const QJsonObject saved = k.listsJson();
+        QCOMPARE(saved.value("account").toObject().value("token").toString(), QString("tok-SECRET-123"));
+        KickClient again(&net);
+        again.setListsJson(saved);
+        QVERIFY(again.signedIn());
+        QCOMPARE(again.accountName(), QString("GamerOne"));
+        k.signOut();
+        QVERIFY(!k.signedIn());
+        QVERIFY(k.listsJson().value("account").toObject().isEmpty());
+        KickClient guest(&net);
+        guest.setListsJson(QJsonObject{});                                              // a guest or a profile that never signed in
+        QVERIFY(!guest.signedIn());
+        guest.setListsJson(QJsonObject{{"account", QJsonObject{{"token", QString(5000, 'x')}}}});   // junk
+        QVERIFY(!guest.signedIn());
+    }
+    void aSignInThatIsCancelledOrNeverApprovedStopsAsking()
+    {
+        fresh();
+        ft->handler = [](const QUrl &) { NetReply w; w.status = 404; w.error = "the site answered 404"; return w; };
+        KickClient k(&net);
+        k.setSignInPollMs(10);
+        k.open();
+        k.startSignIn();
+        QTRY_VERIFY_WITH_TIMEOUT(ft->asked.size() >= 3, 3000);
+        k.cancelSignIn();
+        QVERIFY(k.signInState().isEmpty() && k.signInCode().isEmpty());
+        const int n = ft->asked.size();
+        QTest::qWait(100);
+        QVERIFY(ft->asked.size() <= n + 1);                                              // (one already on the way may still come back, then nothing)
+        QVERIFY(!k.signedIn());
+        // errors that are not "not approved yet" end it with a plain message
+        ft->handler = [](const QUrl &) { NetReply w; w.status = 500; w.error = "the site answered 500"; return w; };
+        k.startSignIn();
+        QTRY_COMPARE_WITH_TIMEOUT(k.signInState(), QString("error"), 3000);
+        QVERIFY(k.signInMessage().contains("500"));
+        // signed in already, or the app closed: nothing starts
+        k.close();
+        k.startSignIn();
+        QVERIFY(k.signInState() == "error" || k.signInState().isEmpty());
+    }
+    void followsAreImportedOnceIntoTheLocalListAndStayThere()
+    {
+        fresh();
+        QList<QUrl> urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u;
+            if (u.path() == "/api/v2/channels/followed") {
+                if (u.query().isEmpty()) return ok("{\"channels\":[{\"channel_slug\":\"a\"},{\"slug\":\"b\"},{\"user\":{\"username\":\"c\"}},{\"channel_slug\":\"not a name!\"}],\"nextCursor\":\"2\"}");
+                return ok("{\"channels\":[{\"channel_slug\":\"d\"},{\"channel_slug\":\"a\"}],\"nextCursor\":\"\"}");
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTest::qWait(50);
+        urls.clear();
+        k.importFollows();                                                                // not signed in: nothing is asked
+        QTest::qWait(50);
+        QCOMPARE(urls.size(), 0);
+        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "tok-1"}, {"name", "me"}}}, {"following", QJsonArray{"a"}}, {"blocked", QJsonArray{"b"}}});
+        QVERIFY(k.signedIn());
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.importFollows();
+        QTRY_VERIFY_WITH_TIMEOUT(!k.importing() && !k.importMessage().startsWith("reading"), 5000);
+        QCOMPARE(urls.size(), 2);                                                         // two pages
+        int followedRequests = 0;
+        for (int i = 0; i < ft->asked.size(); ++i)
+            if (ft->asked[i].path() == "/api/v2/channels/followed") { ++followedRequests; QCOMPARE(headerOf(ft->limitsAsked[i], "Authorization"), QByteArray("Bearer tok-1")); }
+        QCOMPARE(followedRequests, 2);
+        QStringList following;
+        for (const QVariant &v : k.following()) following << v.toMap().value("slug").toString();
+        following.sort();
+        QCOMPARE(following, (QStringList{"a", "c", "d"}));                               // a was already there; b is blocked and stays out; the bad name is dropped
+        QVERIFY(k.isBlocked("b") && !k.isFollowing("b"));
+        QVERIFY(k.importMessage().contains("imported 2") && k.importMessage().contains("blocked"));
+        QVERIFY(edited.count() >= 1);
+        QVERIFY(k.listsJson().value("following").toArray().contains("c"));               // kept locally, saved with the profile
+        // signing out keeps the imported list (it is yours now) but forgets the token
+        k.signOut();
+        QVERIFY(k.isFollowing("c") && !k.signedIn());
+        // an expired sign-in is said plainly and signs out
+        ft->handler = [](const QUrl &) { NetReply e; e.status = 401; e.error = "the site answered 401"; return e; };
+        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "old"}}}});
+        k.importFollows();
+        QTRY_VERIFY_WITH_TIMEOUT(!k.importing() && k.importMessage().contains("expired"), 5000);
+        QVERIFY(!k.signedIn());
+        // an answer of an unknown shape is said plainly
+        ft->handler = [](const QUrl &) { return ok("{\"oops\":true}"); };
+        k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "t"}}}});
+        k.importFollows();
+        QTRY_VERIFY_WITH_TIMEOUT(!k.importing() && k.importMessage().contains("not in a form"), 5000);
+    }
+
+private slots:
+    // ---- searching by name: closest first, and phrases Kick finds nothing for ----
+    void searchResultsAreRankedByHowCloseTheNameIs()
+    {
+        QVERIFY(KickClient::nameScore("Lumielle", "lumielle") > KickClient::nameScore("Lumielle", "lumiellevt"));      // exact beats longer
+        QVERIFY(KickClient::nameScore("lumie", "lumiere") > KickClient::nameScore("lumie", "lumiellevt"));            // shorter name that starts the same
+        QVERIFY(KickClient::nameScore("lumie", "lumiellevt") > KickClient::nameScore("lumie", "sharelylumielle"));    // starts with beats contains
+        QVERIFY(KickClient::nameScore("lumie", "sharelylumielle") > KickClient::nameScore("lumie", "unrelated"));     // contains beats nothing in common
+        QVERIFY(KickClient::nameScore("Lumielle vtuber", "lumiellevt") > KickClient::nameScore("Lumielle vtuber", "sharelylumielle"));   // name + extra word
+        QVERIFY(KickClient::nameScore("lumielle", "lumielel") > KickClient::nameScore("lumielle", "zzzzzzzz"));       // a near spelling beats nonsense
+        QCOMPARE(KickClient::nameScore("", "x"), 0);
+        QVariantList l;
+        for (const char *s : {"sharelylumielle", "lumiellevt", "unrelated", "lumielle", "llumiellee"})
+            l.append(QVariantMap{{"slug", s}, {"name", QString(s).toUpper()}});
+        KickClient::rankByName(&l, "lumielle");
+        QStringList order; for (const QVariant &v : l) order << v.toMap().value("slug").toString();
+        QCOMPARE(order.first(), QString("lumielle"));
+        QCOMPARE(order.at(1), QString("lumiellevt"));
+        QCOMPARE(order.last(), QString("unrelated"));
+    }
+    void aPhraseKickFindsNothingForIsSearchedByItsLongestWord()
+    {
+        fresh();
+        QStringList words;
+        ft->handler = [&words](const QUrl &u) -> NetReply {
+            if (u.path() == "/api/search") {
+                const QString w = QUrlQuery(u).queryItemValue("searched_word", QUrl::FullyDecoded);
+                words << w;
+                if (w == "Lumielle") return ok("{\"channels\":[{\"slug\":\"sharelylumielle\",\"user\":{\"username\":\"SharelyLumielle\"}},{\"slug\":\"lumiellevt\",\"user\":{\"username\":\"LumielleVT\"},\"isLive\":false},{\"slug\":\"lumielle\",\"user\":{\"username\":\"Lumielle\"}}],\"categories\":[]}");
+                return ok("{\"channels\":[],\"categories\":[]}");
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        k.search("Lumielle vtuber");
+        QTRY_VERIFY(!k.streams().isEmpty());
+        QCOMPARE(words, (QStringList{"Lumielle vtuber", "Lumielle"}));                  // the phrase first, then its longest word
+        QCOMPARE(k.streams().first().toMap().value("slug").toString(), QString("lumiellevt"));      // closest to what was typed first
+        QCOMPARE(k.streams().last().toMap().value("slug").toString(), QString("sharelylumielle"));
+        // typing on: a stale answer never replaces a newer search
+        words.clear();
+        k.search("lum");
+        k.search("lumi");
+        QTRY_VERIFY(words.contains("lumi"));
+        QCOMPARE(k.query(), QString("lumi"));
+        // clearing the box goes back to the live list
+        k.search("");
+        QVERIFY(k.query().isEmpty());
+    }
+
+private slots:
+    // ---- your own category chips ----
+    void yourOwnCategoryChipsReplaceKicksPopularOnesAndAreKept()
+    {
+        fresh();
+        ft->handler = [](const QUrl &u) -> NetReply {
+            if (u.path().startsWith("/api/v1/subcategories"))
+                return ok("{\"data\":[{\"id\":15,\"name\":\"Just Chatting\",\"slug\":\"jc\"},{\"id\":3,\"name\":\"Grand Theft Auto V\",\"slug\":\"gta\"},{\"id\":9,\"name\":\"Minecraft\",\"slug\":\"mc\"}]}");
+            if (u.path() == "/api/search") {
+                const QString w = QUrlQuery(u).queryItemValue("searched_word").toLower();
+                QJsonArray cats;
+                if (QString("palworld").contains(w)) cats.append(QJsonObject{{"id", 7234}, {"category_id", 1}, {"name", "Palworld"}, {"is_mature", false}});
+                if (QString("pal's adult game").contains(w)) cats.append(QJsonObject{{"id", 55}, {"name", "Pal's Adult Game"}, {"is_mature", true}});
+                return ok(QJsonDocument(QJsonObject{{"channels", QJsonArray{}}, {"categories", cats}}).toJson());
+            }
+            return ok("{\"data\":{\"livestreams\":[],\"pagination\":{\"next_cursor\":\"\"}}}");
+        };
+        KickClient k(&net);
+        QSignalSpy edited(&k, &KickClient::listsEdited);
+        k.open();
+        QTRY_COMPARE(k.chips().size(), 3);
+        QVERIFY(!k.categoriesCustom());                                                  // Kick's popular ones to start with
+        auto ids = [&] { QList<int> l; for (const QVariant &v : k.chips()) l << v.toMap().value("id").toInt(); return l; };
+        // taking one away starts from what is shown, and the list is yours from then on
+        k.unpinCategory(3);
+        QVERIFY(k.categoriesCustom());
+        QCOMPARE(ids(), (QList<int>{15, 9}));
+        QCOMPARE(edited.count(), 1);
+        // the category search finds games by name; a one-letter search asks nothing
+        const int before = ft->asked.size();
+        k.searchCategories("p");
+        QCOMPARE(ft->asked.size(), before);
+        k.searchCategories("pal");
+        QTRY_VERIFY(!k.categoryResults().isEmpty());
+        QCOMPARE(k.categoryResults().first().toMap().value("name").toString(), QString("Palworld"));
+        QVERIFY(k.categoryResults().last().toMap().value("mature").toBool());
+        QVERIFY(k.pinCategory(7234, "Palworld"));
+        QVERIFY(!k.pinCategory(7234, "Palworld"));                                        // not twice
+        QVERIFY(!k.pinCategory(0, "x") && !k.pinCategory(5, "  "));
+        QCOMPARE(ids(), (QList<int>{15, 9, 7234}));
+        // moving: earlier / later, never off the ends
+        k.movePinnedCategory(7234, -1);
+        QCOMPARE(ids(), (QList<int>{15, 7234, 9}));
+        k.movePinnedCategory(15, -1);
+        QCOMPARE(ids(), (QList<int>{15, 7234, 9}));
+        k.movePinnedCategory(9, 1);
+        QCOMPARE(ids(), (QList<int>{15, 7234, 9}));
+        // a category that was filtering the list and is taken away stops filtering
+        k.setCategoryId(7234);
+        k.unpinCategory(7234);
+        QCOMPARE(k.categoryId(), 0);
+        QCOMPARE(ids(), (QList<int>{15, 9}));
+        // limits
+        for (int i = 0; i < 40; ++i) k.pinCategory(1000 + i, QString("c%1").arg(i));
+        QCOMPARE(k.chips().size(), int(KickClient::kMaxPinned));
+        // saved with the profile and restored; junk is left out
+        KickClient again(&net);
+        again.setListsJson(k.listsJson());
+        QVERIFY(again.categoriesCustom());
+        QCOMPARE(again.chips().size(), int(KickClient::kMaxPinned));
+        QCOMPARE(again.chips().first().toMap().value("id").toInt(), 15);
+        again.setListsJson(QJsonObject{{"pinnedCategories", QJsonObject{{"custom", true}, {"items", QJsonArray{
+            QJsonObject{{"id", 7}, {"name", "ok"}}, QJsonObject{{"id", 7}, {"name", "dup"}}, QJsonObject{{"id", -2}, {"name", "neg"}}, QJsonObject{{"id", 8}, {"name", ""}}, "junk"}}}}});
+        QCOMPARE(again.chips().size(), 1);
+        // an emptied own list stays empty (it does not quietly bring Kick's back); reset does
+        again.unpinCategory(7);
+        QVERIFY(again.categoriesCustom() && again.chips().isEmpty());
+        again.resetCategories();
+        QVERIFY(!again.categoriesCustom());
+        k.resetCategories();
+        QVERIFY(!k.categoriesCustom());
+        QCOMPARE(ids(), (QList<int>{15, 3, 9}));
+    }
+
+private slots:
+private slots:
+    // ---- search by game (live streams playing it), and pictures that stay ----
+    void searchingAGameShowsTheStreamsPlayingItFirst()
+    {
+        fresh();
+        QStringList urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search") {
+                return ok("{\"channels\":[{\"slug\":\"palworld52\",\"user\":{\"username\":\"Palworld52\",\"profilePic\":\"https://files.kick.com/a.webp\"}},{\"slug\":\"gamerx\",\"user\":{\"username\":\"GamerX\"}}],"
+                          "\"categories\":[{\"id\":7234,\"name\":\"Palworld\"},{\"id\":99,\"name\":\"Minecraft\"}]}");
+            }
+            if (u.host() == "web.kick.com") {
+                const QString cat = QUrlQuery(u).queryItemValue("category_id");
+                if (cat == "7234") return ok(streamsJson({"pal_streamer_one", "pal_streamer_two", "gamerx"}, ""));
+                return ok(streamsJson({"someone"}, ""));
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTRY_VERIFY(!k.streams().isEmpty());
+        urls.clear();
+        k.search("Palworld");
+        QTRY_COMPARE(k.searchCategory(), QString("Palworld"));
+        QStringList slugs; for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        // the streams playing it come first (most viewers first, with their pictures), then the channels with a similar name; nobody twice
+        QCOMPARE(slugs, (QStringList{"pal_streamer_one", "pal_streamer_two", "gamerx", "palworld52"}));
+        QVERIFY(!k.streams().first().toMap().value("thumb").toString().isEmpty());
+        QVERIFY(!k.streams().first().toMap().value("title").toString().isEmpty());
+        bool askedPalworld = false, askedMinecraft = false;
+        for (const QString &u : urls) { if (u.contains("category_id=7234")) askedPalworld = true; if (u.contains("category_id=99")) askedMinecraft = true; }
+        QVERIFY(askedPalworld && !askedMinecraft);                                       // only the category that matches what was typed
+        // part of the name finds it too ("pal" starts "Palworld"); something unrelated does not ask for a category at all
+        urls.clear();
+        k.search("pal");
+        QTRY_COMPARE(k.searchCategory(), QString("Palworld"));
+        urls.clear();
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search") return ok("{\"channels\":[{\"slug\":\"zzzz1\",\"user\":{\"username\":\"zzzz1\"}}],\"categories\":[{\"id\":99,\"name\":\"Minecraft\"}]}");
+            return ok(streamsJson({"someone"}, ""));
+        };
+        k.search("zzzz");
+        QTRY_VERIFY(!k.streams().isEmpty());
+        QTest::qWait(60);
+        QVERIFY(k.searchCategory().isEmpty());
+        for (const QString &u : urls) QVERIFY2(!u.contains("category_id"), qPrintable(u));
+        QCOMPARE(k.streams().first().toMap().value("slug").toString(), QString("zzzz1"));
+        // english only reaches the category request too
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search") return ok("{\"channels\":[],\"categories\":[{\"id\":7234,\"name\":\"Palworld\"}]}");
+            return ok(streamsJson({"a_stream"}, ""));
+        };
+        k.setEnglishOnly(true);
+        urls.clear();
+        k.search("palworld");
+        QTRY_COMPARE(k.searchCategory(), QString("Palworld"));
+        bool english = false; for (const QString &u : urls) if (u.contains("category_id=7234") && u.contains("language=en")) english = true;
+        QVERIFY(english);
+        // clearing the search clears it
+        k.search("");
+        QVERIFY(k.searchCategory().isEmpty());
+    }
+    void liveSearchResultsKeepTheirPictures()
+    {
+        fresh();
+        int channelLookups = 0;
+        ft->handler = [&channelLookups](const QUrl &u) -> NetReply {
+            if (u.path() == "/api/search")
+                return ok("{\"channels\":[{\"slug\":\"eu_vtuber\",\"isLive\":true,\"user\":{\"username\":\"EU_Vtuber\"}},{\"slug\":\"alpha\",\"isLive\":true,\"user\":{\"username\":\"Alpha\"}},"
+                          "{\"slug\":\"starvtuber\",\"isLive\":false,\"user\":{\"username\":\"StarVtuber\",\"profilePic\":\"https://files.kick.com/s.webp\"}}],\"categories\":[]}");
+            if (u.path() == "/api/v2/channels/eu_vtuber") { ++channelLookups; return ok(channelJson("eu_vtuber", true)); }
+            if (u.host() == "web.kick.com") return ok(streamsJson({"alpha", "bravo"}, ""));      // the ordinary live list: alpha is in it, with its picture
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTRY_VERIFY(k.streams().size() >= 2);                                              // (the list was seen: alpha's picture is known now)
+        k.search("vtuber");
+        QTRY_VERIFY(k.streams().size() == 3);
+        auto entry = [&](const QString &slug) { for (const QVariant &v : k.streams()) if (v.toMap().value("slug").toString() == slug) return v.toMap(); return QVariantMap(); };
+        QVERIFY(!entry("alpha").value("thumb").toString().isEmpty());                      // known from the list: no lookup needed
+        QTRY_VERIFY(!entry("eu_vtuber").value("thumb").toString().isEmpty());              // live and unknown: looked up, and it appears
+        QCOMPARE(channelLookups, 1);
+        QVERIFY(entry("starvtuber").value("thumb").toString().isEmpty());                  // offline: no stream picture, its avatar is shown instead
+        QVERIFY(!entry("starvtuber").value("avatar").toString().isEmpty());
+        // typing on and clearing keeps what was learned: the next search shows it at once, with no new lookup
+        k.search("vtuber2");
+        k.search("vtuber");
+        QTRY_VERIFY(k.streams().size() == 3);
+        QVERIFY(!entry("eu_vtuber").value("thumb").toString().isEmpty());
+        QCOMPARE(channelLookups, 1);
+    }
+
+private slots:
+private slots:
+    void downloadPicturesStayAndComeBackWhenMissing()
+    {
+        Rig r; rig(r, 3);
+        QVariantMap info = streamInfo("s1");
+        info["thumb"] = "https://images.kick.com/video_thumbnails/x/thumb.png";
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(info), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QTRY_VERIFY(!r.dl->thumbPath("s1").isEmpty());                                    // the picture is kept with the download
+        QVERIFY(QImage(r.dl->thumbPath("s1")).width() > 0);
+        QCOMPARE(r.dl->item("s1").value("thumbUrl").toString(), info.value("thumb").toString());
+        // lost (or never fetched): the next time the app opens it is asked for again, so the list never shows a blank tile for long
+        QFile::remove(r.dl->thumbPath("s1"));
+        QVERIFY(r.dl->thumbPath("s1").isEmpty());
+        r.dl->reload();
+        QTRY_VERIFY(!r.dl->thumbPath("s1").isEmpty());
+        // a recording keeps its channel's picture too
+        Rig rec; LiveRig lv; liveRig(rec, lv);
+        QVariantMap ri = recInfo("rec-1");
+        ri["thumb"] = "https://images.kick.com/video_thumbnails/x/thumb.png";
+        QCOMPARE(rec.dl->startRecording(ri), QString());
+        QTRY_VERIFY(!rec.dl->thumbPath("rec-1").isEmpty());
+        rec.dl->stopRecording("rec-1");
+    }
+
+private slots:
+private slots:
+    void aSearchKeepsGameStreamsAndChannelNamesApart()
+    {
+        fresh();
+        QStringList urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search")
+                return ok("{\"channels\":[{\"slug\":\"palworld52\",\"user\":{\"username\":\"Palworld52\"}},{\"slug\":\"gamerx\",\"user\":{\"username\":\"GamerX\"}}],\"categories\":[{\"id\":7234,\"name\":\"Palworld\"}]}");
+            if (u.host() == "web.kick.com" && QUrlQuery(u).queryItemValue("category_id") == "7234") return ok(streamsJson({"pal_one", "pal_two", "gamerx"}, ""));
+            if (u.host() == "web.kick.com") return ok(streamsJson({"someone"}, ""));
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTRY_VERIFY(!k.streams().isEmpty());
+        k.search("Palworld");
+        QTRY_COMPARE(k.gameStreams().size(), 3);
+        auto slugs = [](const QVariantList &l) { QStringList o; for (const QVariant &v : l) o << v.toMap().value("slug").toString(); return o; };
+        // everything (the start): streams playing it first, then channels named like it, nobody twice
+        QCOMPARE(k.searchScope(), QString("all"));
+        QCOMPARE(slugs(k.gameStreams()), (QStringList{"pal_one", "pal_two", "gamerx"}));
+        QCOMPARE(slugs(k.channelResults()), (QStringList{"palworld52"}));
+        QCOMPARE(slugs(k.streams()), (QStringList{"pal_one", "pal_two", "gamerx", "palworld52"}));
+        const int asked = urls.size();
+        // only the streams playing a game
+        k.setSearchScope("streams");
+        QCOMPARE(slugs(k.streams()), (QStringList{"pal_one", "pal_two", "gamerx"}));
+        QVERIFY(k.channelResults().isEmpty());
+        // only channels by name (all of them, including one that is also streaming the game)
+        k.setSearchScope("channels");
+        QCOMPARE(slugs(k.streams()), (QStringList{"palworld52", "gamerx"}));
+        QVERIFY(k.gameStreams().isEmpty());
+        QCOMPARE(slugs(k.channelResults()), (QStringList{"palworld52", "gamerx"}));
+        k.setSearchScope("nonsense");                                                 // anything else means everything
+        QCOMPARE(k.searchScope(), QString("all"));
+        QCOMPARE(urls.size(), asked);                                                 // changing the view asks nobody
+        // a blocked streamer is left out of both kinds
+        k.block("gamerx");
+        QCOMPARE(slugs(k.gameStreams()), (QStringList{"pal_one", "pal_two"}));
+        QCOMPARE(slugs(k.channelResults()), (QStringList{"palworld52"}));
+        k.unblock("gamerx");
+        // clearing the search puts the scope back to everything
+        k.setSearchScope("streams");
+        k.search("");
+        QCOMPARE(k.searchScope(), QString("all"));
+        QVERIFY(k.gameStreams().isEmpty());
+    }
+
+private slots:
+    // A real clip, from the real servers, only when asked for: HOPTUNES_LIVE_KICK=<channel with clips>. Not run in CI.
+    void liveClipDownloadAgainstTheRealServers()
+    {
+        const QString slug = qEnvironmentVariable("HOPTUNES_LIVE_KICK");
+        if (slug.isEmpty()) QSKIP("set HOPTUNES_LIVE_KICK=<channel> to try the real servers");
+        QNetworkProxyFactory::setUseSystemConfiguration(true);
+        AppNet realNet;                                                    // the real transport
+        realNet.setAllowed("kick", true);
+        realNet.open("kick");
+        KickClient k(&realNet);
+        k.open();
+        k.openChannel(slug);
+        QTRY_VERIFY_WITH_TIMEOUT(!k.channel().value("loading").toBool(), 20000);
+        k.loadClips();
+        QTRY_VERIFY_WITH_TIMEOUT(!k.clips().isEmpty(), 20000);
+        const QVariantMap clip = k.clips().first().toMap();
+        QTemporaryDir tmp;
+        OfflineStore store;
+        store.setDefaultBase(tmp.filePath("offline"));
+        store.setProfileId("live");
+        OfflineDownloads dl(&realNet, &store);
+        QSignalSpy finished(&dl, &OfflineDownloads::finished);
+        QVariantMap info = clip;
+        info["channel"] = slug;
+        QCOMPARE(dl.enqueue(info), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(finished.count() == 1 || dl.item(clip.value("id").toString()).value("state").toString() == "failed", 120000);
+        const QVariantMap it = dl.item(clip.value("id").toString());
+        qInfo() << "live clip:" << it.value("state") << it.value("error") << it.value("bytes") << clip.value("title");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        const QByteArray data = readAll(dl.videoPath(clip.value("id").toString()));
+        QVERIFY(data.size() > 10000);
+        QCOMPARE(uchar(data[0]), uchar(0x47));                             // an MPEG-TS packet starts with the sync byte
+        QCOMPARE(uchar(data[188]), uchar(0x47));
+        QFile::copy(dl.videoPath(clip.value("id").toString()), qEnvironmentVariable("HOPTUNES_LIVE_OUT", tmp.filePath("clip-copy.ts")));
+    }
+    // A real live stream, only when asked for: HOPTUNES_LIVE_KICK=<a channel that is live now>. Records ~15 s. Not run in CI.
+    void liveRecordingAgainstTheRealServers()
+    {
+        const QString slug = qEnvironmentVariable("HOPTUNES_LIVE_KICK");
+        if (slug.isEmpty()) QSKIP("set HOPTUNES_LIVE_KICK=<live channel> to try the real servers");
+        QNetworkProxyFactory::setUseSystemConfiguration(true);
+        AppNet realNet;
+        realNet.setAllowed("kick", true);
+        realNet.open("kick");
+        KickClient k(&realNet);
+        k.open();
+        k.openChannel(slug);
+        QTRY_VERIFY_WITH_TIMEOUT(!k.channel().value("loading").toBool(), 20000);
+        const QString addr = k.channel().value("playbackUrl").toString();
+        if (addr.isEmpty()) QSKIP("that channel is not live right now");
+        QTemporaryDir tmp;
+        OfflineStore store;
+        store.setDefaultBase(tmp.filePath("offline"));
+        store.setProfileId("live");
+        OfflineDownloads dl(&realNet, &store);
+        QCOMPARE(dl.startRecording({{"id", "rec-live"}, {"title", "t"}, {"channel", slug}, {"url", addr}, {"maxHeight", 480}}), QString());
+        QTest::qWait(15000);
+        dl.stopRecording("rec-live");
+        const QVariantMap it = dl.item("rec-live");
+        qInfo() << "live recording:" << it.value("state") << it.value("error") << it.value("bytes") << it.value("seconds") << it.value("quality");
+        QCOMPARE(it.value("state").toString(), QString("done"));
+        const QByteArray data = readAll(dl.videoPath("rec-live"));
+        QVERIFY(data.size() > 50000);
+        QCOMPARE(uchar(data[0]), uchar(0x47));
+        QCOMPARE(uchar(data[188]), uchar(0x47));
+        QFile::copy(dl.videoPath("rec-live"), qEnvironmentVariable("HOPTUNES_LIVE_OUT", tmp.filePath("rec-copy.ts")));
     }
 };
 
