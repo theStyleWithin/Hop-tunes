@@ -119,6 +119,16 @@ FocusScope {
                 PlainButton { objectName: "kickNotNow"; text: "not now"; onClicked: root.leave() }
                 Item { Layout.fillWidth: true }
             }
+            Rectangle { Layout.fillWidth: true; Layout.topMargin: 6; height: 1; color: Theme.line }
+            Label {   // the developer's channel: opens in the browser only when it is clicked (nothing is fetched by Hop-tunes)
+                objectName: "kickDevLink"
+                Layout.fillWidth: true; Layout.topMargin: 2; wrapMode: Text.WordWrap
+                textFormat: Text.StyledText
+                text: "made by gamehopper \u00b7 <a href=\"https://kick.com/gamehopper/about\" style=\"color:" + Theme.accent + "\">kick.com/gamehopper</a>"
+                color: Theme.muted; linkColor: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                onLinkActivated: function (link) { Qt.openUrlExternally(link) }
+                HoverHandler { cursorShape: parent.hoveredLink ? Qt.PointingHandCursor : Qt.ArrowCursor }
+            }
         }
     }
 

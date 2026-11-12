@@ -2213,6 +2213,8 @@ private slots:
         QCOMPARE(ft->asked.size(), 0);
         QVERIFY(!kick->isOpen() || kick->streams().isEmpty());
         QVERIFY(item("kickAllow") && item("kickNotNow"));
+        QVERIFY(item("kickDevLink") && item("kickDevLink")->property("text").toString().contains("https://kick.com/gamehopper/about"));   // the link at the very bottom
+        QVERIFY(item("kickDevLink")->mapToItem(item("kickPermission"), QPointF(0, 0)).y() > item("kickAllow")->mapToItem(item("kickPermission"), QPointF(0, 0)).y());
         shot("kick-permission");
         // "not now" leaves and still nothing was sent
         QVERIFY(click("kickNotNow"));
