@@ -184,6 +184,11 @@ until you click a stream, and no Kick account is needed.
   on Debian and Ubuntu; the Flatpak, AppImage and Windows builds include them). Playing the stream uses libmpv (AppImage, Windows, AUR) or, in the Flatpak, GStreamer, which needs its HLS plugin: if
   a stream does not play there, the message under the picture says so.
 
+### Making your own app
+
+The [Hop-tunes apps developer toolkit](https://github.com/theStyleWithin/Hoptunes-apps-AI-dev-toolkit) holds everything you (or a coding agent you work with)
+need to add an app: the rules, a step-by-step guide, a tested example and a checker. Today an app is added to the Hop-tunes source and Hop-tunes is rebuilt.
+
 ## Playing music
 
 - **Double-click** a song (or press `Enter`) to play from there. **Play album** plays the

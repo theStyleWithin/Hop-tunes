@@ -143,6 +143,11 @@ from kick.com with a follow list and a block list that stay on your computer (no
 uses the internet: it asks first, lists the exact sites it contacts, connects only while it is open, and every connection goes through one
 gateway (secure connections, only those sites, no cookies, nothing kept). Details in the [user guide](docs/user-guide.md#apps-off-until-you-switch-them-on).
 
+**Want to make your own app?** The [Hop-tunes apps developer toolkit](https://github.com/theStyleWithin/Hoptunes-apps-AI-dev-toolkit) is a hand-off package
+for exactly that: give it, with this repository, to Claude or any coding agent, tell it what you would like, and it knows the rules (offline first, nothing
+sent anywhere, a permission card for anything online), how an app is built and how to test it. Today an app is added to the Hop-tunes source and Hop-tunes is
+rebuilt; apps you can drop in without rebuilding are planned, and the toolkit says so plainly.
+
 ## Building
 
 Hop-tunes is C++20 + Qt 6 (QML) + GStreamer + TagLib + SQLite.
