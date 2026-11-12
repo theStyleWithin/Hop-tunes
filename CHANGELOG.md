@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **Room set aside for offline Kick.** Settings > apps settings > kick offline storage: you choose how much space Kick may use for things kept offline (downloads and recordings come next), in MB or GB, and you can raise or lower it at any time. A meter shows what is used, with a warning at 80%. At the limit, or when the drive is nearly full, new downloads pause; nothing is ever deleted to make room. Optionally keep it on another drive or folder: what is already stored is moved there, and an unplugged drive just shows as "not available" until it is back. The setting is per profile.
+
 ## [1.9.0] - 2026-11-12: Giving power back to the ordinary
 
 ### Added

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
 #include "apps/KickClient.h"
+#include "apps/OfflineStore.h"
 #include "net/AppNet.h"
 
 #include <QDirIterator>
+#include <QTemporaryDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -450,6 +452,132 @@ private slots:
         k.close();
         QVERIFY(k.streams().isEmpty());
         QVERIFY(!net.isOpen("kick"));
+    }
+    // ---- the room set aside for offline Kick ----
+    static void writeFile(const QString &path, qint64 bytes)
+    {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(QByteArray(int(bytes), 'x'));
+    }
+    void offlineStoreKeepsALimitTheUserSets()
+    {
+        QTemporaryDir tmp;
+        OfflineStore o;
+        o.setDefaultBase(tmp.filePath("offline"));
+        o.setProfileId("p1");
+        o.setFreeProbe([](const QString &) { return qint64(100) * 1024 * 1024 * 1024; });
+        QCOMPARE(o.limitMB(), 5.0 * 1024);                                   // 5 GB to start with
+        QVERIFY(!o.setLimitMB(10));                                          // below the smallest limit: refused, nothing changes
+        QCOMPARE(o.limitMB(), 5.0 * 1024);
+        QVERIFY(!o.setLimitMB(-3));
+        QVERIFY(o.setLimitGB(2));
+        QCOMPARE(o.limitMB(), 2048.0);
+        QVERIFY(o.setLimitMB(50));                                           // down to the smallest, any time
+        QVERIFY(o.setLimitMB(80));
+        // used space is what is in the folder; the meter and the warning follow it
+        QCOMPARE(o.usedBytes(), qint64(0));
+        writeFile(o.folder() + "/a/one.ts", 30 * OfflineStore::kMB);
+        writeFile(o.folder() + "/two.ts", 30 * OfflineStore::kMB);
+        o.refresh();
+        QCOMPARE(o.usedBytes(), 60 * OfflineStore::kMB);
+        QVERIFY(!o.nearLimit() && !o.full());                                // 60 of 80 is 75%: no warning yet
+        writeFile(o.folder() + "/three.ts", 5 * OfflineStore::kMB);
+        o.refresh();
+        QVERIFY(o.nearLimit() && !o.full());                                 // 65 of 80 is 81%: the warning
+    }
+    void offlineStoreWarnsAndPausesButNeverDeletes()
+    {
+        QTemporaryDir tmp;
+        OfflineStore o;
+        o.setDefaultBase(tmp.filePath("offline"));
+        o.setProfileId("p1");
+        qint64 free = qint64(100) * 1024 * 1024 * 1024;
+        o.setFreeProbe([&free](const QString &) { return free; });
+        o.setLimitMB(100);
+        writeFile(o.folder() + "/x.ts", 85 * OfflineStore::kMB);
+        o.refresh();
+        QVERIFY(o.nearLimit() && !o.full());
+        QVERIFY(o.summary().contains("close to the limit"));
+        QString why;
+        QVERIFY(o.canStore(10 * OfflineStore::kMB, &why));                   // 95 of 100 fits
+        QVERIFY(why.isEmpty());
+        QVERIFY(!o.canStore(20 * OfflineStore::kMB, &why));                  // 105 of 100 does not
+        QVERIFY(why.contains("limit"));
+        writeFile(o.folder() + "/y.ts", 20 * OfflineStore::kMB);
+        o.refresh();
+        QVERIFY(o.full());
+        QVERIFY(o.summary().contains("paused"));
+        QVERIFY(QFileInfo::exists(o.folder() + "/x.ts") && QFileInfo::exists(o.folder() + "/y.ts"));   // nothing was deleted
+        // raising the limit lets things carry on
+        o.setLimitMB(500);
+        QVERIFY(o.canStore(10 * OfflineStore::kMB, &why));
+        // a nearly full drive pauses things too, whatever the limit
+        free = 500 * OfflineStore::kMB;
+        QVERIFY(!o.canStore(10 * OfflineStore::kMB, &why));
+        QVERIFY(why.contains("drive"));
+    }
+    void offlineStoreMovesToAnotherDriveAndSurvivesItBeingUnplugged()
+    {
+        QTemporaryDir tmp, usb;
+        OfflineStore o;
+        o.setDefaultBase(tmp.filePath("offline"));
+        o.setProfileId("p1");
+        o.setFreeProbe([](const QString &) { return qint64(100) * 1024 * 1024 * 1024; });
+        writeFile(o.folder() + "/s1/seg1.ts", 2 * OfflineStore::kMB);
+        writeFile(o.folder() + "/s1/seg2.ts", 3 * OfflineStore::kMB);
+        o.refresh();
+        QCOMPARE(o.usedBytes(), 5 * OfflineStore::kMB);
+        QSignalSpy edited(&o, &OfflineStore::edited);
+        QString why;
+        QVERIFY2(o.moveTo(usb.path(), &why), qPrintable(why));
+        QCOMPARE(edited.count(), 1);                                          // the setting is saved with the profile
+        QCOMPARE(o.location(), QDir::cleanPath(usb.path()));
+        QVERIFY(o.folder().startsWith(QDir::cleanPath(usb.path()) + "/Hop-tunes offline/"));
+        QVERIFY(QFileInfo::exists(o.folder() + "/s1/seg2.ts"));               // arrived
+        QVERIFY(!QFileInfo::exists(tmp.filePath("offline/p1")));              // and the old copy is gone
+        QCOMPARE(o.usedBytes(), 5 * OfflineStore::kMB);
+        // saved and restored
+        OfflineStore again;
+        again.setDefaultBase(tmp.filePath("offline"));
+        again.setProfileId("p1");
+        again.fromJson(o.toJson());
+        QCOMPARE(again.folder(), o.folder());
+        QCOMPARE(again.usedBytes(), 5 * OfflineStore::kMB);
+        // unplugged: unavailable, said plainly, nothing stored, no crash
+        QString gone = usb.path();
+        QDir(usb.path()).removeRecursively();
+        again.refresh();
+        QVERIFY(!again.available());
+        QVERIFY(again.summary().contains("not available"));
+        QVERIFY(!again.canStore(1, &why));
+        QCOMPARE(again.usedBytes(), qint64(0));
+        // not enough room on the new drive: refused, and nothing moved or lost
+        QTemporaryDir small;
+        OfflineStore o2;
+        o2.setDefaultBase(tmp.filePath("offline2"));
+        o2.setProfileId("p1");
+        o2.setFreeProbe([](const QString &) { return qint64(10) * OfflineStore::kMB; });
+        writeFile(o2.folder() + "/k.ts", 5 * OfflineStore::kMB);
+        o2.refresh();
+        QVERIFY(!o2.moveTo(small.path(), &why));
+        QVERIFY(why.contains("room"));
+        QVERIFY(QFileInfo::exists(o2.folder() + "/k.ts"));
+        QVERIFY(!o2.moveTo("/definitely/not/a/folder", &why));
+    }
+    void offlineStoreSettingsAreSafeAgainstJunk()
+    {
+        OfflineStore o;
+        o.setDefaultBase("/tmp/hop-offline-test");
+        o.fromJson(QJsonObject{{"limitMB", 3}, {"location", "/nope/never"}});     // too small: back to the default; a missing place is just unavailable
+        QCOMPARE(o.limitMB(), OfflineStore::kDefaultLimitMB);
+        QVERIFY(!o.available());
+        o.fromJson(QJsonObject{});
+        QCOMPARE(o.limitMB(), OfflineStore::kDefaultLimitMB);
+        QVERIFY(o.available());
+        o.setProfileId("../../etc");                                               // a profile id never walks out of the folder
+        QVERIFY(!o.folder().contains(".."));
     }
 };
 

@@ -97,6 +97,7 @@ Item {
     }
 
     Flickable {
+        objectName: "settingsFlick"
         id: settingsFlick
         anchors.fill: parent
         contentHeight: col.implicitHeight + 40
@@ -569,6 +570,81 @@ Item {
                 spacing: 10
                 Button { objectName: "kickClearBlocked"; visible: hop.kick && hop.kick.blocked.length > 0; text: "unblock everyone"; onClicked: hop.kick.clearBlocked() }
             }
+        }
+
+        ColumnLayout {   // offline kick: the room set aside for downloads and recordings (same idea as a posting limit: you choose it, any time)
+            id: offlineBox
+            objectName: "offlineBox"
+            visible: hop.netAppsBuilt && hop.appsEnabled && hop.offline
+            Layout.fillWidth: true; Layout.maximumWidth: 640; spacing: 8
+            property string moveMsg: ""
+            Label { text: "kick offline storage"; color: Theme.text; Layout.topMargin: 8; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } }
+            Label {
+                objectName: "offlineSummary"
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: hop.offline && !hop.offline.available ? Theme.danger : Theme.text2
+                text: hop.offline ? hop.offline.summary : ""
+                font { family: Theme.font; pixelSize: Theme.fs(14) }
+            }
+            Rectangle {   // the meter
+                objectName: "offlineMeter"
+                Layout.fillWidth: true; height: 8; color: Theme.line; radius: 4
+                Rectangle { width: Math.max(hop.offline && hop.offline.usedBytes > 0 ? 4 : 0, parent.width * (hop.offline ? hop.offline.fraction : 0)); height: parent.height; radius: 4
+                            color: hop.offline && hop.offline.nearLimit ? Theme.danger : Theme.accent }
+            }
+            Label { text: "set aside up to:"; color: Theme.muted; Layout.topMargin: 6; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            RowLayout {
+                spacing: 10; Layout.fillWidth: true
+                TextField {
+                    id: limitEdit
+                    objectName: "offlineLimitEdit"
+                    Layout.preferredWidth: 110; implicitHeight: 42; selectByMouse: true
+                    inputMethodHints: Qt.ImhFormattedNumbersOnly
+                    validator: DoubleValidator { bottom: 0; decimals: 2; notation: DoubleValidator.StandardNotation }
+                    property bool useGB: hop.offline ? hop.offline.limitMB >= 1024 && hop.offline.limitMB % 1024 === 0 : true
+                    text: hop.offline ? String(useGB ? hop.offline.limitMB / 1024 : hop.offline.limitMB) : ""
+                    color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) }
+                    Accessible.name: "offline storage limit"
+                    background: Rectangle { color: Theme.panel; border { width: limitEdit.activeFocus ? 2 : 1; color: limitEdit.activeFocus ? Theme.accent : Theme.line } }
+                    onAccepted: offlineBox.applyLimit()
+                }
+                Choice {
+                    id: unitChoice
+                    objectName: "offlineUnit"
+                    options: [["offlineMB", "MB"], ["offlineGB", "GB"]]
+                    value: limitEdit.useGB ? "offlineGB" : "offlineMB"
+                    onPicked: function (v) { limitEdit.useGB = (v === "offlineGB") }
+                }
+                PlainButton { objectName: "offlineSetLimit"; text: "set limit"; implicitHeight: 42; onClicked: offlineBox.applyLimit() }
+            }
+            function applyLimit() {
+                const n = Number(limitEdit.text.replace(",", "."))
+                if (!(n > 0) || !hop.offline.setLimitMB(n * (limitEdit.useGB ? 1024 : 1))) offlineBox.moveMsg = "the smallest limit is 50 MB."
+                else offlineBox.moveMsg = ""
+            }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                text: "downloads and recordings in the kick app are kept in their own folder inside hop-tunes (not as loose video files). nothing is ever deleted to make room: at the limit, or when the drive is nearly full, new downloads pause and you decide. you can change the limit any time."
+            }
+            Label { text: "where it is kept:"; color: Theme.muted; Layout.topMargin: 6; font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            Label {
+                objectName: "offlineWhere"
+                Layout.fillWidth: true; wrapMode: Text.WrapAnywhere; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
+                text: hop.offline ? (hop.offline.location === "" ? "hop-tunes' own folder (" + hop.offline.folder + ")" : hop.offline.folder) : ""
+            }
+            RowLayout {
+                spacing: 10
+                PlainButton { objectName: "offlineChoose"; text: "choose a drive or folder"; implicitHeight: 42; onClicked: offlineFolder.open() }
+                PlainButton { objectName: "offlineDefault"; visible: hop.offline && hop.offline.location !== ""; text: "back to the default"; implicitHeight: 42
+                              onClicked: offlineBox.moveMsg = hop.offline.moveToLocation("") }
+            }
+            Label { objectName: "offlineMessage"; visible: offlineBox.moveMsg !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.danger; text: offlineBox.moveMsg
+                    font { family: Theme.font; pixelSize: Theme.fs(14) } }
+            FolderPick {
+                id: offlineFolder
+                title: "choose where offline kick is kept"
+                onAccepted: offlineBox.moveMsg = hop.offlineMoveTo(selectedFolder)
+            }
+            Component.onCompleted: if (hop.offline) hop.offline.refresh()
         }
 
         // ---- music folders ---------------------------------------------------------

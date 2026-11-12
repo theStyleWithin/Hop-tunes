@@ -2334,6 +2334,49 @@ private slots:
     }
 #endif
 
+#ifdef HOPTUNES_NET_APPS
+    // settings > apps settings > kick offline storage: the limit is the person's to change, with a meter; nothing for guests to keep.
+    void offlineStorageSettingsShowAndChangeTheLimit()
+    {
+        auto *w = window();
+        m_app->setAppsEnabled(true);
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("offlineBox") && item("offlineBox")->isVisible());
+        OfflineStore *off = m_app->offlineStore();
+        QCOMPARE(off->limitMB(), OfflineStore::kDefaultLimitMB);
+        QVERIFY(item("offlineSummary")->property("text").toString().contains("of your"));
+        QVERIFY(item("offlineMeter") && item("offlineWhere")->property("text").toString().contains("hop-tunes"));
+        QTest::qWait(300);
+        if (QQuickItem *flick = item("settingsFlick")) {                           // scroll the section into view for the render
+            const qreal y = item("offlineBox")->mapToItem(flick->property("contentItem").value<QQuickItem *>(), QPointF(0, 0)).y();
+            flick->setProperty("contentY", qMax<qreal>(0, y - 80));
+        }
+        QTest::qWait(150);
+        shot("settings-offline-storage");
+        // a number below the smallest limit is refused, plainly
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("0.01"));
+        item("offlineLimitEdit")->setProperty("useGB", false);
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("10"));
+        QVERIFY(click("offlineSetLimit"));
+        QTRY_VERIFY(item("offlineMessage")->isVisible() && item("offlineMessage")->property("text").toString().contains("50 MB"));
+        QCOMPARE(off->limitMB(), OfflineStore::kDefaultLimitMB);
+        // a good one is kept, in the profile, and can go up or down again
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("200"));
+        QVERIFY(click("offlineSetLimit"));
+        QCOMPARE(off->limitMB(), 200.0);
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("offline").toObject().value("limitMB").toDouble() == 200.0);
+        QTRY_VERIFY(!item("offlineMessage")->isVisible());
+        item("offlineLimitEdit")->setProperty("useGB", true);
+        item("offlineLimitEdit")->setProperty("text", QStringLiteral("3"));
+        QVERIFY(click("offlineSetLimit"));
+        QCOMPARE(off->limitMB(), 3072.0);
+        QVERIFY(!item("offlineDefault")->isVisible());                            // nothing to go back from
+        off->setLimitMB(OfflineStore::kDefaultLimitMB);
+        m_app->setAppsEnabled(false);
+        w->setProperty("view", QStringLiteral("collection"));
+    }
+#endif
+
     // A controller is connected: starting a song from the collection opens Now playing (and only then).
     void aConnectedControllerOpensNowPlayingWhenASongStarts()
     {

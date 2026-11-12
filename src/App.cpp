@@ -84,6 +84,8 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 #endif
 #ifdef HOPTUNES_NET_APPS
     connect(&m_kick, &KickClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    connect(&m_offline, &OfflineStore::edited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    m_offline.setDefaultBase(Paths::dataDir() + QStringLiteral("/offline"));
 #endif
     connect(&m_audio, &AudioAnalyzer::beat, &m_albumFall, &AlbumFall::onBeat);
     connect(&m_audio, &AudioAnalyzer::beat, &m_musyNote, &MusyNoteGame::onBeat);
@@ -465,6 +467,8 @@ void App::activate(const QString &id, bool guest)
 #ifdef HOPTUNES_NET_APPS
     m_kick.close();
     m_kick.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("kick")).toObject());
+    m_offline.setProfileId(guest ? QStringLiteral("guest") : m_profileId);
+    m_offline.fromJson(guest ? QJsonObject{} : s.value(QStringLiteral("offline")).toObject());
     m_appNet.setAllowed(QStringLiteral("kick"), m_netAllowed.contains(QStringLiteral("kick")));
 #endif
     emit appNetChanged();
@@ -634,6 +638,7 @@ void App::saveProfileSettings()
         s.insert(QStringLiteral("appsNet"), net);
 #ifdef HOPTUNES_NET_APPS
         s.insert(QStringLiteral("kick"), m_kick.listsJson());
+        s.insert(QStringLiteral("offline"), m_offline.toJson());
 #endif
     }
     s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
@@ -2885,6 +2890,16 @@ void App::djTopUp()
         if (!recent.contains(t.path) && more.size() < 25) more.append(t);
     if (more.isEmpty()) more = smartMix(m_djSeed, m_library, m_stats, 25, ++m_djRound);
     m_player.enqueue(more);
+}
+
+QString App::offlineMoveTo(const QUrl &folder)
+{
+#ifdef HOPTUNES_NET_APPS
+    return m_offline.moveToLocation(Paths::folderPath(folder));
+#else
+    Q_UNUSED(folder);
+    return QStringLiteral("this build has no networked apps");
+#endif
 }
 
 } // namespace hop

@@ -84,7 +84,8 @@ add_library(hoptunes_core STATIC
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
 if(HOPTUNES_NET_APPS AND NOT ANDROID)
-    target_sources(hoptunes_core PRIVATE src/net/AppNet.h src/net/AppNet.cpp src/apps/KickClient.h src/apps/KickClient.cpp)
+    target_sources(hoptunes_core PRIVATE src/net/AppNet.h src/net/AppNet.cpp src/apps/KickClient.h src/apps/KickClient.cpp
+                                         src/apps/OfflineStore.h src/apps/OfflineStore.cpp)
     target_link_libraries(hoptunes_core PUBLIC Qt6::Network)
     target_compile_definitions(hoptunes_core PUBLIC HOPTUNES_NET_APPS=1)
 endif()
