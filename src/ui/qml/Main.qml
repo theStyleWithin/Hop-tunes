@@ -242,20 +242,6 @@ ApplicationWindow {
                 }
             }
         }
-        Item {   // the tab that brings a pushed-away mini player back
-            id: miniTab
-            objectName: "miniPullTab"
-            Layout.alignment: Qt.AlignRight
-            Layout.rightMargin: 12; Layout.bottomMargin: 6
-            implicitWidth: 44; implicitHeight: 40
-            visible: miniWrap.compactBar && win.miniHidden && win.view !== "now playing"
-            Rectangle { anchors.fill: parent; radius: 20; color: Theme.panel; border { width: 1; color: Theme.line } }
-            Icon { anchors.centerIn: parent; kind: "down"; ink: Theme.text2; width: 18; height: 18; rotation: 90 }      // pointing back to the left
-            TapHandler { onTapped: win.miniHidden = false }
-            DragHandler { xAxis { enabled: true; maximum: 0 } yAxis.enabled: false; onActiveChanged: if (!active && centroid.position.x < -20) win.miniHidden = false }
-            Accessible.role: Accessible.Button
-            Accessible.name: "show the player"
-        }
         Item {   // room for the phone's bottom bar
             visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer" && win.view !== "now playing"
             implicitHeight: 72
@@ -273,5 +259,21 @@ ApplicationWindow {
             if (v === "search" && win.view === "collection" && collectionView.appSearchable && collectionView.appSearch()) return
             win.view = v
         }
+    }
+
+    Item {   // the little tab that brings a pushed-away mini player back: it floats at the right edge above the bottom bar and takes no room of its own
+        id: miniTab
+        objectName: "miniPullTab"
+        visible: win.mobileNav && !win.tablet && win.miniHidden && win.view !== "now playing" && hop.profileReady && !hop.videoPlayerOpen
+        width: 14; height: 64                              // slimmer than the page's side margin: it never sits on top of a page's content
+        anchors { right: parent.right; bottom: parent.bottom; bottomMargin: (hop.navStyle !== "drawer" ? 72 : 0) + 16 }
+        z: 50
+        Rectangle { anchors.fill: parent; radius: 12; color: Theme.panel; border { width: 1; color: Theme.line } }
+        Rectangle { anchors { right: parent.right; top: parent.top; bottom: parent.bottom } width: 7; color: Theme.panel }        // (square on the screen's edge side)
+        Icon { anchors.centerIn: parent; kind: "down"; ink: Theme.text2; width: 11; height: 11; rotation: 90 }              // pointing back to the left
+        TapHandler { onTapped: win.miniHidden = false }
+        DragHandler { xAxis { enabled: true; maximum: 0 } yAxis.enabled: false; onActiveChanged: if (!active && centroid.position.x < -20) win.miniHidden = false }
+        Accessible.role: Accessible.Button
+        Accessible.name: "show the player"
     }
 }

@@ -8,6 +8,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 - **Kick stream pictures.** Kick sends every stream picture and profile picture as WebP, which Qt can only read through an optional plugin that the Android app (and some Linux installs) do not have, so the cards showed plain tiles. Hop-tunes now reads WebP itself (with libwebp), on desktop and, once the Android build carries it, on the phone.
 
 ### Added
+- **Search finds streams playing a game.** Typing a game or category ("Palworld") now shows the live streams playing it first (most viewers first, with their pictures), then the channels whose names are similar, instead of only channels named like it. English only applies to those streams too.
+- **Pictures stay.** Live search results get their stream picture (from what was seen before, or by asking for the live ones), channels that are not live show their avatar on the tile instead of a blank colour, channel playlists show a channel's live picture when it is live, and downloads and recordings keep their picture (fetched again the next time the app opens if it was missing).
+- **More room for the chat on a phone.** The chat is taller, and the tab that brings back a pushed-away mini player is now a slim handle at the right edge that takes no room (it used to sit in its own row and squeeze the page).
 - **Kick on a phone: ask before opening, full screen, and a pop-out window.**
   - Tapping a stream now asks "watch this stream?" first, so a slip of the finger while scrolling does not open one (settings > apps settings > opening a stream turns it off).
   - A full-screen button on the picture makes it fill the whole phone (status and navigation bars hidden), in portrait or landscape: turn the phone, or use the rotate button when the phone's own rotation is off. Back (or the button) leaves full screen.

@@ -56,7 +56,7 @@ QVariantMap OfflineDownloads::item(const QString &id) const
     QVariantMap m{{"id", it.id}, {"kind", it.kind}, {"title", it.title}, {"channel", it.channel}, {"quality", it.quality},
                   {"state", it.state}, {"error", it.error}, {"bytes", it.bytes}, {"estimate", it.estimate}, {"seconds", it.seconds},
                   {"doneParts", it.done}, {"totalParts", it.parts.size()}, {"progress", total > 0 ? it.done / total : 0.0},
-                  {"thumb", thumbPath(it.id)}};
+                  {"thumb", thumbPath(it.id)}, {"thumbUrl", it.thumb}};
     return m;
 }
 
@@ -135,7 +135,13 @@ void OfflineDownloads::reload()
         for (const QString &d : ids) loadItem(d);
     }
     emit changed();
-    if (m_net->isOpen(kApp)) next();
+    if (m_net->isOpen(kApp)) {
+        for (const QString &id : m_order) {                           // a picture that is missing (it could not be fetched before) is asked for again now
+            const auto it = m_items.constFind(id);
+            if (it != m_items.constEnd() && !it->thumb.isEmpty() && thumbPath(id).isEmpty()) fetchThumb(id);
+        }
+        next();
+    }
 }
 
 void OfflineDownloads::setState(Item &it, const QString &state, const QString &error)
@@ -413,12 +419,14 @@ QString OfflineDownloads::startRecording(const QVariantMap &info)
     it.url = url.toString();
     it.maxHeight = info.value("maxHeight").toInt();
     it.state = QStringLiteral("recording");
+    it.thumb = info.value("thumb").toString();
     m_items.insert(id, it);
     m_order.prepend(id);
     m_recording = id;
     const quint64 gen = ++m_recGen;
     save(m_items[id]);
     emit changed();
+    fetchThumb(id);                                                 // the channel's picture, kept with the recording
     QPointer<OfflineDownloads> self(this);
     m_net->get(kApp, url, [self, id, gen, url](NetReply r) {
         if (!self || self->m_recGen != gen || !self->m_items.contains(id)) return;

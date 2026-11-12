@@ -85,7 +85,7 @@ FocusScope {
         const ch = kick.channel
         if (!ch.playbackUrl) { root.recordMessage = "this stream has no address to record"; return }
         root.recordMessage = hop.downloads.startRecording({ id: "rec-" + ch.slug + "-" + Qt.formatDateTime(new Date(), "yyyyMMdd-hhmmss"), title: ch.title || "", channel: ch.slug,
-                                                            url: ch.playbackUrl, maxHeight: root.dlHeight })
+                                                            url: ch.playbackUrl, thumb: ch.thumb || "", maxHeight: root.dlHeight })
     }
     function dlState(it) {
         if (!it) return ""
@@ -445,7 +445,7 @@ FocusScope {
             }
                 }
             }
-            Label { visible: kick.query !== ""; text: "results for “" + kick.query + "”"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+            Label { visible: kick.query !== ""; text: "results for “" + kick.query + "”" + (kick.searchCategory !== "" ? ": live streams playing " + kick.searchCategory.toLowerCase() + " first, then channels with a similar name" : ""); color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
             Flickable {
                 id: gridScroll
@@ -471,6 +471,8 @@ FocusScope {
                                 id: still
                                 width: parent.width; height: width * 9 / 16
                                 address: modelData.thumb; backing: Theme.artColors("kick" + modelData.slug)[1]
+                                Pic { visible: modelData.thumb === "" && (modelData.avatar || "") !== ""; anchors.centerIn: parent; width: parent.height * 0.6; height: width
+                                      address: modelData.avatar || ""; round: true; backing: still.backing; maskColor: still.backing }
                                 Pill { visible: modelData.viewers > 0 || modelData.live === true; anchors { left: parent.left; top: parent.top; margins: 8 } text: "LIVE"; color: "#fff"
                                        background: Rectangle { color: "#e5484d"; radius: 3 } }
                                 Pill { objectName: "kickDeveloperTag"; visible: modelData.developer === true; anchors { left: parent.left; top: parent.top; leftMargin: 54; topMargin: 8 }
@@ -710,7 +712,7 @@ FocusScope {
             ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
                 visible: root.watchTab === "live"
                 Layout.preferredWidth: root.phone ? -1 : 360; Layout.fillWidth: root.phone; Layout.fillHeight: true; spacing: 8
-                Layout.minimumHeight: root.phone ? 230 : 0                            // the chat is never squeezed to a sliver; the page scrolls instead
+                Layout.minimumHeight: root.phone ? 280 : 0                            // the chat is never squeezed to a sliver; the page scrolls instead
                 RowLayout {
                     spacing: 8
                     Label { text: "chat"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
@@ -983,9 +985,9 @@ FocusScope {
                         columns: root.phone && !it.isChannel ? 1 : 2; columnSpacing: 12; rowSpacing: 6
                         RowLayout {
                             Layout.fillWidth: true; spacing: 12
-                            Pic { visible: it.isChannel; Layout.preferredWidth: 44; Layout.preferredHeight: 44; address: it.isChannel ? (it.modelData.avatar || "") : ""; round: true; maskColor: Theme.panel
+                            Pic { visible: it.isChannel && (it.modelData.thumb || "") === ""; Layout.preferredWidth: it.visible ? 44 : 0; Layout.preferredHeight: 44; address: it.isChannel ? (it.modelData.avatar || "") : ""; round: true; maskColor: Theme.panel
                                   backing: Qt.hsla((it.key.charCodeAt(0) % 36) / 36, 0.4, 0.4, 1) }
-                            Pic { visible: !it.isChannel; Layout.preferredWidth: 96; Layout.preferredHeight: 54; address: it.isChannel ? "" : (it.modelData.thumb || ""); backing: Theme.artColors("kick" + it.key)[1] }
+                            Pic { visible: !it.isChannel || (it.modelData.thumb || "") !== ""; Layout.preferredWidth: 96; Layout.preferredHeight: 54; address: it.modelData.thumb || ""; backing: Theme.artColors("kick" + it.key)[1] }
                             ColumnLayout {
                                 spacing: 1; Layout.fillWidth: true; Layout.minimumWidth: 0
                                 Label { text: it.isChannel ? (it.modelData.name || it.key) : (it.modelData.title || "(untitled)"); color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; font { family: Theme.font; pixelSize: Theme.fs(15) } }
@@ -1049,7 +1051,7 @@ FocusScope {
                             Rectangle {
                                 Layout.preferredWidth: 107; Layout.preferredHeight: 60; Layout.alignment: Qt.AlignTop; color: Theme.artColors("kick" + drow.modelData.id)[1]
                                 Image { anchors.fill: parent; fillMode: Image.PreserveAspectCrop; asynchronous: true; cache: false
-                                        source: drow.modelData.thumb !== "" ? "file://" + drow.modelData.thumb : "" }
+                                        source: drow.modelData.thumb !== "" ? "file://" + drow.modelData.thumb : root.pic(drow.modelData.thumbUrl || "") }
                             }
                             ColumnLayout {
                                 spacing: 2; Layout.fillWidth: true; Layout.minimumWidth: 0

@@ -2478,6 +2478,35 @@ private slots:
         }
         QVERIFY(click("appCollapse"));                                                    // up again: the chat and video get the room
         QTRY_VERIFY(!item("kickFollowButton")->isVisible());
+        // the chat: tall enough, and more room when the mini player is pushed away (its pull-back tab floats at the edge and takes no room)
+        {
+            QVERIFY(click("kickChat_pretend"));
+            QQuickItem *chat = item("kickPretendChat");
+            QTRY_VERIFY(chat && chat->isVisible());
+            QVERIFY2(chat->height() >= 200, qPrintable(QString::number(chat->height())));   // (the column has a 280 dp minimum: this is the chat panel inside it)
+            const qreal shown = chat->height();
+            const qreal flickBefore = item("kickWatch")->height();
+            w->setProperty("miniHidden", true);
+            QTRY_VERIFY(item("miniPullTab")->isVisible());
+            QTRY_VERIFY(item("kickWatch")->height() >= flickBefore + 60);                   // the page itself got the mini player's room (and no tab row is left behind)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+            QTRY_VERIFY(chat->height() >= shown + 50);                                      // and on the phone's Qt (6.8) the chat takes it (Qt 6.4's grid layout does not hand it on)
+#endif
+            QVERIFY(chat->height() >= shown);
+            // the tab is not on top of anything the person uses: not the chat's input, not its send button, not the bottom bar
+            const QRectF tab(item("miniPullTab")->mapToScene(QPointF(0, 0)), item("miniPullTab")->size());
+            for (const char *name : {"liveChatInput", "liveChatSend", "kickPretendChat"}) {
+                QQuickItem *it = item(name);
+                if (!it || !it->isVisible()) continue;
+                const QRectF r(it->mapToScene(QPointF(0, 0)), it->size());
+                QVERIFY2(!tab.intersects(r), name);
+            }
+            QVERIFY(tab.bottom() <= item("navTab_collection")->mapToScene(QPointF(0, 0)).y() + 1);   // above the bottom bar
+            shot("phone-kick-chat-room");
+            QVERIFY(click("miniPullTab"));
+            QTRY_VERIFY(!w->property("miniHidden").toBool());
+            QVERIFY(click("kickChat_off"));
+        }
         // the bottom "search" button searches Kick while the Kick app is open (not the music), from any page of the app
         QVERIFY(item("navTab_search") && item("navTab_search")->isVisible());
         QVERIFY(click("navTab_search"));

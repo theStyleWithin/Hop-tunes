@@ -217,6 +217,11 @@ the stream is asked for again automatically.
 On the streams page, the round arrow at the top right of the Kick app pulls the search box, filters and categories up like a curtain, so the streams get the room; press it again and
 the menu comes back down. Searching with the phone's bottom search button also brings it back.
 
+### Searching for a game
+
+Type a game or category in the search box (for example "Palworld") and the live streams playing it come first, most viewers first, followed by channels with a similar name. Channels that are not
+live show their avatar. Pictures of streams, playlists and downloads stay: a download's picture is kept with it.
+
 ### Searching, and your own categories
 
 Type a streamer's name in the search box and the list follows your spelling a moment after you pause (no enter needed), with the closest names first. If Kick finds nothing for a

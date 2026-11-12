@@ -7,7 +7,9 @@
 #include "apps/WebpDecode.h"
 #include "net/AppNet.h"
 
+#include <QBuffer>
 #include <QDirIterator>
+#include <QImage>
 #include <QNetworkProxyFactory>
 #include <QTemporaryDir>
 #include <QFile>
@@ -462,7 +464,9 @@ private slots:
         k.search("lofi");
         QTRY_COMPARE(firstSlug(k), QString("lofi_one"));
         QCOMPARE(k.streams().size(), 1);                                           // the nameless "bad name!" entry was dropped
-        QVERIFY(urls.last().contains("searched_word=lofi"));
+        bool searchedLofi = false;                                                 // (a live result may ask for its picture after the search itself)
+        for (const QString &u : urls) if (u.contains("searched_word=lofi")) searchedLofi = true;
+        QVERIFY(searchedLofi);
         k.search("");
         QTRY_COMPARE(firstSlug(k), QString("alpha"));
         k.close();
@@ -715,6 +719,7 @@ private:
                 return ok(partBytes(path.section('/', -1).section('.', 0, 0).toInt()));
             }
             if (path.endsWith("thumb.webp")) return ok(QByteArray("not an image"));
+            if (path.endsWith("thumb.png")) { QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(200, 60, 60)); QByteArray b; QBuffer buf(&b); buf.open(QIODevice::WriteOnly); im.save(&buf, "PNG"); return ok(b); }
             NetReply e; e.status = 404; e.error = "the site answered 404"; return e;
         };
     }
@@ -1505,6 +1510,130 @@ private slots:
         k.resetCategories();
         QVERIFY(!k.categoriesCustom());
         QCOMPARE(ids(), (QList<int>{15, 3, 9}));
+    }
+
+private slots:
+private slots:
+    // ---- search by game (live streams playing it), and pictures that stay ----
+    void searchingAGameShowsTheStreamsPlayingItFirst()
+    {
+        fresh();
+        QStringList urls;
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search") {
+                return ok("{\"channels\":[{\"slug\":\"palworld52\",\"user\":{\"username\":\"Palworld52\",\"profilePic\":\"https://files.kick.com/a.webp\"}},{\"slug\":\"gamerx\",\"user\":{\"username\":\"GamerX\"}}],"
+                          "\"categories\":[{\"id\":7234,\"name\":\"Palworld\"},{\"id\":99,\"name\":\"Minecraft\"}]}");
+            }
+            if (u.host() == "web.kick.com") {
+                const QString cat = QUrlQuery(u).queryItemValue("category_id");
+                if (cat == "7234") return ok(streamsJson({"pal_streamer_one", "pal_streamer_two", "gamerx"}, ""));
+                return ok(streamsJson({"someone"}, ""));
+            }
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTRY_VERIFY(!k.streams().isEmpty());
+        urls.clear();
+        k.search("Palworld");
+        QTRY_COMPARE(k.searchCategory(), QString("Palworld"));
+        QStringList slugs; for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
+        // the streams playing it come first (most viewers first, with their pictures), then the channels with a similar name; nobody twice
+        QCOMPARE(slugs, (QStringList{"pal_streamer_one", "pal_streamer_two", "gamerx", "palworld52"}));
+        QVERIFY(!k.streams().first().toMap().value("thumb").toString().isEmpty());
+        QVERIFY(!k.streams().first().toMap().value("title").toString().isEmpty());
+        bool askedPalworld = false, askedMinecraft = false;
+        for (const QString &u : urls) { if (u.contains("category_id=7234")) askedPalworld = true; if (u.contains("category_id=99")) askedMinecraft = true; }
+        QVERIFY(askedPalworld && !askedMinecraft);                                       // only the category that matches what was typed
+        // part of the name finds it too ("pal" starts "Palworld"); something unrelated does not ask for a category at all
+        urls.clear();
+        k.search("pal");
+        QTRY_COMPARE(k.searchCategory(), QString("Palworld"));
+        urls.clear();
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search") return ok("{\"channels\":[{\"slug\":\"zzzz1\",\"user\":{\"username\":\"zzzz1\"}}],\"categories\":[{\"id\":99,\"name\":\"Minecraft\"}]}");
+            return ok(streamsJson({"someone"}, ""));
+        };
+        k.search("zzzz");
+        QTRY_VERIFY(!k.streams().isEmpty());
+        QTest::qWait(60);
+        QVERIFY(k.searchCategory().isEmpty());
+        for (const QString &u : urls) QVERIFY2(!u.contains("category_id"), qPrintable(u));
+        QCOMPARE(k.streams().first().toMap().value("slug").toString(), QString("zzzz1"));
+        // english only reaches the category request too
+        ft->handler = [&urls](const QUrl &u) -> NetReply {
+            urls << u.toString();
+            if (u.path() == "/api/search") return ok("{\"channels\":[],\"categories\":[{\"id\":7234,\"name\":\"Palworld\"}]}");
+            return ok(streamsJson({"a_stream"}, ""));
+        };
+        k.setEnglishOnly(true);
+        urls.clear();
+        k.search("palworld");
+        QTRY_COMPARE(k.searchCategory(), QString("Palworld"));
+        bool english = false; for (const QString &u : urls) if (u.contains("category_id=7234") && u.contains("language=en")) english = true;
+        QVERIFY(english);
+        // clearing the search clears it
+        k.search("");
+        QVERIFY(k.searchCategory().isEmpty());
+    }
+    void liveSearchResultsKeepTheirPictures()
+    {
+        fresh();
+        int channelLookups = 0;
+        ft->handler = [&channelLookups](const QUrl &u) -> NetReply {
+            if (u.path() == "/api/search")
+                return ok("{\"channels\":[{\"slug\":\"eu_vtuber\",\"isLive\":true,\"user\":{\"username\":\"EU_Vtuber\"}},{\"slug\":\"alpha\",\"isLive\":true,\"user\":{\"username\":\"Alpha\"}},"
+                          "{\"slug\":\"starvtuber\",\"isLive\":false,\"user\":{\"username\":\"StarVtuber\",\"profilePic\":\"https://files.kick.com/s.webp\"}}],\"categories\":[]}");
+            if (u.path() == "/api/v2/channels/eu_vtuber") { ++channelLookups; return ok(channelJson("eu_vtuber", true)); }
+            if (u.host() == "web.kick.com") return ok(streamsJson({"alpha", "bravo"}, ""));      // the ordinary live list: alpha is in it, with its picture
+            return ok("{}");
+        };
+        KickClient k(&net);
+        k.open();
+        QTRY_VERIFY(k.streams().size() >= 2);                                              // (the list was seen: alpha's picture is known now)
+        k.search("vtuber");
+        QTRY_VERIFY(k.streams().size() == 3);
+        auto entry = [&](const QString &slug) { for (const QVariant &v : k.streams()) if (v.toMap().value("slug").toString() == slug) return v.toMap(); return QVariantMap(); };
+        QVERIFY(!entry("alpha").value("thumb").toString().isEmpty());                      // known from the list: no lookup needed
+        QTRY_VERIFY(!entry("eu_vtuber").value("thumb").toString().isEmpty());              // live and unknown: looked up, and it appears
+        QCOMPARE(channelLookups, 1);
+        QVERIFY(entry("starvtuber").value("thumb").toString().isEmpty());                  // offline: no stream picture, its avatar is shown instead
+        QVERIFY(!entry("starvtuber").value("avatar").toString().isEmpty());
+        // typing on and clearing keeps what was learned: the next search shows it at once, with no new lookup
+        k.search("vtuber2");
+        k.search("vtuber");
+        QTRY_VERIFY(k.streams().size() == 3);
+        QVERIFY(!entry("eu_vtuber").value("thumb").toString().isEmpty());
+        QCOMPARE(channelLookups, 1);
+    }
+
+private slots:
+private slots:
+    void downloadPicturesStayAndComeBackWhenMissing()
+    {
+        Rig r; rig(r, 3);
+        QVariantMap info = streamInfo("s1");
+        info["thumb"] = "https://images.kick.com/video_thumbnails/x/thumb.png";
+        QSignalSpy finished(r.dl.get(), &OfflineDownloads::finished);
+        QCOMPARE(r.dl->enqueue(info), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, 5000);
+        QTRY_VERIFY(!r.dl->thumbPath("s1").isEmpty());                                    // the picture is kept with the download
+        QVERIFY(QImage(r.dl->thumbPath("s1")).width() > 0);
+        QCOMPARE(r.dl->item("s1").value("thumbUrl").toString(), info.value("thumb").toString());
+        // lost (or never fetched): the next time the app opens it is asked for again, so the list never shows a blank tile for long
+        QFile::remove(r.dl->thumbPath("s1"));
+        QVERIFY(r.dl->thumbPath("s1").isEmpty());
+        r.dl->reload();
+        QTRY_VERIFY(!r.dl->thumbPath("s1").isEmpty());
+        // a recording keeps its channel's picture too
+        Rig rec; LiveRig lv; liveRig(rec, lv);
+        QVariantMap ri = recInfo("rec-1");
+        ri["thumb"] = "https://images.kick.com/video_thumbnails/x/thumb.png";
+        QCOMPARE(rec.dl->startRecording(ri), QString());
+        QTRY_VERIFY(!rec.dl->thumbPath("rec-1").isEmpty());
+        rec.dl->stopRecording("rec-1");
     }
 
 private slots:

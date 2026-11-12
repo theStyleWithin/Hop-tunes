@@ -3,6 +3,7 @@
 
 #include <QDateTime>
 #include <QRandomGenerator>
+#include <QSet>
 #include <QTimer>
 #include <QUuid>
 #include <QJsonArray>
@@ -257,6 +258,7 @@ void KickClient::requestList(bool more)
         if (!parseLivestreams(r.body, &got, &next)) { setError(QStringLiteral("kick answered, but not in a form this version understands")); return; }
         m_next = next;
         m_raw.append(got);
+        remember(got);
         applyFilters();
         // a whole page hidden by "blocked" or "18+" would look like a dead end: ask for the next one (at most 3 times in a row)
         if (m_streams.isEmpty() && !m_next.isEmpty() && m_emptyPages < 3) { ++m_emptyPages; requestList(true); }
@@ -273,7 +275,14 @@ bool isEnglish(const QString &lang) { return lang.isEmpty() || lang.compare(QLat
 void KickClient::applyFilters()
 {
     QVariantList shown;
-    const QVariantList &src = m_query.isEmpty() ? m_raw : m_searchChannels;
+    // a search shows the live streams of a matching game or category first, then the channels with a similar name
+    QVariantList merged;
+    if (!m_query.isEmpty()) {
+        QSet<QString> seen;
+        for (const QVariant &v : m_searchStreams) { merged.append(v); seen.insert(v.toMap().value(QStringLiteral("slug")).toString()); }
+        for (const QVariant &v : m_searchChannels) if (!seen.contains(v.toMap().value(QStringLiteral("slug")).toString())) merged.append(v);
+    }
+    const QVariantList &src = m_query.isEmpty() ? m_raw : merged;
     for (const QVariant &v : src) {
         const QVariantMap m = v.toMap();
         if (m_blocked.contains(m.value(QStringLiteral("slug")).toString())) continue;
@@ -309,6 +318,7 @@ void KickClient::requestDeveloper()
         if (ch.value(QStringLiteral("slug")).toString() != QLatin1String(kDeveloperSlug)) return;      // only that channel can take the card
         ch[QStringLiteral("developer")] = true;
         m_dev = ch;
+        remember(ch);
         applyFilters();
     });
 }
@@ -324,6 +334,88 @@ void KickClient::requestCategories()
         QVariantList cats;
         if (parseCategories(r.body, &cats)) { m_categories = cats; emit categoriesChanged(); }
     });
+}
+
+void KickClient::remember(const QVariantMap &ch)
+{
+    const QString slug = ch.value(QStringLiteral("slug")).toString();
+    if (slug.isEmpty()) return;
+    QVariantMap &k = m_known[slug];
+    for (const char *key : {"thumb", "avatar", "name"}) {
+        const QString v = ch.value(QString::fromLatin1(key)).toString();
+        if (!v.isEmpty()) k[QString::fromLatin1(key)] = v;
+    }
+    if (m_known.size() > 2000) m_known.clear();                               // a long session never grows without bound
+}
+
+void KickClient::remember(const QVariantList &channels)
+{
+    for (const QVariant &v : channels) remember(v.toMap());
+}
+
+// live search results have no picture of their own: ask for the channels that are live (a few at a time), and show them as they come
+void KickClient::lookupThumbs(const QStringList &slugs, quint64 gen)
+{
+    if (slugs.isEmpty()) return;
+    auto next = std::make_shared<int>(0);
+    auto step = std::make_shared<std::function<void()>>();
+    *step = [this, slugs, gen, next, step] {
+        if (gen != m_listGen || *next >= slugs.size() || !m_open) return;
+        const QString slug = slugs.at((*next)++);
+        m_net->get(kApp, QUrl(QStringLiteral("https://kick.com/api/v2/channels/") + slug), [this, gen, slug, step](NetReply r) {
+            if (gen != m_listGen) return;
+            QVariantMap ch;
+            if (r.error.isEmpty() && parseChannel(r.body, &ch)) {
+                remember(ch);
+                const QString thumb = ch.value(QStringLiteral("live")).toBool() ? ch.value(QStringLiteral("thumb")).toString() : QString();
+                if (!thumb.isEmpty()) {
+                    for (QVariant &v : m_searchChannels) {
+                        QVariantMap m = v.toMap();
+                        if (m.value(QStringLiteral("slug")).toString() != slug) continue;
+                        m[QStringLiteral("thumb")] = thumb;
+                        m[QStringLiteral("viewers")] = ch.value(QStringLiteral("viewers"));
+                        m[QStringLiteral("viewersText")] = ch.value(QStringLiteral("viewersText"));
+                        if (m.value(QStringLiteral("title")).toString().isEmpty()) m[QStringLiteral("title")] = ch.value(QStringLiteral("title"));
+                        if (m.value(QStringLiteral("category")).toString().isEmpty()) m[QStringLiteral("category")] = ch.value(QStringLiteral("category"));
+                        v = m;
+                    }
+                    applyFilters();
+                }
+            }
+            (*step)();
+        });
+    };
+    for (int i = 0; i < 3; ++i) (*step)();
+}
+
+void KickClient::requestCategoryStreams(const QVariantList &categories, quint64 gen)
+{
+    QStringList names;
+    for (const QVariant &v : categories) names << v.toMap().value(QStringLiteral("name")).toString();
+    for (const QVariant &cv : categories) {
+        const int id = cv.toMap().value(QStringLiteral("id")).toInt();
+        QUrl url(QStringLiteral("https://web.kick.com/api/v1/livestreams"));
+        QUrlQuery q;
+        q.addQueryItem(QStringLiteral("limit"), QString::number(kPageSize));
+        q.addQueryItem(QStringLiteral("sort"), QStringLiteral("viewer_count_desc"));
+        if (!language().isEmpty()) q.addQueryItem(QStringLiteral("language"), language());
+        q.addQueryItem(QStringLiteral("category_id"), QString::number(id));
+        url.setQuery(q);
+        begin();
+        m_net->get(kApp, url, [this, gen, names](NetReply r) {
+            end();
+            if (gen != m_listGen) return;
+            QVariantList got;
+            QString next;
+            if (!r.error.isEmpty() || !parseLivestreams(r.body, &got, &next) || got.isEmpty()) return;     // nothing playing it: just the channels
+            remember(got);
+            QSet<QString> seen;
+            for (const QVariant &v : m_searchStreams) seen.insert(v.toMap().value(QStringLiteral("slug")).toString());
+            for (const QVariant &v : got) if (!seen.contains(v.toMap().value(QStringLiteral("slug")).toString())) m_searchStreams.append(v);
+            m_searchCategory = names.join(QStringLiteral(" / "));
+            applyFilters();
+        });
+    }
 }
 
 namespace {
@@ -377,6 +469,7 @@ void KickClient::search(const QString &text)
     m_query = text.trimmed();
     emit filtersChanged();
     if (!ready()) return;
+    m_searchStreams.clear(); m_searchCategory.clear();
     if (m_query.isEmpty()) { ++m_listGen; m_searchChannels.clear(); refresh(); return; }
     const quint64 gen = ++m_listGen;
     setError(QString());
@@ -405,8 +498,31 @@ void KickClient::requestSearch(const QString &word, quint64 gen, bool mayRetry)
             if (plain(longest).size() >= 2) { requestSearch(longest, gen, false); return; }
         }
         rankByName(&ch, m_query);
+        // a live result gets its stream picture from what was seen before, or by asking (a few at a time); the rest show their avatar
+        QStringList need;
+        for (QVariant &v : ch) {
+            QVariantMap m = v.toMap();
+            const QString slug = m.value(QStringLiteral("slug")).toString();
+            const QVariantMap k = m_known.value(slug);
+            if (m.value(QStringLiteral("avatar")).toString().isEmpty() && !k.value(QStringLiteral("avatar")).toString().isEmpty()) m[QStringLiteral("avatar")] = k.value(QStringLiteral("avatar"));
+            if (m.value(QStringLiteral("live")).toBool() && m.value(QStringLiteral("thumb")).toString().isEmpty()) {
+                if (!k.value(QStringLiteral("thumb")).toString().isEmpty()) m[QStringLiteral("thumb")] = k.value(QStringLiteral("thumb"));
+                else if (need.size() < 12) need << slug;
+            }
+            v = m;
+        }
         m_searchChannels = ch;
         applyFilters();
+        lookupThumbs(need, gen);
+        // a typed game or category ("Palworld") finds streams PLAYING it, not just channels with a similar name
+        QVariantList cats, chosen;
+        if (parseSearchCategories(r.body, &cats)) {
+            for (const QVariant &v : cats) {
+                const QVariantMap m = v.toMap();
+                if (chosen.size() < 2 && nameScore(m_query, m.value(QStringLiteral("name")).toString()) >= 700) chosen.append(m);
+            }
+        }
+        if (!chosen.isEmpty()) requestCategoryStreams(chosen, gen);
     });
 }
 
@@ -467,6 +583,7 @@ void KickClient::openChannel(const QString &slugOrLink)
             emit channelChanged(); setError(e); return;
         }
         m_channel = ch;
+        remember(ch);
         emit channelChanged();
     });
 }
@@ -664,9 +781,11 @@ void KickClient::refreshChannels(const QStringList &todo)
             end();
             if (gen != m_channelGen) return;
             QVariantMap ch;
-            if (r.error.isEmpty() && parseChannel(r.body, &ch) && (m_following.contains(slug) || channelInPlaylists(slug))) {
+            if (r.error.isEmpty() && parseChannel(r.body, &ch)) remember(ch);
+            if (r.error.isEmpty() && !ch.isEmpty() && (m_following.contains(slug) || channelInPlaylists(slug))) {
                 m_status[slug] = QVariantMap{{QStringLiteral("live"), ch.value(QStringLiteral("live"))}, {QStringLiteral("viewers"), ch.value(QStringLiteral("viewers"))},
                                              {QStringLiteral("name"), ch.value(QStringLiteral("name"))}, {QStringLiteral("avatar"), ch.value(QStringLiteral("avatar"))},
+                                             {QStringLiteral("thumb"), ch.value(QStringLiteral("live")).toBool() ? ch.value(QStringLiteral("thumb")) : QVariant(QString())},
                                              {QStringLiteral("checked"), true}};
                 emit listsChanged();
             }

@@ -3,6 +3,7 @@
 
 #include "net/AppNet.h"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
@@ -27,6 +28,7 @@ class KickClient : public QObject {
     Q_PROPERTY(bool categoriesCustom READ categoriesCustom NOTIFY categoriesChanged)    // true once you changed them
     Q_PROPERTY(QVariantList categoryResults READ categoryResults NOTIFY categoryResultsChanged)   // what a category search found: {id, name, mature}
     Q_PROPERTY(bool categorySearching READ categorySearching NOTIFY categoryResultsChanged)
+    Q_PROPERTY(QString searchCategory READ searchCategory NOTIFY streamsChanged)    // when the search matched a game/category: its name (live streams of it come first)
     Q_PROPERTY(QVariantList playlists READ playlists NOTIFY listsChanged)          // {id, name, kind, count, items}: channels, clips or past streams
     Q_PROPERTY(QVariantList following READ following NOTIFY listsChanged)         // {slug, name, avatar, live, viewers, checked}
     Q_PROPERTY(QStringList blocked READ blocked NOTIFY listsChanged)
@@ -74,6 +76,7 @@ public:
     QVariantList categories() const { return m_categories; }
     QVariantList following() const;
     QVariantList playlists() const;
+    QString searchCategory() const { return m_searchCategory; }
     QVariantList chips() const { return m_customCategories ? m_pinned : m_categories; }
     bool categoriesCustom() const { return m_customCategories; }
     QVariantList categoryResults() const { return m_categoryResults; }
@@ -198,6 +201,7 @@ signals:
 private:
     void requestList(bool more);
     void requestSearch(const QString &word, quint64 gen, bool mayRetry);
+    void requestCategoryStreams(const QVariantList &categories, quint64 gen);
     void requestCategories();
     void requestDeveloper();
     bool pinApplies() const { return m_query.isEmpty() && m_categoryId == 0 && (m_language.isEmpty() || m_englishOnly); }
@@ -213,7 +217,8 @@ private:
     quint64 m_listGen = 0, m_channelGen = 0;
     QString m_error;
     QVariantList m_raw;          // everything fetched for the current list, before blocked / 18+ are left out
-    QVariantList m_streams, m_categories, m_searchChannels;
+    QVariantList m_streams, m_categories, m_searchChannels, m_searchStreams;
+    QString m_searchCategory;
     QString m_next, m_sort = QStringLiteral("viewers"), m_language, m_query;
     int m_categoryId = 0, m_emptyPages = 0;
     bool m_englishOnly = false;
@@ -228,6 +233,10 @@ private:
     struct Playlist { QString id, name, kind; QVariantList items; };
     QList<Playlist> m_playlists;
     QVariantList m_pinned, m_categoryResults;
+    QHash<QString, QVariantMap> m_known;          // what has been seen of each channel (stream picture, avatar, name), so a picture is not lost when the list changes
+    void remember(const QVariantMap &channel);
+    void remember(const QVariantList &channels);
+    void lookupThumbs(const QStringList &slugs, quint64 gen);
     bool m_customCategories = false, m_categorySearching = false;
     quint64 m_categorySearchGen = 0;
     bool channelInPlaylists(const QString &slug) const;
