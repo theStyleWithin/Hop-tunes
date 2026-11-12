@@ -448,6 +448,8 @@ void App::activate(const QString &id, bool guest)
     updateAnalysisAvailable();
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
+    m_appsEnabled = !guest && s.value(QStringLiteral("appsEnabled")).toBool(false);
+    emit appsEnabledChanged();
     m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
     if (m_videoOrientation != QLatin1String("portrait") && m_videoOrientation != QLatin1String("landscape")) m_videoOrientation = QStringLiteral("auto");
     m_navStyle = s.value(QStringLiteral("navStyle")).toString() == QLatin1String("drawer") ? QStringLiteral("drawer") : QStringLiteral("bar");
@@ -534,6 +536,8 @@ void App::leaveProfile()
     m_pinball.setPaused(true);
     emit gameSettingsChanged();
     m_videoViewStyle = QStringLiteral("window");
+    m_appsEnabled = false;
+    emit appsEnabledChanged();
     m_videoOrientation = QStringLiteral("auto");
     m_navStyle = QStringLiteral("bar");
     m_statusNote.clear();
@@ -598,6 +602,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
     s.insert(QStringLiteral("videoOrientation"), m_videoOrientation);
     s.insert(QStringLiteral("navStyle"), m_navStyle);
     s.insert(QStringLiteral("statusNote"), m_statusNote);
@@ -1847,6 +1852,14 @@ void App::setVideoViewStyle(const QString &style)
     m_videoViewStyle = s;
     saveProfileSettings();
     emit videoViewStyleChanged();
+}
+
+void App::setAppsEnabled(bool on)
+{
+    if (on == m_appsEnabled) return;
+    m_appsEnabled = on;
+    saveProfileSettings();
+    emit appsEnabledChanged();
 }
 
 void App::closeVideoPlayer(qint64 positionMs, qint64 durationMs)

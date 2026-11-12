@@ -513,6 +513,25 @@ Item {
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
 
+        // ---- apps settings -----------------------------------------------------------
+        Label { text: "apps settings"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+        SRow {
+            objectName: "appsRow"
+            spacing: 16
+            Label { text: "apps"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "appsEnabledChoice"
+                options: [["appsOff", "off"], ["appsOn", "show the apps tab"]]
+                value: hop.appsEnabled ? "appsOn" : "appsOff"
+                onPicked: function (v) { hop.appsEnabled = v === "appsOn" }
+            }
+        }
+        Label {
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "apps are small programs that are part of hop-tunes and open inside its window. they are off until you switch them on here, so a fresh hop-tunes shows every other tab and stays exactly as quiet as before. an app that needs the internet says so and asks you first."
+            color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) }
+        }
+
         // ---- music folders ---------------------------------------------------------
         // The music scanner's list. Videos use their own list below once one is added; until
         // then they scan these same folders, so existing libraries keep working.

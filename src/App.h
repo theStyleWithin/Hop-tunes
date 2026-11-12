@@ -147,6 +147,7 @@ class App : public QObject {
     // How video is shown: "window" (video with the movie's details and an up-next list), "theater" (a wide video
     // with the details below) or "fullscreen". The profile's default; the player can switch for the moment.
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
+    Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString videoOrientation READ videoOrientation WRITE setVideoOrientation NOTIFY videoOrientationChanged)   // phones: how videos open, "portrait" | "auto" | "landscape"
     Q_PROPERTY(QString navStyle READ navStyle WRITE setNavStyle NOTIFY navStyleChanged)   // phones and tablets: "bar" or "drawer"
@@ -271,6 +272,8 @@ public:
     QVariantMap videoPlayerInfo() const { return buildVideoDetail(m_videoPlayerPath); }
     QString videoViewStyle() const { return m_videoViewStyle; }
     void setVideoViewStyle(const QString &style);
+    bool appsEnabled() const { return m_appsEnabled; }
+    void setAppsEnabled(bool on);
     QString videoOrientation() const { return m_videoOrientation; }
     void setVideoOrientation(const QString &mode);
     Q_INVOKABLE void requestOrientation(const QString &mode);
@@ -469,6 +472,7 @@ signals:
     void videoPlayerChanged();
     void videoDetailChanged();
     void videoViewStyleChanged();
+    void appsEnabledChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
     void videoOrientationChanged();
@@ -516,6 +520,7 @@ private:
     Collection m_fullCollection;            // unfiltered, for quickplay
     QVariantMap buildVideoDetail(const QString &path) const;
     QString m_videoViewStyle = QStringLiteral("window");
+    bool m_appsEnabled = false;
     QString m_videoComments = QStringLiteral("off");
     QString m_videoOrientation = QStringLiteral("auto");
     QString m_navStyle = QStringLiteral("bar");

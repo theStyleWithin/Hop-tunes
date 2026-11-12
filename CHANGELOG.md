@@ -5,7 +5,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
-- **Apps (desktop).** A new collection tab, next to pictures, audiobooks, ebooks and podcasts: small apps that are part of Hop-tunes and open inside its window, each one a glass tile. There is one sample app for now; real ones come one at a time. The music keeps playing inside an app, and Esc or the back button leaves it.
+- **Apps (desktop).** A new collection tab, next to pictures, audiobooks, ebooks and podcasts: small apps that are part of Hop-tunes and open inside its window, each one a glass tile. The tab is off until you switch it on in the new **settings > apps** section, so a fresh Hop-tunes shows every other tab and stays as quiet as before. There is one sample app for now; real ones come one at a time. The music keeps playing inside an app, and Esc or the back button leaves it.
 
 ## [1.8.0] - 2026-11-06
 

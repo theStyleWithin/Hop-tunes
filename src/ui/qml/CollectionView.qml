@@ -35,6 +35,11 @@ Item {
         onLeave: root.collectionTab = "apps"
     }
     onVisibleChanged: if (!visible) appHost.close()
+    // switching apps off in settings takes the tab away (and an app that is open with it)
+    Connections {
+        target: hop
+        function onAppsEnabledChanged() { if (!hop.appsEnabled) { appHost.close(); if (root.collectionTab === "apps") root.collectionTab = "music" } }
+    }
     MergeArtistDialog {
         id: mergeDialog
         onDone: function (text, undo) { root.say(text, undo) }
@@ -217,7 +222,7 @@ Item {
             }
             AbstractButton {   // apps: small apps that are part of Hop-tunes (desktop for now)
                 id: appsTab
-                visible: !root.phone
+                visible: !root.phone && hop.appsEnabled
                 objectName: "subTab_apps"
                 hoverEnabled: true
                 onClicked: root.collectionTab = "apps"
@@ -384,7 +389,7 @@ Item {
             }
         }
         AppsView {
-            visible: root.collectionTab === "apps" && !root.phone
+            visible: root.collectionTab === "apps" && !root.phone && hop.appsEnabled
             onOpenApp: function (id) { appHost.open(id) }
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18

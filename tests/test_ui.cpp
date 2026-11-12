@@ -2092,6 +2092,11 @@ private slots:
         m_app->playSongs(0);
         QTRY_VERIFY(m_app->player()->isPlaying());
         QVERIFY(item("subTab_music") && item("subTab_videos") && item("subTab_apps"));
+        QVERIFY(!m_app->appsEnabled());                                         // off by default: every other tab, no apps tab
+        QVERIFY(!item("subTab_apps")->isVisible());
+        QVERIFY(item("subTab_podcasts")->isVisible());
+        m_app->setAppsEnabled(true);                                            // (settings > apps does the same, tested below)
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
         QVERIFY(click("subTab_apps"));
         QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
         QQuickItem *tile = item("appTile_sample");
