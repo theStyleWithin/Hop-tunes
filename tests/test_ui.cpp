@@ -54,7 +54,6 @@ public:
     int aborted = 0;
     int livePolls = 0;
     int failMode = 0;                    // 0 fine, 1 only the list server fails, 2 everything fails (a 503)
-    int signInPolls = 0;
     static QByteArray pngBytes()
     {
         QImage im(64, 36, QImage::Format_RGB32); im.fill(QColor(90, 60, 160));
@@ -96,12 +95,6 @@ public:
             if (QStringLiteral("palworld").contains(w)) cats.append(QJsonObject{{"id", 7234}, {"name", "Palworld"}, {"is_mature", false}});
             r.body = QJsonDocument(QJsonObject{{"channels", a}, {"categories", cats}}).toJson();
         }
-        else if (url.path().startsWith("/api/tv/link/authenticate/")) {
-            if (++signInPolls < 2) { r.status = 404; r.error = "the site answered 404"; r.body.clear(); }
-            else r.body = "{\"token\":\"tok-ui\"}";
-        }
-        else if (url.path() == "/api/v1/user") r.body = "{\"username\":\"UiTester\"}";
-        else if (url.path() == "/api/v2/channels/followed") r.body = "{\"channels\":[{\"channel_slug\":\"zulu\"},{\"channel_slug\":\"yankee\"}],\"nextCursor\":\"\"}";
         else if (url.path().endsWith("/videos")) {
             QJsonArray a;
             a.append(QJsonObject{{"id", 1}, {"is_live", true}, {"session_title", "live now"}, {"source", "https://stream.kick.com/x/master.m3u8"}, {"duration", 0}});
@@ -2918,16 +2911,15 @@ private slots:
         w->setProperty("view", QStringLiteral("collection"));
     }
 
-    // The optional account page: sign in with a code, import who you follow into the local list, sign out. Never needed to watch.
-    void signingInIsOptionalAndImportsFollowsIntoTheLocalList()
+    // "add channels": paste names or links into the follow list or a channel playlist. No sign-in, nothing is sent to Kick.
+    void pastingChannelNamesAddsThemToTheLocalListsWithoutAskingKick()
     {
         auto *w = window();
         auto fake = std::make_unique<FakeKick>();
         FakeKick *ft = fake.get();
         m_app->gateway()->setTransport(std::move(fake));
         KickClient *kick = m_app->kickClient();
-        kick->setSignInPollMs(400);
-        struct Restore { App *app; KickClient *k; ~Restore() { k->signOut(); k->unfollow("zulu"); k->unfollow("yankee"); k->setSignInPollMs(3000); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
+        struct Restore { App *app; KickClient *k; ~Restore() { k->unfollow("zulu"); k->unfollow("yankee"); k->unfollow("xray"); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
         w->setProperty("view", QStringLiteral("collection"));
         m_app->setAppsEnabled(true);
         m_app->setAppNetAllowed("kick", true);
@@ -2935,36 +2927,39 @@ private slots:
         QVERIFY(click("subTab_apps"));
         QVERIFY(click("appTile_kick"));
         QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
-        // nothing about signing in is asked for until the account page is opened and the button is pressed
-        for (const QUrl &u : ft->asked) QVERIFY2(!u.path().contains("/tv/link") && u.path() != "/api/v1/user", qPrintable(u.toString()));
+        QVERIFY(item("kickSignIn") == nullptr);                                        // there is no sign-in any more
         QVERIFY(item("kickAccountButton") && item("kickAccountButton")->isVisible());
+        QCOMPARE(item("kickAccountButton")->property("text").toString(), QString("add channels"));
         QVERIFY(click("kickAccountButton"));
         QTRY_VERIFY(item("kickAccountPage") && item("kickAccountPage")->isVisible());
-        QVERIFY(item("kickSignIn")->isVisible() && !item("kickImportFollows")->isVisible());
-        shot("kick-account-signed-out");
-        QVERIFY(click("kickSignIn"));
-        QTRY_VERIFY(item("kickSignInCode") && item("kickSignInCode")->isVisible());
-        QVERIFY(QRegularExpression("^\\d{6}$").match(item("kickSignInCode")->property("text").toString()).hasMatch());
-        QVERIFY(item("kickSignInUrl")->property("text").toString().startsWith("https://kick.com/tv/login?uuid="));
-        shot("kick-account-code");
-        QTRY_VERIFY_WITH_TIMEOUT(kick->signedIn(), 5000);
-        QTRY_VERIFY(item("kickAccountName") && item("kickAccountName")->isVisible());
-        QTRY_VERIFY(item("kickAccountName")->property("text").toString().contains("UiTester"));
-        QVERIFY(!item("kickSignIn")->isVisible());
-        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("token").toString() == QLatin1String("tok-ui"));
-        QVERIFY(click("kickImportFollows"));
-        QTRY_VERIFY_WITH_TIMEOUT(item("kickImportMessage")->isVisible() && item("kickImportMessage")->property("text").toString().contains("imported 2"), 5000);
+        QVERIFY(!item("kickImportAdd")->property("enabled").toBool());                 // nothing pasted yet
+        shot("kick-add-channels");
+        const int asked = ft->asked.size();
+        // paste into the follow list
+        item("kickImportText")->setProperty("text", QStringLiteral("zulu\nhttps://kick.com/yankee\n"));
+        QTRY_VERIFY(item("kickImportAdd")->property("enabled").toBool());
+        QVERIFY(click("kickImportAdd"));
+        QTRY_VERIFY(item("kickImportMessage")->isVisible() && item("kickImportMessage")->property("text").toString().startsWith("added 2"));
         QVERIFY(kick->isFollowing("zulu") && kick->isFollowing("yankee"));
-        shot("kick-account-imported");
-        QVERIFY(click("kickSignOut"));
-        QTRY_VERIFY(!kick->signedIn());
-        QVERIFY(item("kickSignIn")->isVisible());
-        QVERIFY(kick->isFollowing("zulu"));                                            // the imported list is yours and stays
-        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().isEmpty());
+        QVERIFY(item("kickImportText")->property("text").toString().isEmpty());        // the box is emptied after a good paste
+        shot("kick-add-channels-done");
+        QCOMPARE(ft->asked.size(), asked);                                             // nothing was sent to Kick
+        // into a playlist of channels (the chips show only those)
+        const QString pl = kick->createPlaylist("favourites", "channels");
+        kick->createPlaylist("funny", "clips");
+        QTRY_VERIFY(item((QByteArray("kickImportTarget_") + pl.toUtf8()).constData()) != nullptr);
+        QVERIFY(item((QByteArray("kickImportTarget_") + kick->playlists().last().toMap().value("id").toString().toUtf8()).constData()) == nullptr);   // the clips list is not offered
+        QVERIFY(click((QByteArray("kickImportTarget_") + pl.toUtf8()).constData()));
+        item("kickImportText")->setProperty("text", QStringLiteral("xray zulu"));
+        QVERIFY(click("kickImportAdd"));
+        QTRY_VERIFY(kick->isInPlaylist(pl, "xray") && kick->isInPlaylist(pl, "zulu"));
+        QVERIFY(!kick->isFollowing("xray"));
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(item("kickBrowse")->isVisible());
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        kick->deletePlaylist(pl);
+        for (const auto &p : kick->playlists()) kick->deletePlaylist(p.toMap().value("id").toString());
     }
 
     // Search follows the spelling as you type (after a short pause), closest names first; no need to press enter.

@@ -42,8 +42,7 @@ public:
         req.setTransferTimeout(limits.timeoutMs);
         if (limits.rangeStart >= 0 && limits.rangeLength > 0)
             req.setRawHeader("Range", "bytes=" + QByteArray::number(limits.rangeStart) + "-" + QByteArray::number(limits.rangeStart + limits.rangeLength - 1));
-        for (const auto &h : limits.headers) req.setRawHeader(h.first, h.second);
-        QNetworkReply *rep = limits.method == "POST" ? m_nam.post(req, limits.body) : m_nam.get(req);
+        QNetworkReply *rep = m_nam.get(req);
         m_live.insert(rep);
         QObject::connect(rep, &QNetworkReply::readyRead, rep, [rep, limits] {
             if (rep->bytesAvailable() > limits.maxBody) rep->abort();           // too much: stop
@@ -101,18 +100,6 @@ bool AppNet::streamUrlAllowed(const QString &app, const QUrl &url, QString *why)
     return no(QStringLiteral("%1 is not a video site this app uses").arg(host));
 }
 
-bool AppNet::accountUrlAllowed(const QString &app, const QUrl &url, QString *why)
-{
-    auto no = [&](const QString &m) { if (why) *why = m; return false; };
-    if (app != QLatin1String("kick")) return no(QStringLiteral("this app has no account addresses"));
-    if (!urlAllowed(app, url, why)) return false;
-    if (url.host().toLower() != QLatin1String("kick.com")) return no(QStringLiteral("only kick.com takes sign-in requests"));
-    const QString path = url.path();
-    const bool ok = path.startsWith(QLatin1String("/api/tv/link/authenticate/")) || path == QLatin1String("/api/v1/user")
-                    || path == QLatin1String("/api/v2/channels/followed");
-    return ok ? true : no(QStringLiteral("that is not a sign-in address"));
-}
-
 bool AppNet::urlAllowed(const QString &app, const QUrl &url, QString *why)
 {
     auto no = [&](const QString &m) { if (why) *why = m; return false; };
@@ -158,15 +145,6 @@ void AppNet::get(const QString &app, const QUrl &url, std::function<void(NetRepl
     if (!m_allowed.contains(app)) { NetReply r; r.error = QStringLiteral("this app is not allowed to use the internet (settings > apps)"); done(r); return; }
     if (!m_open.contains(app)) { NetReply r; r.error = QStringLiteral("the app is not open"); done(r); return; }
     if (!urlAllowed(app, url, &why)) { NetReply r; r.error = why; done(r); return; }
-    if (limits.isAccount()) {
-        if (!accountUrlAllowed(app, url, &why)) { NetReply r; r.error = why; done(r); return; }
-        if (limits.method != "GET" && limits.method != "POST") { NetReply r; r.error = QStringLiteral("only GET and POST are allowed"); done(r); return; }
-        static const QSet<QByteArray> okNames{"authorization", "origin", "referer", "content-type", "accept"};
-        for (const auto &h : limits.headers) {
-            if (!okNames.contains(h.first.toLower()) || h.second.contains('\n') || h.second.contains('\r')) { NetReply r; r.error = QStringLiteral("that header is not allowed"); done(r); return; }
-            if (h.first.toLower() == "authorization" && url.host().toLower() != QLatin1String("kick.com")) { NetReply r; r.error = QStringLiteral("the token only goes to kick.com"); done(r); return; }
-        }
-    }
     if (!m_transport) m_transport = std::make_unique<QtTransport>();
     fetch(app, url, 0, m_epoch.value(app), limits, std::move(done));
 }
@@ -179,7 +157,6 @@ void AppNet::fetch(const QString &app, const QUrl &url, int hops, quint64 epoch,
     m_transport->get(url, userAgent(), "application/json, image/*;q=0.8, */*;q=0.5", limits,
         [self, app, url, hops, epoch, limits, done = std::move(done)](NetReply r) mutable {
             if (!self || self->m_epoch.value(app) != epoch) return;                 // the app was closed meanwhile: nothing is delivered
-            if (r.status >= 300 && r.status < 400 && limits.isAccount()) { NetReply e; e.error = QStringLiteral("kick answered with a redirect, which sign-in does not follow"); done(e); return; }
             if (r.status >= 300 && r.status < 400 && r.location.isValid()) {
                 const QUrl next = url.resolved(r.location);
                 QString why;
