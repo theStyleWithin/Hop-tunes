@@ -296,7 +296,7 @@ FocusScope {
                     Label { text: "an app inside hop-tunes · off until you allow it"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                 }
             }
-            Label { text: "it will only contact these sites, and only while this app is open:"; color: Theme.text2; wrapMode: Text.WordWrap; Layout.fillWidth: true
+            Label { text: "it will only contact these sites, and only while this app is open. one exception: a live stream you pick keeps playing in a small window after you leave the app, until you close it (the x), start a song or a video, or quit. nothing else connects once the app is closed:"; color: Theme.text2; wrapMode: Text.WordWrap; Layout.fillWidth: true
                     font { family: Theme.font; pixelSize: Theme.fs(16) } }
             Repeater {
                 model: root.hosts
