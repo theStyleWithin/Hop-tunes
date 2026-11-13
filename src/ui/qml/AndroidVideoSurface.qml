@@ -13,6 +13,7 @@ Item {
     readonly property bool idle: player.source.toString() === ""
     readonly property real position: player.position
     readonly property real duration: player.duration
+    readonly property real videoAspect: output.sourceRect.height > 0 ? output.sourceRect.width / output.sourceRect.height : 0   // wide > 1, tall (shorts style) < 1
     readonly property string hwdecActive: ""
     readonly property string error: player.errorString
     readonly property var subtitleTracks: []

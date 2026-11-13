@@ -17,7 +17,7 @@ FocusScope {
     property bool inBackground: false
     property bool videoFullscreen: false          // the picture fills the whole window (Esc / the back button / its own button leave it)
     // the small pop-out window (picture in picture, Android): allowed while a stream or a download is playing
-    readonly property bool canPopOut: (livePlayer.started && livePlayer.error === "") || (localPlayer.started && localPlayer.error === "")
+    readonly property bool canPopOut: hop.videoEngine !== "none" && ((livePlayer.wanted && livePlayer.error === "") || (localPlayer.wanted && localPlayer.error === ""))
     onCanPopOutChanged: hop.setPictureInPictureAllowed(canPopOut, 16, 9)
     function setBackground(away) {
         if (inBackground === away) return
@@ -102,6 +102,9 @@ FocusScope {
         root.dlMessage = hop.downloads.enqueue({ id: entry.id, kind: entry.kind, title: entry.title, channel: kick.channel.slug || "", thumb: entry.thumb,
                                                  url: entry.url, maxHeight: root.dlHeight, estimate: entry.estimate, seconds: entry.seconds })
     }    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
+    // a phone turned sideways: watching becomes a widescreen "theatre" (the picture as big as it can be, the chat beside it, no bars around)
+    readonly property bool landscape: phone && width > height * 1.25
+    readonly property bool theatre: landscape && ((page === "watch" && watchTab === "live") || page === "play")
     property string lastBlocked: ""
     signal leave()
 
@@ -284,7 +287,7 @@ FocusScope {
     // ------------------------------------------------------------------------------------------------------
     Item {
         id: live
-        anchors { fill: parent; topMargin: 30 }               // (the connection bar is above, right under the app's own title bar)
+        anchors { fill: parent; topMargin: root.theatre ? 0 : 30 }               // (the connection bar is above, right under the app's own title bar)
         visible: !!kick && root.allowed
 
         // ---- browse: an open, wide menu of live streams (nothing plays until you pick one) ----
@@ -547,26 +550,26 @@ FocusScope {
             id: watchFlick
             objectName: "kickWatch"
             anchors.fill: parent; visible: root.page === "watch"; clip: true
-            contentWidth: width; contentHeight: Math.max(height, watch.implicitHeight)
-            interactive: root.phone && contentHeight > height + 1
+            contentWidth: width; contentHeight: root.theatre ? height : Math.max(height, watch.implicitHeight)
+            interactive: root.phone && !root.theatre && contentHeight > height + 1
             boundsBehavior: Flickable.StopAtBounds
         GridLayout {
             id: watch
-            width: watchFlick.width; height: Math.max(watchFlick.height, root.phone ? watch.implicitHeight : 0)
-            columns: root.phone ? 1 : 2; columnSpacing: 22; rowSpacing: 10
+            width: watchFlick.width; height: root.theatre ? watchFlick.height : Math.max(watchFlick.height, root.phone ? watch.implicitHeight : 0)
+            columns: root.phone && !root.theatre ? 1 : 2; columnSpacing: root.theatre ? 12 : 22; rowSpacing: 10
             ColumnLayout {
-                Layout.fillWidth: true; Layout.fillHeight: !root.phone; spacing: 12
+                Layout.fillWidth: true; Layout.fillHeight: !root.phone || root.theatre; spacing: root.theatre ? 0 : 12
                 Item {   // the curtain over the channel's header, tabs and record row (pulled up by the arrow at the top right of the app)
                     id: watchCurtain
                     objectName: "kickWatchCurtain"
                     Layout.fillWidth: true
-                    property real reveal: root.collapsed ? 0 : 1
+                    property real reveal: root.collapsed || root.theatre ? 0 : 1
                     Behavior on reveal { NumberAnimation { duration: Theme.reduceMotion ? 0 : 200; easing.type: Easing.InOutQuad } }
                     Layout.preferredHeight: watchControls.implicitHeight * reveal
                     clip: true
                     opacity: reveal
-                    enabled: !root.collapsed
-                    visible: !root.collapsed || reveal > 0.01
+                    enabled: !root.collapsed && !root.theatre
+                    visible: !(root.collapsed || root.theatre) || reveal > 0.01
                     ColumnLayout {
                     id: watchControls
                     width: parent.width; spacing: 12
@@ -699,8 +702,8 @@ FocusScope {
                 }
                 Item {
                     visible: root.watchTab === "live"
-                    Layout.fillWidth: true; Layout.fillHeight: !root.phone
-                    Layout.preferredHeight: root.phone ? width * 9 / 16 : -1
+                    Layout.fillWidth: true; Layout.fillHeight: !root.phone || root.theatre
+                    Layout.preferredHeight: root.phone && !root.theatre ? width * 9 / 16 : -1
                     KickPlayer {
                         id: livePlayer
                         anchors.fill: parent
@@ -726,8 +729,16 @@ FocusScope {
             }
             ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
                 visible: root.watchTab === "live"
-                Layout.preferredWidth: root.phone ? -1 : 360; Layout.fillWidth: root.phone; Layout.fillHeight: true; spacing: 8
-                Layout.minimumHeight: root.phone ? 280 : 0                            // the chat is never squeezed to a sliver; the page scrolls instead
+                Layout.preferredWidth: root.theatre ? Math.max(260, Math.min(340, Math.round(watch.width * 0.32))) : (root.phone ? -1 : 360)
+                Layout.fillWidth: root.phone && !root.theatre; Layout.fillHeight: true; spacing: 8
+                Layout.minimumHeight: root.phone && !root.theatre ? 280 : 0           // the chat is never squeezed to a sliver; the page scrolls instead
+                RowLayout {   // widescreen: the bars are gone, so the way back and who it is live here
+                    objectName: "kickTheatreHeader"
+                    visible: root.theatre; Layout.fillWidth: true; spacing: 8
+                    PlainButton { objectName: "kickTheatreBack"; text: "‹"; implicitHeight: 36; Layout.preferredWidth: 44; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                    Label { Layout.fillWidth: true; elide: Text.ElideRight; text: kick.channel.name || ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                    Pill { visible: kick.channel.live === true; text: "LIVE"; color: "#fff"; background: Rectangle { color: "#e5484d"; radius: 3 } }
+                }
                 RowLayout {
                     spacing: 8
                     Label { text: "chat"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
@@ -1103,18 +1114,59 @@ FocusScope {
             objectName: "kickLocalPlay"
             anchors.fill: parent; visible: root.page === "play"; spacing: 10
             RowLayout {
+                visible: !root.theatre
                 spacing: 12; Layout.fillWidth: true
                 PlainButton { objectName: "kickLocalBack"; text: root.phone ? "‹" : "‹ downloads"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
                 Label { Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(18) }
                         text: root.dlById[root.playId] ? root.dlById[root.playId].title : "" }
             }
-            KickPlayer {
-                id: localPlayer
-                objectName: "kickLocalPlayer"
+            GridLayout {   // the picture, and beside it (a phone: under it) the same pretend chat as on a live channel
                 Layout.fillWidth: true; Layout.fillHeight: true
-                fullscreen: root.videoFullscreen
-                onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
-                file: root.page === "play" && hop.downloads ? hop.downloads.videoPath(root.playId) : ""
+                columns: root.phone && !root.theatre ? 1 : 2; columnSpacing: root.theatre ? 12 : 22; rowSpacing: 10
+                KickPlayer {
+                    id: localPlayer
+                    objectName: "kickLocalPlayer"
+                    Layout.fillWidth: true; Layout.fillHeight: !root.phone || root.theatre
+                    Layout.preferredHeight: root.phone && !root.theatre ? Math.round(width * 9 / 16) : -1
+                    fullscreen: root.videoFullscreen
+                    onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
+                    file: root.page === "play" && hop.downloads ? hop.downloads.videoPath(root.playId) : ""
+                }
+                ColumnLayout {
+                    objectName: "kickLocalChatColumn"
+                    Layout.preferredWidth: root.theatre ? 300 : (root.phone ? -1 : 360); Layout.fillWidth: root.phone && !root.theatre; Layout.fillHeight: true; spacing: 8
+                    Layout.minimumHeight: root.phone && !root.theatre ? 240 : 0
+                    RowLayout {
+                        objectName: "kickLocalTheatreHeader"
+                        visible: root.theatre; Layout.fillWidth: true; spacing: 8
+                        PlainButton { objectName: "kickLocalTheatreBack"; text: "‹"; implicitHeight: 36; Layout.preferredWidth: 44; Layout.minimumWidth: 0; onClicked: root.goBack() }
+                        Label { Layout.fillWidth: true; elide: Text.ElideRight; text: root.dlById[root.playId] ? root.dlById[root.playId].title : ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(16) } }
+                    }
+                    RowLayout {
+                        spacing: 8
+                        Label { text: "chat"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13); letterSpacing: 1 } }
+                        Chip { objectName: "kickLocalChat_off"; text: "none"; on: kick.chatMode === "off"; onClicked: kick.chatMode = "off" }
+                        Chip { objectName: "kickLocalChat_pretend"; text: "pretend"; on: kick.chatMode === "pretend"; onClicked: kick.chatMode = "pretend" }
+                    }
+                    Label { visible: kick.chatMode === "off"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                            text: "no chat. choose pretend for a made-up one that follows the video as you move around in it (nobody in it is real)." }
+                    LiveChat {
+                        id: localChat
+                        objectName: "kickLocalPretendChat"
+                        visible: kick.chatMode === "pretend"
+                        Layout.fillWidth: true; Layout.fillHeight: true
+                        Layout.minimumWidth: visible ? 120 : 0; Layout.minimumHeight: visible ? 120 : 0   // (a size that changes with it, so the column always lays it out when "pretend" is chosen)
+                        look: hop.videoChatLook
+                        readonly property var dl: root.dlById[root.playId]
+                        seed: "kick|download|" + root.playId
+                        info: ({ meta: { title: dl ? dl.title : "", year: "", album: "" },
+                                 cast: dl && dl.channel ? [{ name: dl.channel, role: "streamer" }] : [] })
+                        position: localPlayer.surface ? localPlayer.surface.position : 0            // seeking in the video recalculates the chat
+                        duration: localPlayer.surface ? localPlayer.surface.duration : 0
+                    }
+                    Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
+                    Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
+                }
             }
         }
 
@@ -1153,7 +1205,7 @@ FocusScope {
     // red: Kick's servers are not answering. Nothing live can be watched or loaded, but what is already on this device still works.
     Rectangle {
         objectName: "kickDown"
-        anchors { fill: parent; topMargin: 30 }
+        anchors { fill: parent; topMargin: root.theatre ? 0 : 30 }
         z: 5; color: Theme.bg
         visible: !!kick && root.allowed && kick.health === "down" && (root.page === "browse" || root.page === "watch")
         ColumnLayout {
@@ -1169,7 +1221,7 @@ FocusScope {
     RowLayout {
         objectName: "kickStatusBar"
         anchors { left: parent.left; right: parent.right; top: parent.top } height: 26
-        visible: !!kick && root.allowed
+        visible: !!kick && root.allowed && !root.theatre
         spacing: 10
         Rectangle { objectName: "kickHealthDot"; width: 8; height: 8; radius: 4; color: !kick ? Theme.dim : kick.health === "good" ? "#53fc18" : kick.health === "slow" ? "#f5c518" : kick.health === "down" ? "#ff4d4d" : Theme.dim }
         Label { objectName: "kickContacted"; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }

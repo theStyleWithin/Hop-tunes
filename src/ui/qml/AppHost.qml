@@ -10,6 +10,7 @@ FocusScope {
     objectName: "appHost"
     property string appId: ""
     readonly property bool active: appId !== ""
+    readonly property bool theatre: active && !!appLoader.item && appLoader.item.theatre === true     // the app wants the whole window (a phone turned sideways, watching)
     readonly property var names: ({ "kick": "kick" })
     visible: active
     signal leave()
@@ -33,6 +34,7 @@ FocusScope {
 
     RowLayout {
         id: bar
+        visible: !root.theatre
         anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: Theme.pad; rightMargin: Theme.pad; topMargin: 18 }
         spacing: 14
         AbstractButton {
@@ -67,7 +69,7 @@ FocusScope {
     // ---- the apps ----
     Loader {
         id: appLoader
-        anchors { left: parent.left; right: parent.right; top: bar.bottom; bottom: parent.bottom; margins: Theme.pad; topMargin: 18 }
+        anchors { left: parent.left; right: parent.right; top: root.theatre ? parent.top : bar.bottom; bottom: parent.bottom; margins: root.theatre ? 0 : Theme.pad; topMargin: root.theatre ? 0 : 18 }
         active: root.active
         sourceComponent: root.appId === "kick" ? kickApp : null
     }
