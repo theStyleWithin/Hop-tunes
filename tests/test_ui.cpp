@@ -2328,8 +2328,23 @@ private slots:
         QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("chatMode").toString() == QLatin1String("pretend"));
         QVERIFY(click("kickChat_off"));
         QTRY_VERIFY(!item("kickPretendChat")->isVisible());
+        // a live channel: no seek meter (it is only for videos kept on this device), the "live" tag instead
+        QVERIFY(!item("kickPlayer")->property("showSeekMeter").toBool());
+        QVERIFY(item("kickPlayer")->property("showLiveTag").toBool());
+        // the follow button says what it did: "☆ follow" -> "★ following" (filled) -> back, every time
+        QCOMPARE(item("kickFollowButton")->property("text").toString(), QStringLiteral("\u2606 follow"));
+        QVERIFY(!item("kickFollowButton")->property("primary").toBool());
         QVERIFY(click("kickFollowButton"));
         QVERIFY(kick->isFollowing("alpha"));
+        QTRY_COMPARE(item("kickFollowButton")->property("text").toString(), QStringLiteral("\u2605 following"));
+        QVERIFY(item("kickFollowButton")->property("primary").toBool());
+        QVERIFY(click("kickFollowButton"));
+        QVERIFY(!kick->isFollowing("alpha"));
+        QTRY_COMPARE(item("kickFollowButton")->property("text").toString(), QStringLiteral("\u2606 follow"));
+        QVERIFY(!item("kickFollowButton")->property("primary").toBool());
+        QVERIFY(click("kickFollowButton"));
+        QVERIFY(kick->isFollowing("alpha"));
+        QTRY_COMPARE(item("kickFollowButton")->property("text").toString(), QStringLiteral("\u2605 following"));
         QCOMPARE(ft->asked.size(), sentBefore);                                    // following asks nobody
         QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("following").toArray().contains("alpha"));
         QTest::keyClick(w, Qt::Key_Escape);                                        // Esc steps back to the streams first
@@ -2434,9 +2449,8 @@ private slots:
         QVERIFY(click("subTab_music"));
     }
 
-    // The seek meter along the top of a video (Kick): drag or tap to rewind and skip ahead; on a live stream it spans what Kick keeps and a
-    // "live" pill jumps back to the front; a video that cannot be moved around in says so.
-    void seekMeterMovesAVideoAndKnowsLive()
+    // The seek meter along the top of a video kept on this device (Kick): drag or tap to rewind and skip ahead. A live stream has none.
+    void seekMeterMovesADownloadedVideo()
     {
         QQmlComponent comp(m_engine.get(), QUrl(QStringLiteral("qrc:/qml/SeekMeter.qml")));
         QVERIFY2(comp.status() == QQmlComponent::Ready, qPrintable(comp.errorString()));
@@ -2445,41 +2459,23 @@ private slots:
         QSignalSpy sink(obj.get(), SIGNAL(seekRequested(double)));
         QVERIFY(sink.isValid());
         auto last = [&] { return sink.last().at(0).toDouble(); };
-        auto call = [&](const char *fn, QVariant a = {}) {
-            QVariant r;
-            if (a.isValid()) QMetaObject::invokeMethod(obj.get(), fn, Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, a));
-            else QMetaObject::invokeMethod(obj.get(), fn, Q_RETURN_ARG(QVariant, r));
-            return r;
-        };
-        // a downloaded video: all of it, "0:30 / 2:00:00", skips are clamped to the ends
-        obj->setProperty("duration", 7200000.0); obj->setProperty("position", 30000.0); obj->setProperty("live", false);
+        auto skip = [&](double by) { QVariant r; QMetaObject::invokeMethod(obj.get(), "skip", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, by)); };
+        // all of the video: "0:30 / 2:00:00", skips are clamped to the ends
+        obj->setProperty("duration", 7200000.0); obj->setProperty("position", 30000.0);
         QVERIFY(obj->property("seekable").toBool());
         QCOMPARE(obj->property("text").toString(), QString("0:30 / 2:00:00"));
-        call("skip", 10000);  QCOMPARE(last(), 40000.0);
-        call("skip", -10000); QCOMPARE(last(), 20000.0);
-        call("skip", -999999); QCOMPARE(last(), 0.0);
+        skip(10000);   QCOMPARE(last(), 40000.0);
+        skip(-10000);  QCOMPARE(last(), 20000.0);
+        skip(-999999); QCOMPARE(last(), 0.0);
         obj->setProperty("position", 7195000.0);
-        call("skip", 10000);  QCOMPARE(last(), 7200000.0);
-        // a live stream: the stretch Kick keeps; at the front it says "live", behind it says how far, and the pill goes back to the front
-        obj->setProperty("live", true); obj->setProperty("duration", 28000.0); obj->setProperty("position", 27000.0);
-        QCOMPARE(obj->property("text").toString(), QString("live"));
-        obj->setProperty("position", 14000.0);
-        QCOMPARE(obj->property("text").toString(), QString("-0:14 behind live"));
+        skip(10000);   QCOMPARE(last(), 7200000.0);
+        // no length from the engine: the buttons do nothing and there is no text
         const int n = sink.size();
-        call("goLive");
-        QCOMPARE(sink.size(), n + 1);
-        QCOMPARE(last(), 26500.0);
-        obj->setProperty("position", 27000.0);
-        call("goLive");                                                              // already there: nothing is sent
-        QCOMPARE(sink.size(), n + 1);
-        // not movable (the engine gives no length): the buttons do nothing and it says why
         obj->setProperty("duration", 0.0);
         QVERIFY(!obj->property("seekable").toBool());
-        QVERIFY(obj->property("text").toString().contains("cannot be rewound"));
-        call("skip", 10000); call("goLive");
-        QCOMPARE(sink.size(), n + 1);
-        obj->setProperty("live", false);
         QCOMPARE(obj->property("text").toString(), QString());
+        skip(10000);
+        QCOMPARE(sink.size(), n);
     }
 
     // Kick on a phone held upright: one column of cards that fits the screen, touch-sized, and on the watch page the picture on top
@@ -3236,6 +3232,9 @@ private slots:
         QVERIFY(click("kickDlPlay_clip_abc"));
         QTRY_VERIFY(item("kickLocalPlay") && item("kickLocalPlay")->isVisible());
         QTRY_VERIFY(item("kickLocalPlayer") != nullptr);
+        // a video kept on this device gets the seek meter (and no "live" tag)
+        QVERIFY(item("kickLocalPlayer")->property("showSeekMeter").toBool());
+        QVERIFY(!item("kickLocalPlayer")->property("showLiveTag").toBool());
         // the pretend chat is there for a downloaded stream too: it shows in "pretend" and is gone in "none"
         {
             const QString was = kick->chatMode();
@@ -3243,10 +3242,13 @@ private slots:
             QTRY_VERIFY(item("kickLocalPretendChat") && item("kickLocalPretendChat")->isVisible());
             QVERIFY(item("kickLocalChat_pretend") && item("kickLocalChat_off"));
             window()->grabWindow();                                                    // draw a frame now: that is when the layouts are laid out (a slow headless run may not have drawn one yet)
-            QTRY_VERIFY2(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
-                     qPrintable(QStringLiteral("chat %1x%2, column %3x%4, play page %5x%6").arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height())
-                                .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())));
-            QVERIFY(item("kickLocalPretendChat")->mapToItem(item("kickLocalPlay"), QPointF(0, 0)).x() > item("kickLocalPlayer")->x());   // beside the picture
+            // (a long wait: on a slow runner the real video engine can keep the interface busy for a while while it opens the fixture file)
+            QTRY_VERIFY2_WITH_TIMEOUT(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
+                     qPrintable(QStringLiteral("chat %1x%2 visible=%3, column %4x%5, play page %6x%7, player started=%8 error=%9")
+                                .arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height()).arg(item("kickLocalPretendChat")->isVisible())
+                                .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())
+                                .arg(item("kickLocalPlayer")->property("started").toBool()).arg(item("kickLocalPlayer")->property("error").toString())), 30000);
+            QTRY_VERIFY(item("kickLocalPretendChat")->mapToItem(item("kickLocalPlay"), QPointF(0, 0)).x() > item("kickLocalPlayer")->x());   // beside the picture
             shot("kick-local-chat");
             QVERIFY(click("kickLocalChat_off"));
             QTRY_VERIFY(!item("kickLocalPretendChat")->isVisible());

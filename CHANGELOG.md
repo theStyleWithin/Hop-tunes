@@ -4,6 +4,12 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Changed
+- **The seek meter is only for videos kept on your device.** A live stream no longer shows it (it is just watched, and now has the small red **live** tag again); a downloaded stream, a recording or a clip keeps the meter along the top.
+
+### Fixed
+- **The follow button did not show that you followed.** It kept saying "☆ follow" after you pressed it. It now flips to a filled "★ following" at once and back again, and the follow/unfollow entry in a card's menu follows suit.
+
 ## [1.10.0] - 2026-11-13: Kick grows up
 
 ### Added
