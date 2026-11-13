@@ -3415,7 +3415,9 @@ private slots:
             QVERIFY(item("kickLocalChat_pretend") && item("kickLocalChat_off"));
             window()->grabWindow();                                                    // draw a frame now: that is when the layouts are laid out (a slow headless run may not have drawn one yet)
             // (a long wait: on a slow runner the real video engine can keep the interface busy for a while while it opens the fixture file)
-            QTRY_VERIFY2_WITH_TIMEOUT(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
+            // (every retry draws a frame first: the layout only runs when one is drawn, and a loaded runner may not draw on its own)
+            auto laidOut = [this] { window()->grabWindow(); return item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100; };
+            QTRY_VERIFY2_WITH_TIMEOUT(laidOut(),
                      qPrintable(QStringLiteral("chat %1x%2 visible=%3, column %4x%5, play page %6x%7, player started=%8 error=%9")
                                 .arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height()).arg(item("kickLocalPretendChat")->isVisible())
                                 .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())
