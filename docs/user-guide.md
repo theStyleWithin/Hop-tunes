@@ -158,6 +158,18 @@ Everything here is private to the profile and works offline. Hop-tunes only read
 Apps are small programs that are part of Hop-tunes and open inside its window. They are **off** until you turn them on: go to
 **settings → apps settings** and choose **show the apps tab**. A fresh Hop-tunes shows every other tab and stays exactly as quiet as before.
 
+### neko cafe
+
+A small game: you are a neko maid running a cafe. A customer walks in, sits and orders; walk up and press **A** to take the order, press **A** at the counter to
+hand the slip to the cook, stand at the counter to pick up the coffee when he holds it out, then press **A** beside the right customer. The faster you
+serve, the happier they are: a happy customer pays the bill and tips, an upset one pays nothing (and a few are grumpy whatever you do). Serving someone
+else's coffee sends that customer away upset. The day lasts five minutes, then the results show your orders, bills, tips, profit, happiness and a grade
+from A to D, and your profit goes on the best list.
+
+Keys: arrows or **wasd** walk; **space**, **enter** or **z** is A; **esc** pauses, and **esc** again leaves. A game controller works (d-pad and A), and on a
+phone there is a touch pad under the picture. neko cafe works offline, sends nothing anywhere and has no music or sound of its own: your music keeps
+playing (space is the game's A button while it is open, not play/pause), and so does a stream in its small window.
+
 ### Kick
 
 Kick is the first app. It browses the live streams on kick.com in a wide menu and plays the one you pick, inside Hop-tunes. Nothing plays
@@ -196,14 +208,15 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
-### Signing in to Kick (optional)
+### No Kick account, no sign-in
 
-Nothing needs an account. If you want to, **sign in** (streams page) uses Kick's official sign-in with your own free Kick app (a client ID and secret you create on kick.com;
-nothing secret ships with Hop-tunes). For now it only shows who is signed in. Step by step, and exactly what is sent and kept: [kick-sign-in.md](kick-sign-in.md).
+Kick in Hop-tunes is a local viewing experience. You never sign in to Kick: your follows, blocks and playlists belong to your Hop-tunes profile (built into the player,
+kept on this device) and never touch a Kick account. Hop-tunes cannot follow or post for you on Kick. The chat beside a stream is **none** or **pretend**, a made-up chat you
+can post in (nobody in it is real); Kick's own chat cannot be read without signing in, so it is not offered.
 
 ### Adding many channels at once
 
-There is no sign-in. To bring your favourite channels in, press **add channels** on the streams page, paste channel names or kick.com links (one per line, or separated by
+To bring your favourite channels in, press **add channels** on the streams page, paste channel names or kick.com links (one per line, or separated by
 spaces or commas) and press **add them**. They go into your follow list on this device, or into one of your playlists of channels (pick it under **add to**). A streamer you
 blocked is skipped, channels already in the list are not doubled, and words that are not channel names are counted and left out. This is only text you paste: nothing is sent
 to Kick, and nothing is followed or changed on Kick. Tip: open the channels you follow on kick.com, copy the page and paste it here.

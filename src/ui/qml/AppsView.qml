@@ -13,7 +13,8 @@ Item {
     // id, the name under the tile, a line for the tooltip, an icon (a url, or "" for the plain glass)
     // net: the app uses the internet (it says so on its tile, and is left out of builds without networked apps)
     readonly property var allApps: [
-        { id: "kick", name: "kick", blurb: "browse and watch live streams from kick.com. uses the internet only while it is open, and only after you allow it", icon: "qrc:/images/app-kick.png", net: true }
+        { id: "kick", name: "kick", blurb: "browse and watch live streams from kick.com. uses the internet only while it is open, and only after you allow it", icon: "qrc:/images/app-kick.png", net: true },
+        { id: "nekocafe", name: "neko cafe", blurb: "a little game: run a cafe as a neko maid. take orders, fetch the coffee from the cook and serve the right customer, fast. works offline, nothing is sent anywhere", icon: "qrc:/images/app-neko-cafe.png", net: false }
     ]
     readonly property var apps: allApps.filter(function (a) { return !a.net || hop.netAppsBuilt })
 

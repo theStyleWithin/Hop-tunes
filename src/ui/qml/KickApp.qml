@@ -11,7 +11,7 @@ FocusScope {
     objectName: "kickApp"
     readonly property var kick: hop.kick
     property bool allowed: hop.appNetAllowed("kick")
-    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account (add channels) | signin | categories
+    property string page: "browse"               // browse | watch | downloads | play | playlists | playlist | account (add channels) | categories
     // Android: switching to another app pauses the phone's video player and the stream's address (it carries a time-limited token) goes stale,
     // which showed "Demuxing failed" on coming back. So the stream is let go while the app is away and asked for again (with a fresh address) on return.
     property bool inBackground: false
@@ -158,8 +158,7 @@ FocusScope {
 
     readonly property var hosts: [["kick.com", "finds the channel and its live stream"], ["web.kick.com", "the list of live streams"],
                                   ["images.kick.com", "the stream pictures"], ["stream.kick.com", "the developer\u2019s live picture"], ["files.kick.com", "profile pictures and emotes"], ["clips.kick.com", "clips, only when you download one"],
-                                  ["live-video.net", "the video itself"],
-                                  ["id.kick.com", "only if you sign in with your own Kick app: Kick\u2019s sign-in page"], ["api.kick.com", "only if you sign in: who is signed in"]]
+                                  ["live-video.net", "the video itself"]]
 
     Connections { target: hop; function onAppNetChanged() { root.allowed = hop.appNetAllowed("kick") } }
     Component.onCompleted: { if (kick && allowed) { kick.open(); takeMeBack() } }
@@ -170,7 +169,7 @@ FocusScope {
     function goBack() {
         if (videoFullscreen) { videoFullscreen = false; return true }
         if (pending !== null) { pending = null; return true }
-        if (page === "account" || page === "signin") { page = "browse"; return true }
+        if (page === "account") { page = "browse"; return true }
         if (page === "categories") { kick.searchCategories(""); page = "browse"; return true }
         if (page === "play") { page = "downloads"; playId = ""; return true }
         if (page === "playlist") { page = "playlists"; playlistId = ""; return true }
@@ -437,7 +436,6 @@ FocusScope {
                 }
                 PlainButton { objectName: "kickRefresh"; text: "refresh"; implicitHeight: 36; onClicked: { if (kick.query === "") kick.refresh(); else kick.search(kick.query); kick.refreshFollowing() } }
                 PlainButton { objectName: "kickAccountButton"; implicitHeight: 36; text: "add channels"; onClicked: root.page = "account" }
-                PlainButton { objectName: "kickSignInButton"; implicitHeight: 36; text: kick.signedIn ? "account" : "sign in"; onClicked: root.page = "signin" }
                 PlainButton { objectName: "kickPlaylistsButton"; text: "playlists" + (kick.playlists.length > 0 ? " (" + kick.playlists.length + ")" : ""); implicitHeight: 36
                               onClicked: { root.playlistMessage = ""; root.page = "playlists" } }
                 PlainButton { objectName: "kickDownloadsButton"; visible: !!hop.downloads; implicitHeight: 36
@@ -782,7 +780,7 @@ FocusScope {
                     }
                 }
             }
-            ColumnLayout {   // the chat: none (the start), or the pretend one; Kick's own chat is for people who sign in (later step)
+            ColumnLayout {   // the chat: none (the start), or the pretend one (Kick's own chat cannot be read without a sign-in, and there is none)
                 visible: root.watchTab === "live"
                 Layout.preferredWidth: root.theatre ? Math.max(260, Math.min(340, Math.round(watch.width * 0.32))) : (root.phone ? -1 : 360)
                 Layout.fillWidth: root.phone && !root.theatre; Layout.fillHeight: true; spacing: 8
@@ -939,78 +937,6 @@ FocusScope {
                     font { family: Theme.font; pixelSize: Theme.fs(14) } }
             Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
                     text: "a streamer you blocked is not added. channels already in the list are not doubled." }
-        }
-
-        // ---- Kick's official sign-in (optional): your own Kick app; it only shows who is signed in ----
-        ColumnLayout {
-            id: signInPage
-            objectName: "kickSignInPage"
-            anchors.fill: parent; visible: root.page === "signin"; spacing: 10
-            RowLayout {
-                spacing: 12; Layout.fillWidth: true
-                PlainButton { objectName: "kickSignInBack"; text: root.phone ? "\u2039" : "\u2039 streams"; implicitHeight: 36; Layout.preferredWidth: root.phone ? 44 : -1; Layout.minimumWidth: 0; onClicked: root.goBack() }
-                Label { text: "kick account"; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(24); weight: Font.Light } }
-                Item { Layout.fillWidth: true }
-            }
-            Flickable {
-                Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                contentWidth: width; contentHeight: signInColumn.implicitHeight
-                boundsBehavior: Flickable.StopAtBounds
-                ColumnLayout {
-                    id: signInColumn
-                    width: parent.width; spacing: 10
-                    Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(14) }
-                            text: "signing in is optional: you never need it to watch, search, download or record. it uses kick\u2019s official sign-in with your own free kick app, so nothing secret is built into hop-tunes. for now it only shows who is signed in. it cannot import your follows (kick offers no follow list): use add channels for that." }
-                    // signed in
-                    ColumnLayout {
-                        visible: kick.signedIn; Layout.fillWidth: true; spacing: 8
-                        Label { objectName: "kickAccountName"; text: "signed in as " + kick.accountName; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(18) } }
-                        PlainButton { objectName: "kickSignOut"; text: "sign out"; danger: true; implicitHeight: 40; onClicked: kick.signOut() }
-                    }
-                    // your Kick app
-                    ColumnLayout {
-                        visible: !kick.signedIn; Layout.fillWidth: true; spacing: 8
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) }
-                                text: "1. on kick.com turn on 2FA, then Account settings > Developer > create an app. 2. as its redirect URL give exactly the address below. 3. copy the app\u2019s client ID and client secret here. the secret stays on this device, in your profile." }
-                        Label { text: "redirect URL to register"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 1 } }
-                        RowLayout {
-                            Layout.fillWidth: true; spacing: 8
-                            TextEdit { objectName: "kickRedirectUrl"; Layout.fillWidth: true; text: kick.redirectUrl; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere
-                                       color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(14) } }
-                            PlainButton { objectName: "kickCopyRedirect"; text: "copy"; implicitHeight: 34; onClicked: hop.copyText(kick.redirectUrl) }
-                        }
-                        Label { text: "client ID"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 1 } }
-                        TextField { id: clientIdField; objectName: "kickClientId"; Layout.fillWidth: true; text: kick.appClientId; selectByMouse: true
-                                    color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) }
-                                    background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } } }
-                        Label { text: "client secret"; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(12); letterSpacing: 1 } }
-                        TextField { id: clientSecretField; objectName: "kickClientSecret"; Layout.fillWidth: true; echoMode: TextInput.Password; selectByMouse: true
-                                    placeholderText: kick.appConfigured ? "saved (type to replace)" : ""
-                                    color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) }
-                                    background: Rectangle { color: Theme.panel; border { width: 1; color: Theme.line } } }
-                        RowLayout {
-                            spacing: 10
-                            PlainButton { objectName: "kickSaveApp"; text: "save"; implicitHeight: 40; enabled: clientIdField.text.trim() !== "" && (clientSecretField.text.trim() !== "" || kick.appConfigured)
-                                          onClicked: { kick.setAppCredentials(clientIdField.text, clientSecretField.text); clientSecretField.clear() } }
-                            PlainButton { objectName: "kickSignIn"; text: "sign in with Kick"; primary: true; implicitHeight: 40; enabled: kick.appConfigured && kick.signInState !== "waiting" && kick.signInState !== "working"
-                                          onClicked: { kick.startSignIn(); if (kick.signInUrl !== "") Qt.openUrlExternally(kick.signInUrl) } }
-                        }
-                        ColumnLayout {
-                            visible: kick.signInState === "waiting"; Layout.fillWidth: true; spacing: 6
-                            Label { text: "if your browser did not open, open this address (it is kick.com\u2019s own sign-in page):"; color: Theme.text2; Layout.fillWidth: true; wrapMode: Text.WordWrap; font { family: Theme.font; pixelSize: Theme.fs(13) } }
-                            TextEdit { objectName: "kickSignInUrl"; text: kick.signInUrl; readOnly: true; selectByMouse: true; wrapMode: TextEdit.WrapAnywhere; Layout.fillWidth: true
-                                       color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(13) } }
-                            RowLayout {
-                                spacing: 10
-                                PlainButton { objectName: "kickOpenSignIn"; text: "open it"; implicitHeight: 38; onClicked: Qt.openUrlExternally(kick.signInUrl) }
-                                PlainButton { objectName: "kickCancelSignIn"; text: "cancel"; implicitHeight: 38; onClicked: kick.cancelSignIn() }
-                            }
-                        }
-                        Label { objectName: "kickSignInMessage"; visible: kick.signInMessage !== ""; Layout.fillWidth: true; wrapMode: Text.WordWrap
-                                color: kick.signInState === "error" ? Theme.danger : Theme.muted; text: kick.signInMessage; font { family: Theme.font; pixelSize: Theme.fs(14) } }
-                    }
-                }
-            }
         }
 
         // ---- playlists: favourite channels (and clips / past streams), kept on this device only ----

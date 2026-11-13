@@ -17,6 +17,10 @@
     <file>qml/StreamDock.qml</file>
     <file alias="images/app-tile.png">images/app-tile.png</file>
     <file alias="images/app-kick.png">images/app-kick.png</file>
+    <file alias="images/app-neko-cafe.png">images/app-neko-cafe.png</file>
+    <file alias="images/neko-cafe-bg.png">images/neko-cafe-bg.png</file>
+    <file alias="images/neko-cafe-bubble.png">images/neko-cafe-bubble.png</file>
+    <file alias="images/neko-cafe-sprites.png">images/neko-cafe-sprites.png</file>
     <file>qml/NowPlayingView.qml</file>
     <file>qml/QuickplayView.qml</file>
     <file>qml/SettingsView.qml</file>
@@ -42,6 +46,7 @@
     <file>qml/AlbumFall.qml</file>
     <file>qml/CoverPinball.qml</file>
     <file>qml/MusyNote.qml</file>
+    <file>qml/NekoCafeApp.qml</file>
     <file>qml/FolderSlots.qml</file>
     <file>qml/MergeArtistDialog.qml</file>
     <file>qml/TrackMenu.qml</file>

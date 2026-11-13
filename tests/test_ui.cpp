@@ -2246,7 +2246,8 @@ private slots:
         item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));   // (the pill row scrolls sideways: the pill itself can be off the edge)
         QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
         shot("phone-apps-tab");
-        if (!m_app->netAppsBuilt()) QVERIFY(item("appsEmpty")->isVisible());
+        QVERIFY(!item("appsEmpty")->isVisible());                              // neko cafe is in every build; kick only in networked ones
+        QVERIFY(item("appTile_nekocafe") && item("appTile_nekocafe")->isVisible());
         m_app->setAppsEnabled(false);
         QTRY_VERIFY(item("pillTab_apps") == nullptr);
         w->setProperty("forceMobile", false);
@@ -2254,6 +2255,86 @@ private slots:
         QTRY_COMPARE(w->size(), before);
         QTRY_VERIFY(item("subTab_music")->isVisible());
         QVERIFY(click("subTab_music"));
+    }
+
+
+    // neko cafe: a game inside the apps tab. It opens from its tile, starts on A, the maid walks, a whole day ends in the results
+    // screen, and Esc pauses first and leaves second.
+    void nekoCafeOpensPlaysADayAndLeaves()
+    {
+        auto *w = window();
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->playSongs(0);                                                   // music is playing, as it usually is
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        m_app->setAppsEnabled(true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
+        QVERIFY(item("appTile_nekocafe") && item("appTile_nekocafe")->isVisible());
+        QVERIFY(click("appTile_nekocafe"));
+        QObject *host = item("appHost");
+        QTRY_VERIFY(host->property("active").toBool());
+        QTRY_VERIFY(item("nekoCafeApp") && item("nekoCafeApp")->isVisible());
+        QTRY_VERIFY(item("nekoCafeApp")->hasActiveFocus());                     // it takes the keys
+        NekoCafeGame *neko = m_app->neko();
+        QVERIFY(!neko->started());
+        QVERIFY(neko->isOpen());                                               // Space is the game's A now, not play/pause
+        m_app->gamepad()->setDevice(QStringLiteral("Test Pad"));                // a controller shows up while music plays: the game is not yanked away
+        QTest::qWait(100);
+        QVERIFY(host->property("active").toBool());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        m_app->gamepad()->setDevice(QString());
+        QVERIFY(item("nekoTitle")->isVisible());
+        shot("neko-title");
+        QTest::keyClick(w, Qt::Key_Return);                                    // A starts the day
+        QVERIFY(neko->started());
+        QVERIFY(!item("nekoTitle")->isVisible());
+        const int x0 = neko->maidX();
+        QTest::keyPress(w, Qt::Key_Right);                                     // the maid walks while the key is held
+        neko->advance(500);
+        QTest::keyRelease(w, Qt::Key_Right);
+        QVERIFY2(neko->maidX() > x0, "she walked right");
+        const int x1 = neko->maidX();
+        neko->advance(500);
+        QCOMPARE(neko->maidX(), x1);                                           // let go: she stops
+        QQuickItem *maid = item("nekoMaid");
+        QVERIFY(maid && maid->isVisible());
+        QVERIFY(maid->x() > 0 && maid->x() < item("nekoScreen")->width());
+        for (int i = 0; i < 70; ++i) neko->advance(1000);                      // a minute in: customers have come and sat down
+        QGuiApplication::processEvents();
+        bool anyone = false;
+        for (int i = 0; i < NekoCafe::kMaxCustomers; ++i) anyone = anyone || neko->rules().customer(i).state != NekoCafe::None;
+        QVERIFY2(anyone, "customers came in");
+        shot("neko-cafe");
+        // Esc pauses, Esc again leaves
+        QTest::keyClick(w, Qt::Key_Escape);
+        QVERIFY(host->property("active").toBool());
+        QVERIFY(neko->paused());
+        QTRY_VERIFY(item("nekoPaused")->isVisible());
+        shot("neko-paused");
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!host->property("active").toBool());
+        QVERIFY2(!neko->started(), "leaving ends the day and stops the clock");
+        QVERIFY(!neko->isOpen());
+        // play a whole day (nobody serves anyone: the results show an empty day) and read the results
+        QVERIFY(click("appTile_nekocafe"));
+        QTRY_VERIFY(item("nekoCafeApp") && item("nekoCafeApp")->isVisible());
+        QTRY_VERIFY(item("nekoCafeApp")->hasActiveFocus());
+        QTest::keyClick(w, Qt::Key_Space);
+        QVERIFY(neko->started());
+        for (int i = 0; i < 400 && neko->phase() == 0; ++i) neko->advance(1000);
+        QCOMPARE(neko->phase(), 1);
+        QTRY_VERIFY(item("nekoResults")->isVisible());
+        QCOMPARE(neko->grade(), QStringLiteral("D"));
+        neko->advance(3000);
+        shot("neko-results");
+        QTest::keyClick(w, Qt::Key_Return);                                    // the next day
+        QCOMPARE(neko->phase(), 0);
+        QCOMPARE(neko->day(), 2);
+        QTest::keyClick(w, Qt::Key_Escape);                                    // pause, then leave
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!host->property("active").toBool());
+        m_app->setAppsEnabled(false);
     }
 
 #ifdef HOPTUNES_NET_APPS
@@ -2318,11 +2399,11 @@ private slots:
         QTRY_VERIFY(item("kickChannelState")->property("text").toString().contains("offline"));
         QVERIFY(item("kickSurface") == nullptr);
         const int sentBefore = ft->asked.size();
-        // chat: none at the start; pretend is a choice; Kick's own chat is not offered without signing in
+        // chat: none at the start; pretend is a choice; Kick's own chat is not offered (there is no sign-in)
         QCOMPARE(kick->chatMode(), QStringLiteral("off"));
         QVERIFY(item("kickPretendChat") != nullptr && !item("kickPretendChat")->isVisible());
         QVERIFY(item("kickChat_pretend") != nullptr && item("kickChat_kick") == nullptr);
-        kick->setChatMode("kick");                                                   // refused without a sign-in
+        kick->setChatMode("kick");                                                   // refused: only none and pretend exist
         QCOMPARE(kick->chatMode(), QStringLiteral("off"));
         QVERIFY(click("kickChat_pretend"));
         QTRY_VERIFY(item("kickPretendChat")->isVisible());
@@ -3085,7 +3166,7 @@ private slots:
         QVERIFY(click("subTab_apps"));
         QVERIFY(click("appTile_kick"));
         QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
-        QVERIFY(!item("kickSignInPage")->isVisible() && !item("kickSignIn")->isVisible());   // the TV-code sign-in is gone; the official one lives on its own page
+        QVERIFY(!item("kickSignInPage") && !item("kickSignInButton") && !item("kickSignIn"));   // there is no sign-in: Kick is a local viewing experience
         QVERIFY(item("kickAccountButton") && item("kickAccountButton")->isVisible());
         QCOMPARE(item("kickAccountButton")->property("text").toString(), QString("add channels"));
         QVERIFY(click("kickAccountButton"));
@@ -3118,71 +3199,6 @@ private slots:
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
         kick->deletePlaylist(pl);
         for (const auto &p : kick->playlists()) kick->deletePlaylist(p.toMap().value("id").toString());
-    }
-
-    // Kick's official sign-in page: your own Kick app (client ID and secret), the redirect address to register, then sign in / sign out.
-    void theKickAccountPageSignsInWithYourOwnKickApp()
-    {
-        auto *w = window();
-        auto fake = std::make_unique<FakeKick>();
-        FakeKick *ft = fake.get();
-        m_app->gateway()->setTransport(std::move(fake));
-        KickClient *kick = m_app->kickClient();
-        kick->auth()->setPort(0);
-        struct Restore { App *app; KickClient *k; ~Restore() { k->cancelSignIn(); k->signOut(); k->setAppCredentials(QString(), QString()); k->auth()->clearAll(); k->auth()->setPort(KickAuth::kDefaultPort); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), kick};
-        w->setProperty("view", QStringLiteral("collection"));
-        m_app->setAppsEnabled(true);
-        m_app->setAppNetAllowed("kick", true);
-        QTRY_VERIFY(item("subTab_apps")->isVisible());
-        QVERIFY(click("subTab_apps"));
-        QVERIFY(click("appTile_kick"));
-        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
-        for (const QUrl &u : ft->asked) QVERIFY2(u.host() != "id.kick.com" && u.host() != "api.kick.com", qPrintable(u.toString()));   // not signed in: the sign-in sites are never contacted
-        QVERIFY(item("kickSignInButton") && item("kickSignInButton")->isVisible());
-        QVERIFY(click("kickSignInButton"));
-        QTRY_VERIFY(item("kickSignInPage") && item("kickSignInPage")->isVisible());
-        QVERIFY(item("kickRedirectUrl")->property("text").toString().endsWith("/callback"));
-        QVERIFY(!item("kickSignIn")->property("enabled").toBool());                    // needs the person's own Kick app first
-        QVERIFY(!item("kickSaveApp")->property("enabled").toBool());
-        shot("kick-signin-setup");
-        item("kickClientId")->setProperty("text", QStringLiteral("my-client-id"));
-        item("kickClientSecret")->setProperty("text", QStringLiteral("my-secret"));
-        QTRY_VERIFY(item("kickSaveApp")->property("enabled").toBool());
-        QVERIFY(click("kickSaveApp"));
-        QTRY_VERIFY(kick->appConfigured());
-        QVERIFY(item("kickClientSecret")->property("text").toString().isEmpty());      // the secret is not left on the screen
-        QTRY_VERIFY(item("kickSignIn")->property("enabled").toBool());
-        // start it (without opening a browser here) and play the browser with a plain socket
-        kick->startSignIn();
-        QTRY_VERIFY(item("kickSignInUrl") && item("kickSignInUrl")->isVisible());
-        QVERIFY(item("kickSignInUrl")->property("text").toString().startsWith("https://id.kick.com/oauth/authorize?"));
-        shot("kick-signin-waiting");
-        const QUrl url(kick->signInUrl());
-        const QString state = QUrlQuery(url).queryItemValue("state", QUrl::FullyDecoded);
-        const quint16 port = quint16(QUrl(kick->redirectUrl()).port());
-        QTcpSocket sock;
-        QByteArray answer;
-        QObject::connect(&sock, &QTcpSocket::readyRead, &sock, [&] { answer += sock.readAll(); });
-        sock.connectToHost(QHostAddress::LocalHost, port);
-        QTRY_VERIFY(sock.state() == QAbstractSocket::ConnectedState);
-        sock.write("GET /callback?code=ui-code&state=" + QUrl::toPercentEncoding(state) + " HTTP/1.1\r\nHost: localhost\r\n\r\n");
-        QTRY_VERIFY(answer.contains("go back to Hop-tunes"));
-        QTRY_VERIFY(kick->signedIn());
-        QTRY_VERIFY(item("kickAccountName") && item("kickAccountName")->isVisible());
-        QTRY_VERIFY(item("kickAccountName")->property("text").toString().contains("UiTester"));
-        QVERIFY(!item("kickSignIn")->isVisible());
-        shot("kick-signin-signed-in");
-        // kept with the profile (this device only)
-        QTRY_VERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("access").toString() == QLatin1String("acc-ui"));
-        QVERIFY(click("kickSignOut"));
-        QTRY_VERIFY(!kick->signedIn());
-        QTRY_VERIFY(item("kickSignIn")->isVisible());
-        QVERIFY(kick->appConfigured());                                                // the app's ID and secret stay for the next sign-in
-        QTRY_VERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("kick").toObject().value("account").toObject().value("access").toString().isEmpty());
-        QTest::keyClick(w, Qt::Key_Escape);
-        QTRY_VERIFY(item("kickBrowse")->isVisible());
-        QTest::keyClick(w, Qt::Key_Escape);
-        QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 
     // Search follows the spelling as you type (after a short pause), closest names first; no need to press enter.
@@ -3399,7 +3415,9 @@ private slots:
             QVERIFY(item("kickLocalChat_pretend") && item("kickLocalChat_off"));
             window()->grabWindow();                                                    // draw a frame now: that is when the layouts are laid out (a slow headless run may not have drawn one yet)
             // (a long wait: on a slow runner the real video engine can keep the interface busy for a while while it opens the fixture file)
-            QTRY_VERIFY2_WITH_TIMEOUT(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
+            // (every retry draws a frame first: the layout only runs when one is drawn, and a loaded runner may not draw on its own)
+            auto laidOut = [this] { window()->grabWindow(); return item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100; };
+            QTRY_VERIFY2_WITH_TIMEOUT(laidOut(),
                      qPrintable(QStringLiteral("chat %1x%2 visible=%3, column %4x%5, play page %6x%7, player started=%8 error=%9")
                                 .arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height()).arg(item("kickLocalPretendChat")->isVisible())
                                 .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())
