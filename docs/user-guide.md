@@ -158,6 +158,18 @@ Everything here is private to the profile and works offline. Hop-tunes only read
 Apps are small programs that are part of Hop-tunes and open inside its window. They are **off** until you turn them on: go to
 **settings → apps settings** and choose **show the apps tab**. A fresh Hop-tunes shows every other tab and stays exactly as quiet as before.
 
+### neko cafe
+
+A small game: you are a neko maid running a cafe. A customer walks in, sits and orders; walk up and press **A** to take the order, press **A** at the counter to
+hand the slip to the cook, stand at the counter to pick up the coffee when he holds it out, then press **A** beside the right customer. The faster you
+serve, the happier they are: a happy customer pays the bill and tips, an upset one pays nothing (and a few are grumpy whatever you do). Serving someone
+else's coffee sends that customer away upset. The day lasts five minutes, then the results show your orders, bills, tips, profit, happiness and a grade
+from A to D, and your profit goes on the best list.
+
+Keys: arrows or **wasd** walk; **space**, **enter** or **z** is A; **esc** pauses, and **esc** again leaves. A game controller works (d-pad and A), and on a
+phone there is a touch pad under the picture. neko cafe works offline, sends nothing anywhere and has no music or sound of its own: your music keeps
+playing (space is the game's A button while it is open, not play/pause), and so does a stream in its small window.
+
 ### Kick
 
 Kick is the first app. It browses the live streams on kick.com in a wide menu and plays the one you pick, inside Hop-tunes. Nothing plays

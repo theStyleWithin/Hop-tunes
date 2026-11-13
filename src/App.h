@@ -20,6 +20,7 @@
 #include "game/AlbumFall.h"
 #include "game/AnalysisGuard.h"
 #include "game/MusyNoteGame.h"
+#include "game/NekoCafeGame.h"
 #include "game/PinballGame.h"
 #ifdef HOPTUNES_NET_APPS
 #include "apps/KickClient.h"
@@ -60,6 +61,7 @@ class App : public QObject {
     Q_PROPERTY(hop::AudioAnalyzer *audio READ audio CONSTANT)
     Q_PROPERTY(hop::AlbumFall *albumFall READ albumFall CONSTANT)
     Q_PROPERTY(hop::MusyNoteGame *musyNote READ musyNote CONSTANT)
+    Q_PROPERTY(hop::NekoCafeGame *neko READ neko CONSTANT)
     Q_PROPERTY(hop::PinballGame *pinball READ pinball CONSTANT)
     Q_PROPERTY(hop::Gamepad *gamepad READ gamepad CONSTANT)
     Q_PROPERTY(QVariantMap gameSettings READ gameSettings NOTIFY gameSettingsChanged)
@@ -193,6 +195,7 @@ public:
     AudioAnalyzer *audio() { return &m_audio; }
     AlbumFall *albumFall() { return &m_albumFall; }
     MusyNoteGame *musyNote() { return &m_musyNote; }
+    NekoCafeGame *neko() { return &m_neko; }
     PinballGame *pinball() { return &m_pinball; }
     // A game that wants the whole screen: on Android turned sideways with the system bars hidden (restored when it ends).
     Q_INVOKABLE void setGameScreen(bool on);
@@ -662,6 +665,7 @@ private:
     AudioAnalyzer m_audio;
     AlbumFall m_albumFall;
     MusyNoteGame m_musyNote;
+    NekoCafeGame m_neko;
     PinballGame m_pinball;
     AnalysisGuard m_analysisGuard{Paths::dataDir()};
     bool m_analysisSafeMode = false;

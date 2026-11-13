@@ -65,7 +65,7 @@ ApplicationWindow {
     // switched off in settings.
     function maybeOpenNowPlaying() {
         if (win.view === "collection" && hop.profileReady && hop.player.playing && hop.gamepad.connected
-            && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen)
+            && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen && !collectionView.appActive)   // (an app that is open, a game, keeps the screen)
             win.view = "now playing"
     }
     Connections { target: hop.player; function onPlayingChanged() { win.maybeOpenNowPlaying() } }
@@ -116,7 +116,7 @@ ApplicationWindow {
         onAccepted: hop.addFolder(selectedFolder)
     }
 
-    Shortcut { sequence: "Space"; enabled: hop.profileReady && !musyNote.active && !(win.view === "now playing" && (hop.gameSettings.stage === "albumfall" || hop.gameSettings.stage === "pinball")); onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
+    Shortcut { sequence: "Space"; enabled: hop.profileReady && !musyNote.active && !hop.neko.open && !(win.view === "now playing" && (hop.gameSettings.stage === "albumfall" || hop.gameSettings.stage === "pinball")); onActivated: hop.player.hasTrack ? hop.player.toggle() : hop.playSongs(0) }
     Shortcut { sequences: ["Ctrl+Right", "Media Next"]; enabled: hop.profileReady; onActivated: hop.player.next() }
     Shortcut { sequences: ["Ctrl+Left", "Media Previous"]; enabled: hop.profileReady; onActivated: hop.player.previous() }
     Shortcut { sequence: "Ctrl+1"; enabled: hop.profileReady; onActivated: win.view = "collection" }

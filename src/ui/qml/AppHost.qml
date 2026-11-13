@@ -16,7 +16,7 @@ FocusScope {
     // where the app wants the stream's picture (the main window's stream dock sits over it); null when the app has none
     readonly property Item appVideoSlot: active && !!appLoader.item && appLoader.item.videoSlot !== undefined ? appLoader.item.videoSlot : null
     readonly property bool theatre: active && !!appLoader.item && appLoader.item.theatre === true     // the app wants the whole window (a phone turned sideways, watching)
-    readonly property var names: ({ "kick": "kick" })
+    readonly property var names: ({ "kick": "kick", "nekocafe": "neko cafe" })
     visible: active
     signal leave()
 
@@ -76,7 +76,8 @@ FocusScope {
         id: appLoader
         anchors { left: parent.left; right: parent.right; top: root.theatre ? parent.top : bar.bottom; bottom: parent.bottom; margins: root.theatre ? 0 : Theme.pad; topMargin: root.theatre ? 0 : 18 }
         active: root.active
-        sourceComponent: root.appId === "kick" ? kickApp : null
+        sourceComponent: root.appId === "kick" ? kickApp : root.appId === "nekocafe" ? nekoApp : null
     }
     Component { id: kickApp; KickApp { onLeave: { root.appId = ""; root.leave() } } }
+    Component { id: nekoApp; NekoCafeApp { onLeave: { root.appId = ""; root.leave() } } }
 }

@@ -2246,7 +2246,8 @@ private slots:
         item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));   // (the pill row scrolls sideways: the pill itself can be off the edge)
         QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
         shot("phone-apps-tab");
-        if (!m_app->netAppsBuilt()) QVERIFY(item("appsEmpty")->isVisible());
+        QVERIFY(!item("appsEmpty")->isVisible());                              // neko cafe is in every build; kick only in networked ones
+        QVERIFY(item("appTile_nekocafe") && item("appTile_nekocafe")->isVisible());
         m_app->setAppsEnabled(false);
         QTRY_VERIFY(item("pillTab_apps") == nullptr);
         w->setProperty("forceMobile", false);
@@ -2254,6 +2255,86 @@ private slots:
         QTRY_COMPARE(w->size(), before);
         QTRY_VERIFY(item("subTab_music")->isVisible());
         QVERIFY(click("subTab_music"));
+    }
+
+
+    // neko cafe: a game inside the apps tab. It opens from its tile, starts on A, the maid walks, a whole day ends in the results
+    // screen, and Esc pauses first and leaves second.
+    void nekoCafeOpensPlaysADayAndLeaves()
+    {
+        auto *w = window();
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->playSongs(0);                                                   // music is playing, as it usually is
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        m_app->setAppsEnabled(true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
+        QVERIFY(item("appTile_nekocafe") && item("appTile_nekocafe")->isVisible());
+        QVERIFY(click("appTile_nekocafe"));
+        QObject *host = item("appHost");
+        QTRY_VERIFY(host->property("active").toBool());
+        QTRY_VERIFY(item("nekoCafeApp") && item("nekoCafeApp")->isVisible());
+        QTRY_VERIFY(item("nekoCafeApp")->hasActiveFocus());                     // it takes the keys
+        NekoCafeGame *neko = m_app->neko();
+        QVERIFY(!neko->started());
+        QVERIFY(neko->isOpen());                                               // Space is the game's A now, not play/pause
+        m_app->gamepad()->setDevice(QStringLiteral("Test Pad"));                // a controller shows up while music plays: the game is not yanked away
+        QTest::qWait(100);
+        QVERIFY(host->property("active").toBool());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        m_app->gamepad()->setDevice(QString());
+        QVERIFY(item("nekoTitle")->isVisible());
+        shot("neko-title");
+        QTest::keyClick(w, Qt::Key_Return);                                    // A starts the day
+        QVERIFY(neko->started());
+        QVERIFY(!item("nekoTitle")->isVisible());
+        const int x0 = neko->maidX();
+        QTest::keyPress(w, Qt::Key_Right);                                     // the maid walks while the key is held
+        neko->advance(500);
+        QTest::keyRelease(w, Qt::Key_Right);
+        QVERIFY2(neko->maidX() > x0, "she walked right");
+        const int x1 = neko->maidX();
+        neko->advance(500);
+        QCOMPARE(neko->maidX(), x1);                                           // let go: she stops
+        QQuickItem *maid = item("nekoMaid");
+        QVERIFY(maid && maid->isVisible());
+        QVERIFY(maid->x() > 0 && maid->x() < item("nekoScreen")->width());
+        for (int i = 0; i < 70; ++i) neko->advance(1000);                      // a minute in: customers have come and sat down
+        QGuiApplication::processEvents();
+        bool anyone = false;
+        for (int i = 0; i < NekoCafe::kMaxCustomers; ++i) anyone = anyone || neko->rules().customer(i).state != NekoCafe::None;
+        QVERIFY2(anyone, "customers came in");
+        shot("neko-cafe");
+        // Esc pauses, Esc again leaves
+        QTest::keyClick(w, Qt::Key_Escape);
+        QVERIFY(host->property("active").toBool());
+        QVERIFY(neko->paused());
+        QTRY_VERIFY(item("nekoPaused")->isVisible());
+        shot("neko-paused");
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!host->property("active").toBool());
+        QVERIFY2(!neko->started(), "leaving ends the day and stops the clock");
+        QVERIFY(!neko->isOpen());
+        // play a whole day (nobody serves anyone: the results show an empty day) and read the results
+        QVERIFY(click("appTile_nekocafe"));
+        QTRY_VERIFY(item("nekoCafeApp") && item("nekoCafeApp")->isVisible());
+        QTRY_VERIFY(item("nekoCafeApp")->hasActiveFocus());
+        QTest::keyClick(w, Qt::Key_Space);
+        QVERIFY(neko->started());
+        for (int i = 0; i < 400 && neko->phase() == 0; ++i) neko->advance(1000);
+        QCOMPARE(neko->phase(), 1);
+        QTRY_VERIFY(item("nekoResults")->isVisible());
+        QCOMPARE(neko->grade(), QStringLiteral("D"));
+        neko->advance(3000);
+        shot("neko-results");
+        QTest::keyClick(w, Qt::Key_Return);                                    // the next day
+        QCOMPARE(neko->phase(), 0);
+        QCOMPARE(neko->day(), 2);
+        QTest::keyClick(w, Qt::Key_Escape);                                    // pause, then leave
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!host->property("active").toBool());
+        m_app->setAppsEnabled(false);
     }
 
 #ifdef HOPTUNES_NET_APPS
