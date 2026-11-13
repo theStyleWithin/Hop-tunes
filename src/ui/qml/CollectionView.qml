@@ -37,6 +37,9 @@ Item {
     readonly property bool appSearchable: appHost.canSearch
     readonly property bool appSearching: appHost.searching
     readonly property bool appTheatre: appHost.theatre
+    readonly property Item appVideoSlot: appHost.appVideoSlot
+    readonly property bool appActive: appHost.active
+    function openApp(id) { root.collectionTab = "apps"; appHost.open(id) }
     readonly property string appNowTitle: appHost.nowPlayingTitle
     readonly property string appNowSub: appHost.nowPlayingSub
     function appSearch() { return appHost.search() }

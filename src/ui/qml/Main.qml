@@ -12,8 +12,10 @@ ApplicationWindow {
     property bool forceMobile: false   // tests and screenshots
     readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
     property bool miniHidden: false                // the phone's mini player pushed away to the right for now
-    readonly property string appNowTitle: view === "collection" ? collectionView.appNowTitle : ""     // what the open app says is playing (the mini player shows it when no song is)
-    readonly property string appNowSub: view === "collection" ? collectionView.appNowSub : ""
+    // what is "playing" besides music (the mini player shows it when no song is): a live stream in the dock, even with Kick closed, otherwise what the open app says
+    readonly property bool dockOn: !!hop.dock && hop.dock.active
+    readonly property string appNowTitle: dockOn ? "now playing " + hop.dock.name : (view === "collection" ? collectionView.appNowTitle : "")
+    readonly property string appNowSub: dockOn ? "live on kick" : (view === "collection" ? collectionView.appNowSub : "")
     readonly property bool theatre: view === "collection" && collectionView.appTheatre      // an app has the whole window (Kick, phone sideways)
     readonly property bool tablet: Math.min(width, height) >= 600   // a phone turned sideways is still a phone
     Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
@@ -266,6 +268,21 @@ ApplicationWindow {
         }
     }
 
+    // the live stream that keeps playing after the Kick app is left: a small window you can drag anywhere, with a ✕ to close it
+    StreamDock {
+        id: streamDock
+        anchors.fill: parent
+        slot: win.view === "collection" ? collectionView.appVideoSlot : null
+        bottomInset: miniWrap.visible ? miniWrap.height + 16 : 16
+    }
+    // ⤢ on the small window: back to the channel (the Kick app is opened if it was closed; an open one answers by itself)
+    Connections {
+        target: hop.dock
+        enabled: !!hop.dock
+        function onWantsOpenChanged() {
+            if (hop.dock.wantsOpen && !collectionView.appActive) { win.view = "collection"; collectionView.openApp("kick") }
+        }
+    }
     Item {   // the little tab that brings a pushed-away mini player back: it floats at the right edge above the bottom bar and takes no room of its own
         id: miniTab
         objectName: "miniPullTab"

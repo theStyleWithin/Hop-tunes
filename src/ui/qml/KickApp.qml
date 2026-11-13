@@ -101,7 +101,9 @@ FocusScope {
     function download(entry) {
         root.dlMessage = hop.downloads.enqueue({ id: entry.id, kind: entry.kind, title: entry.title, channel: kick.channel.slug || "", thumb: entry.thumb,
                                                  url: entry.url, maxHeight: root.dlHeight, estimate: entry.estimate, seconds: entry.seconds })
-    }    // what the mini player says while Kick is open and no song plays: "kick" on the hub, "now playing <channel>" while a live stream is on,
+    }
+
+    // what the mini player says while Kick is open and no song plays: "kick" on the hub, "now playing <channel>" while a live stream is on,
     // "now playing <title>" for a download. A channel that is offline, or a stream that failed, is just "kick": it never claims more than is true.
     function nowPlayingFor(s) {
         if (!s.open) return { title: "", sub: "" }
@@ -111,11 +113,39 @@ FocusScope {
     }
     readonly property var nowPlaying: nowPlayingFor({
         open: !!kick && allowed, page: page, tab: watchTab, live: !!kick && kick.channel.live === true,
-        wanted: page === "play" ? localPlayer.wanted : livePlayer.wanted, error: page === "play" ? localPlayer.error : livePlayer.error,
+        wanted: page === "play" ? localPlayer.wanted : (useDock ? (hop.dock.active && !!kick && hop.dock.slug === String(kick.channel.slug || "").toLowerCase()) : livePlayer.wanted),
+        error: page === "play" ? localPlayer.error : (useDock ? "" : livePlayer.error),
         channel: !!kick ? (kick.channel.name || kick.channel.slug || "") : "",
         dlTitle: root.dlById[root.playId] ? root.dlById[root.playId].title : "", dlChannel: root.dlById[root.playId] ? root.dlById[root.playId].channel : "" })
     readonly property string nowPlayingTitle: nowPlaying.title
     readonly property string nowPlayingSub: nowPlaying.sub
+    // desktop: the live picture lives in the main window's stream dock so it can keep playing after this app is left
+    readonly property bool useDock: !!hop.dock && Qt.platform.os !== "android"
+    readonly property Item videoSlot: useDock && !!kick && page === "watch" && watchTab === "live" && hop.dock.active
+                                      && hop.dock.slug === String(kick.channel.slug || "").toLowerCase() ? liveSlot : null
+    function syncDock() {
+        if (!useDock || !kick || page !== "watch" || watchTab !== "live") return
+        const slug = String(kick.channel.slug || "")
+        if (slug === "") return
+        if (kick.channel.live === true && (kick.channel.playbackUrl || "") !== "" && kick.health !== "down")
+            hop.dock.start(slug, kick.channel.name || slug, kick.channel.title || "", kick.channel.playbackUrl)
+        else if (kick.channel.live === false && hop.dock.active && hop.dock.slug === slug.toLowerCase()) hop.dock.stop()      // that channel went offline
+    }
+    function takeMeBack() {                       // the stream window's ⤢: open that channel's page
+        if (!useDock || !hop.dock.wantsOpen) return
+        const slug = hop.dock.slug
+        hop.dock.openHandled()
+        if (slug !== "" && kick) { videoFullscreen = false; openChannel(slug) }
+    }
+    Connections { target: kick; function onChannelChanged() { root.syncDock() } }
+    Connections { target: hop.dock; enabled: !!hop.dock; function onWantsOpenChanged() { root.takeMeBack() } }
+    onWatchTabChanged: syncDock()
+    onVideoFullscreenChanged: {
+        if (!useDock || !hop.dock) return
+        if (!videoFullscreen && hop.dock.fullscreen) hop.dock.fullscreen = false
+        else if (videoFullscreen && page === "watch" && hop.dock.active) hop.dock.fullscreen = true
+    }
+    Connections { target: hop.dock; enabled: !!hop.dock; function onChanged() { if (root.useDock && root.videoFullscreen && !hop.dock.fullscreen && root.page === "watch") root.videoFullscreen = false } }
     readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
     // a phone turned sideways: watching becomes a widescreen "theatre" (the picture as big as it can be, the chat beside it, no bars around)
     readonly property bool landscape: phone && width > height * 1.25
@@ -129,9 +159,9 @@ FocusScope {
                                   ["id.kick.com", "only if you sign in with your own Kick app: Kick\u2019s sign-in page"], ["api.kick.com", "only if you sign in: who is signed in"]]
 
     Connections { target: hop; function onAppNetChanged() { root.allowed = hop.appNetAllowed("kick") } }
-    Component.onCompleted: if (kick && allowed) kick.open()
+    Component.onCompleted: { if (kick && allowed) { kick.open(); takeMeBack() } }
     Component.onDestruction: { hop.setPictureInPictureAllowed(false, 16, 9); if (kick) kick.close() }
-    onPageChanged: if (page !== "watch" && page !== "play") videoFullscreen = false
+    onPageChanged: { if (page !== "watch" && page !== "play") videoFullscreen = false; syncDock() }
 
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
@@ -718,15 +748,18 @@ FocusScope {
                     }
                 }
                 Item {
+                    id: liveSlot
+                    objectName: "kickLiveSlot"
                     visible: root.watchTab === "live"
                     Layout.fillWidth: true; Layout.fillHeight: !root.phone || root.theatre
                     Layout.preferredHeight: root.phone && !root.theatre ? width * 9 / 16 : -1
                     KickPlayer {
                         id: livePlayer
+                        visible: !root.useDock                      // desktop: the picture is the main window's stream dock, placed over this slot
                         anchors.fill: parent
                         fullscreen: root.videoFullscreen
                         onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
-                        url: root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.health !== "down" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
+                        url: !root.useDock && root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.health !== "down" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
                         onRetryRequested: { if ((kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug) }
                     }
                     Rectangle {

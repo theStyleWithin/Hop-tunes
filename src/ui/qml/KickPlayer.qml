@@ -11,6 +11,7 @@ Item {
     objectName: "kickPlayer"
     property string url: ""                      // the live stream's address ("" = nothing playing, no engine started)
     property string file: ""                     // a downloaded video on this device (plays from disk, nothing is fetched)
+    property bool showControls: true             // the small dock window hides the control row and has its own buttons
     readonly property bool local: file !== ""
     readonly property var surface: mpvLoader.item ? mpvLoader.item : (gstLoader.item ? gstLoader.item : qtLoader.item)
     readonly property string error: blocked ? "that stream address is not one this app may open" : (surface ? String(surface.error) : "")
@@ -122,7 +123,7 @@ Item {
         // controls: pause, volume
         RowLayout {
             anchors { left: parent.left; right: parent.right; bottom: parent.bottom; margins: 10 }
-            visible: root.started && !hop.inPictureInPicture
+            visible: root.started && root.showControls && !hop.inPictureInPicture
             spacing: 12
             AbstractButton {
                 objectName: "kickPause"

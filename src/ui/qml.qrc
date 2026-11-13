@@ -14,6 +14,7 @@
     <file>qml/KickApp.qml</file>
     <file>qml/KickPlayer.qml</file>
     <file>qml/SeekMeter.qml</file>
+    <file>qml/StreamDock.qml</file>
     <file alias="images/app-tile.png">images/app-tile.png</file>
     <file alias="images/app-kick.png">images/app-kick.png</file>
     <file>qml/NowPlayingView.qml</file>

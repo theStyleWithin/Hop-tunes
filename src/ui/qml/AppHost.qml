@@ -13,6 +13,8 @@ FocusScope {
     // an app may say what is "playing" (nowPlayingTitle / nowPlayingSub on its root item): the mini player shows it when no song is playing
     readonly property string nowPlayingTitle: active && !!appLoader.item && appLoader.item.nowPlayingTitle !== undefined ? String(appLoader.item.nowPlayingTitle) : ""
     readonly property string nowPlayingSub: active && !!appLoader.item && appLoader.item.nowPlayingSub !== undefined ? String(appLoader.item.nowPlayingSub) : ""
+    // where the app wants the stream's picture (the main window's stream dock sits over it); null when the app has none
+    readonly property Item appVideoSlot: active && !!appLoader.item && appLoader.item.videoSlot !== undefined ? appLoader.item.videoSlot : null
     readonly property bool theatre: active && !!appLoader.item && appLoader.item.theatre === true     // the app wants the whole window (a phone turned sideways, watching)
     readonly property var names: ({ "kick": "kick" })
     visible: active
