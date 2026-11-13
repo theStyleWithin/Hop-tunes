@@ -85,6 +85,10 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 #endif
 #ifdef HOPTUNES_NET_APPS
     connect(&m_kick, &KickClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    // the live stream that outlives the Kick app: it waits for a song that is playing, and gives way to the next song or video
+    m_dock.setSongControl([this] { return m_player.isPlaying(); }, [this] { m_player.pause(); });
+    connect(&m_player, &Player::playingChanged, &m_dock, [this] { if (m_player.isPlaying()) m_dock.songStarted(); });
+    connect(this, &App::videoPlayerChanged, &m_dock, [this] { if (m_videoPlayerOpen) m_dock.videoOpened(); });
     connect(&m_offline, &OfflineStore::edited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
     m_offline.setDefaultBase(Paths::dataDir() + QStringLiteral("/offline"));
     connect(&m_appNet, &AppNet::opened, &m_downloads, [this](const QString &a) { if (a == QLatin1String("kick")) m_downloads.appOpened(); });
@@ -471,6 +475,7 @@ void App::activate(const QString &id, bool guest)
         for (auto it = net.constBegin(); it != net.constEnd(); ++it) if (it.value().toBool()) m_netAllowed.insert(it.key());
     }
 #ifdef HOPTUNES_NET_APPS
+    m_dock.stop();
     m_kick.close();
     m_kick.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("kick")).toObject());
     m_offline.setProfileId(guest ? QStringLiteral("guest") : m_profileId);
@@ -570,6 +575,7 @@ void App::leaveProfile()
     emit appsEnabledChanged();
     m_netAllowed.clear();
 #ifdef HOPTUNES_NET_APPS
+    m_dock.stop();
     m_kick.close();
     m_appNet.setAllowed(QStringLiteral("kick"), false);
     m_kick.setListsJson(QJsonObject{});
@@ -1985,7 +1991,7 @@ void App::setAppsEnabled(bool on)
     if (on == m_appsEnabled) return;
     m_appsEnabled = on;
 #ifdef HOPTUNES_NET_APPS
-    if (!on) m_kick.close();                  // switching apps off drops any connection
+    if (!on) { m_dock.stop(); m_kick.close(); }   // switching apps off drops any connection (and the stream window)
 #endif
     saveProfileSettings();
     emit appsEnabledChanged();
@@ -2005,7 +2011,7 @@ void App::setAppNetAllowed(const QString &app, bool on)
     if (app != QLatin1String("kick") || on == m_netAllowed.contains(app)) return;
     if (on) m_netAllowed.insert(app); else m_netAllowed.remove(app);
 #ifdef HOPTUNES_NET_APPS
-    if (!on) m_kick.close();
+    if (!on) { m_dock.stop(); m_kick.close(); }
     m_appNet.setAllowed(app, on);
 #endif
     saveProfileSettings();                    // (guests keep nothing: this holds for the session only)

@@ -37,6 +37,11 @@ Item {
     readonly property bool appSearchable: appHost.canSearch
     readonly property bool appSearching: appHost.searching
     readonly property bool appTheatre: appHost.theatre
+    readonly property Item appVideoSlot: appHost.appVideoSlot
+    readonly property bool appActive: appHost.active
+    function openApp(id) { root.collectionTab = "apps"; appHost.open(id) }
+    readonly property string appNowTitle: appHost.nowPlayingTitle
+    readonly property string appNowSub: appHost.nowPlayingSub
     function appSearch() { return appHost.search() }
     onVisibleChanged: if (!visible) appHost.close()
     // switching apps off in settings takes the tab away (and an app that is open with it)

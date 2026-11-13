@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **A stream that keeps playing (desktop).** Leave a stream by going back to the streams list, out of the Kick app or to the music, and it shrinks to a small window you can drag anywhere and keeps playing as company. The small window has a **✕** to close it, a mute button and an arrow back to the channel; it ends by itself when you start a song or a video, and starting a stream pauses a song that is playing. The mini player at the bottom now says **kick** on the streams list and **now playing <channel>** while a stream runs, even with Kick closed. The permission card says that a stream you pick keeps playing after you leave the app, and that nothing else connects once the app is closed.
+
 ### Changed
 - **The seek meter is only for videos kept on your device.** A live stream no longer shows it (it is just watched, and now has the small red **live** tag again); a downloaded stream, a recording or a clip keeps the meter along the top.
 

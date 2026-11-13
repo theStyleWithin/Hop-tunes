@@ -25,6 +25,7 @@
 #include "apps/KickClient.h"
 #include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
+#include "apps/StreamDock.h"
 #include "net/AppNet.h"
 #endif
 #include "game/AudioAnalyzer.h"
@@ -157,6 +158,7 @@ class App : public QObject {
     Q_PROPERTY(QString videoViewStyle READ videoViewStyle WRITE setVideoViewStyle NOTIFY videoViewStyleChanged)
     Q_PROPERTY(QObject *downloads READ downloadsObject CONSTANT)  // offline downloads of Kick streams and clips (null without the networked apps)
     Q_PROPERTY(QObject *offline READ offlineObject CONSTANT)    // the room set aside for offline Kick (null without the networked apps)
+    Q_PROPERTY(QObject *dock READ dockObject CONSTANT)          // the live stream that keeps playing after the Kick app is left (null without the networked apps)
     Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
     Q_PROPERTY(QStringList netAllowedApps READ netAllowedApps NOTIFY appNetChanged)   // the apps the person has allowed to use the internet
@@ -316,6 +318,13 @@ public:
 #ifdef HOPTUNES_NET_APPS
     OfflineStore *offlineStore() { return &m_offline; }   // for tests
 #endif
+    QObject *dockObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_dock;
+#else
+        return nullptr;
+#endif
+    }
     QObject *kickObject() {
 #ifdef HOPTUNES_NET_APPS
         return &m_kick;
@@ -333,6 +342,7 @@ public:
     QStringList netAllowedApps() const { return QStringList(m_netAllowed.begin(), m_netAllowed.end()); }
 #ifdef HOPTUNES_NET_APPS
     KickClient *kickClient() { return &m_kick; }      // for tests
+    StreamDock *streamDock() { return &m_dock; }      // for tests
     AppNet *gateway() { return &m_appNet; }
 #endif
     QObject *gatewayObject() {
@@ -608,6 +618,7 @@ private:
 #ifdef HOPTUNES_NET_APPS
     AppNet m_appNet;
     KickClient m_kick{&m_appNet};
+    StreamDock m_dock;
     OfflineStore m_offline;
     OfflineDownloads m_downloads{&m_appNet, &m_offline};
 #endif

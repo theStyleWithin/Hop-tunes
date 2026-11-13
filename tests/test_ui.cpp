@@ -6,6 +6,7 @@
 #include "ui/MpvVideoItem.h"
 #ifdef HOPTUNES_NET_APPS
 #include "apps/KickClient.h"
+#include "apps/StreamDock.h"
 #include "net/AppNet.h"
 #endif
 
@@ -26,6 +27,7 @@
 #include <QTcpSocket>
 #include <QHostAddress>
 #include <QUrlQuery>
+#include <QJSValue>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -2476,6 +2478,160 @@ private slots:
         QCOMPARE(obj->property("text").toString(), QString());
         skip(10000);
         QCOMPARE(sink.size(), n);
+    }
+
+    // The mini player says what the open app is doing when no song plays: "kick" on the hub, "now playing <channel>" while a live stream is on.
+    void miniPlayerSaysWhatKickIsDoing()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; ~Restore() { app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get()};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        auto mini = [this] { return item("miniPlayer"); };
+        QVERIFY(mini());
+        QCOMPARE(mini()->property("appTitle").toString(), QString());                   // not in Kick: nothing to add
+        QTRY_VERIFY(item("subTab_apps") && item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        // the hub: "kick" (a song that is playing would still win in the mini player's own label)
+        QTRY_COMPARE(mini()->property("appTitle").toString(), QString("kick"));
+        QCOMPARE(mini()->property("appSub").toString(), QString());
+        if (!m_app->player()->hasTrack()) QCOMPARE(item("miniTitle")->property("text").toString(), QString("kick"));
+        // an offline channel's page is still just "kick": nothing is playing there
+        QVERIFY(QMetaObject::invokeMethod(item("kickApp"), "openChannel", Q_ARG(QVariant, QStringLiteral("alpha"))));
+        QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QTRY_VERIFY(item("kickChannelState")->isVisible());
+        QCOMPARE(mini()->property("appTitle").toString(), QString("kick"));
+        // the rule itself (the live picture needs a video engine, which differs per machine, so the rule is tested directly)
+        auto say = [this](QVariantMap st) {
+            QVariant r;
+            QMetaObject::invokeMethod(item("kickApp"), "nowPlayingFor", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, st));
+            return r.value<QJSValue>().toVariant().toMap();
+        };
+        const QVariantMap live{{"open", true}, {"page", "watch"}, {"tab", "live"}, {"live", true}, {"wanted", true}, {"error", ""}, {"channel", "LumielleVT"}};
+        QCOMPARE(say(live).value("title").toString(), QString("now playing LumielleVT"));
+        QCOMPARE(say(live).value("sub").toString(), QString("live on kick"));
+        for (const QPair<QString, QVariant> &change : {qMakePair(QString("live"), QVariant(false)),            // offline
+                                                       qMakePair(QString("wanted"), QVariant(false)),          // the picture is not on
+                                                       qMakePair(QString("error"), QVariant("could not play")),   // it failed: never claim more than is true
+                                                       qMakePair(QString("tab"), QVariant("clips")),           // looking at clips, not watching
+                                                       qMakePair(QString("page"), QVariant("browse"))}) {
+            QVariantMap st = live; st[change.first] = change.second;
+            QCOMPARE(say(st).value("title").toString(), QString("kick"));
+            QCOMPARE(say(st).value("sub").toString(), QString());
+        }
+        const QVariantMap dl{{"open", true}, {"page", "play"}, {"wanted", true}, {"error", ""}, {"dlTitle", "a funny moment"}, {"dlChannel", "alpha"}};
+        QCOMPARE(say(dl).value("title").toString(), QString("now playing a funny moment"));
+        QCOMPARE(say(dl).value("sub").toString(), QString("alpha"));
+        QVariantMap broken = dl; broken["error"] = "x";
+        QCOMPARE(say(broken).value("title").toString(), QString("kick"));
+        QVariantMap closed = live; closed["open"] = false;
+        QCOMPARE(say(closed).value("title").toString(), QString());
+        // leaving Kick: back to what it was
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QTRY_COMPARE(mini()->property("appTitle").toString(), QString());
+        if (!m_app->player()->hasTrack()) QCOMPARE(item("miniTitle")->property("text").toString(), QString("nothing playing"));
+        Q_UNUSED(kick);
+        m_app->setAppNetAllowed("kick", false);
+        m_app->setAppsEnabled(false);
+        QVERIFY(click("subTab_music"));
+    }
+
+    // The live stream keeps playing in a small draggable window after the Kick app is left, shows in the mini player's text, and ends when you
+    // press its x or start a song. (The picture needs a video engine that differs per machine, so state and geometry are asserted, not frames.)
+    void aLiveStreamKeepsPlayingInASmallWindowAfterTheAppIsLeft()
+    {
+#ifdef Q_OS_ANDROID
+        QSKIP("the phone has picture in picture instead");
+#endif
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        StreamDock *dock = m_app->streamDock();
+        const QSize before = w->size();
+        struct Restore { App *app; QWindow *w; QSize size; ~Restore() { app->streamDock()->stop(); w->resize(size); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get(), w, before};
+        const QString addr = QStringLiteral("https://a1b2.us-east-1.playback.live-video.net/api/video/v1/master.m3u8?t=1");
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        QVERIFY(!item("streamDock")->isVisible());                                        // nothing is playing: no window
+        auto box = [this]() -> QRectF { QQuickItem *b = item("streamDockBox"); return QRectF(b->mapToScene(QPointF(0, 0)), b->size()); };
+        auto inside = [&](const QRectF &r) { return r.left() >= 0 && r.top() >= 0 && r.right() <= w->width() + 0.5 && r.bottom() <= w->height() + 0.5; };
+        // a stream starts (from a channel page, in the real app) and the app is left: the window stays, in the corner, inside the window
+        QVERIFY(dock->start("gamehopper", "GameHopper", "a title", addr));
+        QTRY_VERIFY(item("streamDock")->isVisible());
+        QTRY_VERIFY(box().width() > 200 && box().width() < w->width() * 0.5);
+        QVERIFY(inside(box()));
+        QVERIFY(box().center().x() > w->width() / 2 && box().center().y() > w->height() / 2);   // bottom right
+        for (const char *name : {"streamDockStop", "streamDockExpand", "streamDockMute", "streamDockName"}) QVERIFY2(item(name) && item(name)->isVisible(), name);
+        QCOMPARE(item("streamDockName")->property("text").toString(), QString("GameHopper"));
+        shot("stream-dock-corner");
+        // it stays while you move around Hop-tunes, and the mini player says what is playing even with Kick closed
+        w->setProperty("view", QStringLiteral("settings"));
+        QVERIFY(item("streamDock")->isVisible() && dock->active());
+        QCOMPARE(item("miniPlayer")->property("appTitle").toString(), QString("now playing GameHopper"));
+        QCOMPARE(item("miniPlayer")->property("appSub").toString(), QString("live on kick"));
+        w->setProperty("view", QStringLiteral("collection"));
+        // it can be put anywhere, and never leaves the window (also after the window gets smaller)
+        item("streamDock")->setProperty("spot", QPointF(120, 90));
+        QTRY_VERIFY(qAbs(box().left() - 120) < 2 && qAbs(box().top() - 90) < 2);
+        item("streamDock")->setProperty("spot", QPointF(99999, 99999));
+        QTRY_VERIFY(inside(box()) && box().right() > w->width() - 40);
+        w->resize(900, 600);
+        QTRY_COMPARE(w->width(), 900);
+        QTRY_VERIFY(inside(box()));
+        shot("stream-dock-moved");
+        w->resize(before);
+        QTRY_COMPARE(w->size(), before);
+        // the x closes it and moves on
+        QVERIFY(click("streamDockStop"));
+        QTRY_VERIFY(!dock->active());
+        QTRY_VERIFY(!item("streamDock")->isVisible());
+        QCOMPARE(item("miniPlayer")->property("appTitle").toString(), QString());
+        // a song starting ends it; and a stream starting pauses a song that is playing
+        QVERIFY(dock->start("gamehopper", "GameHopper", "a title", addr));
+        QTRY_VERIFY(item("streamDock")->isVisible());
+        m_app->playSongs(0);
+        QTRY_VERIFY(m_app->player()->isPlaying());
+        QTRY_VERIFY(!dock->active());
+        QTRY_VERIFY(!item("streamDock")->isVisible());
+        QVERIFY(dock->start("gamehopper", "GameHopper", "a title", addr));
+        QVERIFY(!m_app->player()->isPlaying());                                           // the song waited
+        QTRY_VERIFY(item("streamDock")->isVisible());
+        // the arrow on the small window takes you back to the channel: Kick opens on it, and the picture grows over the page's slot
+        QVERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(click("streamDockExpand"));
+        QTRY_VERIFY(item("appHost")->property("active").toBool());
+        QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QTRY_COMPARE(m_app->kickClient()->channel().value("slug").toString(), QString("gamehopper"));
+        QVERIFY(dock->active());
+        QTRY_VERIFY(item("kickLiveSlot")->isVisible());
+        QTRY_VERIFY(qAbs(box().width() - item("kickLiveSlot")->width()) < 3 && qAbs(box().height() - item("kickLiveSlot")->height()) < 3);   // grown to the page
+        QVERIFY(!item("streamDockStop")->isVisible());                                    // (the page has the full controls)
+        shot("stream-dock-on-page");
+        // back to the hub: it shrinks to the corner again and keeps playing
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTRY_VERIFY(item("streamDockStop")->isVisible());
+        QTRY_VERIFY(box().width() < w->width() * 0.5);
+        QVERIFY(dock->active());
+        QCOMPARE(item("miniPlayer")->property("appTitle").toString(), QString("now playing GameHopper"));
+        // leaving the app entirely: it keeps playing; taking the permission back ends it
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(dock->active() && item("streamDock")->isVisible());
+        m_app->setAppNetAllowed("kick", false);
+        QTRY_VERIFY(!dock->active());
+        m_app->setAppsEnabled(false);
+        QVERIFY(click("subTab_music"));
     }
 
     // Kick on a phone held upright: one column of cards that fits the screen, touch-sized, and on the watch page the picture on top

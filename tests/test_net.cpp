@@ -2,6 +2,7 @@
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
 #include "apps/Hls.h"
 #include "apps/KickClient.h"
+#include "apps/StreamDock.h"
 #include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
 #include "apps/WebpDecode.h"
@@ -1284,6 +1285,67 @@ private slots:
         slugs.clear();
         for (const QVariant &v : k.streams()) slugs << v.toMap().value("slug").toString();
         QVERIFY(slugs.contains("japanese_one"));
+    }
+
+private slots:
+    // ---- the live stream that keeps playing after the Kick app is left ----
+    void streamDockStartsPausesTheSongAndKeepsTheSameChannelPlaying()
+    {
+#ifdef Q_OS_ANDROID
+        QSKIP("the phone has picture in picture instead");
+#endif
+        StreamDock d;
+        bool playing = true; int paused = 0;
+        d.setSongControl([&] { return playing; }, [&] { ++paused; playing = false; });
+        QSignalSpy changed(&d, &StreamDock::changed);
+        QVERIFY(!d.active());
+        const QString good = QStringLiteral("https://a1b2.us-east-1.playback.live-video.net/api/video/v1/master.m3u8?token=abc");
+        // starting pauses the song that was playing, and the channel's name is kept as typed while the slug is lower case
+        QVERIFY(d.start("LumielleVT", "LumielleVT", "playing rimworld", good));
+        QVERIFY(d.active() && d.slug() == "lumiellevt" && d.name() == "LumielleVT" && d.title() == "playing rimworld" && d.url() == good);
+        QCOMPARE(paused, 1);
+        QVERIFY(changed.size() >= 1);
+        // the same channel again, with a fresh address: it keeps playing (the address is not swapped), only the words refresh
+        const QString fresh = QStringLiteral("https://zz99.us-east-1.playback.live-video.net/api/video/v1/master.m3u8?token=new");
+        QVERIFY(d.start("lumiellevt", "LumielleVT", "now a different game", fresh));
+        QCOMPARE(d.url(), good);
+        QCOMPARE(d.title(), QString("now a different game"));
+        QCOMPARE(paused, 1);
+        // another channel replaces it (no song is playing now, so nothing is paused)
+        QVERIFY(d.start("alpha", "Alpha", "t", fresh));
+        QVERIFY(d.slug() == "alpha" && d.url() == fresh);
+        QCOMPARE(paused, 1);
+        // refused: not secure, not a Kick video host, nothing to say who it is: nothing changes
+        for (const QString &bad : {QStringLiteral("http://a.playback.live-video.net/x.m3u8"), QStringLiteral("https://evil.example/x.m3u8"),
+                                   QStringLiteral("https://live-video.net.evil.example/x.m3u8"), QStringLiteral("https://u@a.live-video.net/x.m3u8"),
+                                   QStringLiteral("https://a.live-video.net:8443/x.m3u8"), QString()})
+            QVERIFY2(!d.start("bravo", "Bravo", "t", bad), qPrintable(bad));
+        QVERIFY(!d.start("", "x", "t", good));
+        QCOMPARE(d.slug(), QString("alpha"));
+        // stop clears everything (also full screen and a pending "take me back"), and a second stop says nothing
+        d.setFullscreen(true);
+        d.requestOpen();
+        QVERIFY(d.wantsOpen());
+        d.stop();
+        QVERIFY(!d.active() && d.url().isEmpty() && d.slug().isEmpty() && d.name().isEmpty() && !d.fullscreen() && !d.wantsOpen());
+        const int n = changed.size();
+        d.stop();
+        QCOMPARE(changed.size(), n);
+        // a song starting, or a video opening, ends it
+        QVERIFY(d.start("alpha", "Alpha", "t", good));
+        d.songStarted();
+        QVERIFY(!d.active());
+        QVERIFY(d.start("alpha", "Alpha", "t", good));
+        d.videoOpened();
+        QVERIFY(!d.active());
+        // "take me back to the channel": asked by the dock, answered by the page
+        QVERIFY(d.start("alpha", "Alpha", "t", good));
+        QSignalSpy asked(&d, &StreamDock::wantsOpenChanged);
+        d.requestOpen();
+        QVERIFY(d.wantsOpen());
+        d.openHandled();
+        QVERIFY(!d.wantsOpen());
+        QCOMPARE(asked.size(), 2);
     }
 
 private slots:
