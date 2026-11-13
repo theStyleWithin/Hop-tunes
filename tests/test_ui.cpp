@@ -3242,10 +3242,13 @@ private slots:
             QTRY_VERIFY(item("kickLocalPretendChat") && item("kickLocalPretendChat")->isVisible());
             QVERIFY(item("kickLocalChat_pretend") && item("kickLocalChat_off"));
             window()->grabWindow();                                                    // draw a frame now: that is when the layouts are laid out (a slow headless run may not have drawn one yet)
-            QTRY_VERIFY2(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
-                     qPrintable(QStringLiteral("chat %1x%2, column %3x%4, play page %5x%6").arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height())
-                                .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())));
-            QVERIFY(item("kickLocalPretendChat")->mapToItem(item("kickLocalPlay"), QPointF(0, 0)).x() > item("kickLocalPlayer")->x());   // beside the picture
+            // (a long wait: on a slow runner the real video engine can keep the interface busy for a while while it opens the fixture file)
+            QTRY_VERIFY2_WITH_TIMEOUT(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
+                     qPrintable(QStringLiteral("chat %1x%2 visible=%3, column %4x%5, play page %6x%7, player started=%8 error=%9")
+                                .arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height()).arg(item("kickLocalPretendChat")->isVisible())
+                                .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())
+                                .arg(item("kickLocalPlayer")->property("started").toBool()).arg(item("kickLocalPlayer")->property("error").toString())), 30000);
+            QTRY_VERIFY(item("kickLocalPretendChat")->mapToItem(item("kickLocalPlay"), QPointF(0, 0)).x() > item("kickLocalPlayer")->x());   // beside the picture
             shot("kick-local-chat");
             QVERIFY(click("kickLocalChat_off"));
             QTRY_VERIFY(!item("kickLocalPretendChat")->isVisible());
