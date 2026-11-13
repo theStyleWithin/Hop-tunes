@@ -2300,11 +2300,11 @@ private slots:
         QQuickItem *maid = item("nekoMaid");
         QVERIFY(maid && maid->isVisible());
         QVERIFY(maid->x() > 0 && maid->x() < item("nekoScreen")->width());
-        for (int i = 0; i < 70; ++i) neko->advance(1000);                      // a minute in: customers have come and sat down
+        auto someoneIsIn = [neko] { for (int i = 0; i < NekoCafe::kMaxCustomers; ++i) if (neko->rules().customer(i).state != NekoCafe::None) return true; return false; };
+        for (int i = 0; i < 120 && !someoneIsIn(); ++i) neko->advance(1000);   // (the days are random: wait for the first customer to walk in)
+        QVERIFY2(someoneIsIn(), "customers came in");
+        neko->advance(8000);                                                   // and sit down
         QGuiApplication::processEvents();
-        bool anyone = false;
-        for (int i = 0; i < NekoCafe::kMaxCustomers; ++i) anyone = anyone || neko->rules().customer(i).state != NekoCafe::None;
-        QVERIFY2(anyone, "customers came in");
         shot("neko-cafe");
         // Esc pauses, Esc again leaves
         QTest::keyClick(w, Qt::Key_Escape);
