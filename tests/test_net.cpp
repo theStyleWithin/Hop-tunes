@@ -1350,56 +1350,6 @@ private slots:
 
 private slots:
     // ---- adding many channels at once from pasted text (no sign-in, nothing is sent) ----
-    void onlyThreeSignInRequestsMayCarryABodyOrAToken()
-    {
-        QString why;
-        NetLimits tokenReq; tokenReq.post = true; tokenReq.formBody = "grant_type=authorization_code";
-        NetLimits revokeReq; revokeReq.post = true;
-        NetLimits meReq; meReq.bearer = "tok";
-        NetLimits plain;
-        // the three exact requests
-        QVERIFY(AppNet::authUrlAllowed("kick", QUrl("https://id.kick.com/oauth/token"), tokenReq, &why));
-        QVERIFY(AppNet::authUrlAllowed("kick", QUrl("https://id.kick.com/oauth/revoke?token=abc&token_hint_type=access_token"), revokeReq, &why));
-        QVERIFY(AppNet::authUrlAllowed("kick", QUrl("https://api.kick.com/public/v1/users"), meReq, &why));
-        // anything else is refused: another path, host, scheme, port, user name, app, or the wrong shape of request
-        for (const char *u : {"https://id.kick.com/oauth/authorize", "https://id.kick.com/oauth/token/introspect", "https://id.kick.com/", "https://api.kick.com/public/v1/chat",
-                              "https://api.kick.com/public/v1/users/1", "https://kick.com/api/v1/user", "https://web.kick.com/oauth/token", "http://id.kick.com/oauth/token",
-                              "https://id.kick.com:8443/oauth/token", "https://me@id.kick.com/oauth/token", "https://id.kick.com.evil.example/oauth/token", "https://evil.example/oauth/token"}) {
-            QVERIFY2(!AppNet::authUrlAllowed("kick", QUrl(u), tokenReq, &why), u);
-            QVERIFY2(!AppNet::authUrlAllowed("kick", QUrl(u), meReq, &why), u);
-        }
-        QVERIFY(!AppNet::authUrlAllowed("someapp", QUrl("https://id.kick.com/oauth/token"), tokenReq, &why));
-        QVERIFY(!AppNet::authUrlAllowed("kick", QUrl("https://id.kick.com/oauth/token"), meReq, &why));                // a token never goes to the token address
-        QVERIFY(!AppNet::authUrlAllowed("kick", QUrl("https://api.kick.com/public/v1/users"), tokenReq, &why));       // a secret never goes to the api address
-        NetLimits both = tokenReq; both.bearer = "tok";
-        QVERIFY(!AppNet::authUrlAllowed("kick", QUrl("https://id.kick.com/oauth/token"), both, &why));
-        QVERIFY(!AppNet::authUrlAllowed("kick", QUrl("https://id.kick.com/oauth/token?x=1"), tokenReq, &why));
-        QVERIFY(!AppNet::authUrlAllowed("kick", QUrl("https://id.kick.com/oauth/revoke"), revokeReq, &why));           // revoke names its token
-        QVERIFY(!AppNet::authUrlAllowed("kick", QUrl("https://api.kick.com/public/v1/users?id=5"), meReq, &why));
-        // the sign-in sites are not on the ordinary list: a plain GET to them is refused
-        QVERIFY(!AppNet::hostsFor("kick").contains("id.kick.com") && !AppNet::hostsFor("kick").contains("api.kick.com"));
-        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://id.kick.com/oauth/authorize"), &why));
-        QVERIFY(AppNet::authHostsFor("kick").contains("id.kick.com") && AppNet::authHostsFor("kick").contains("api.kick.com"));
-        QVERIFY(AppNet::authHostsFor("someapp").isEmpty());
-        // through the gateway: refused requests never reach the network, and a redirect is never followed
-        fresh();
-        int hits = 0;
-        ft->handler = [&hits](const QUrl &) { ++hits; NetReply r; r.status = 302; r.location = QUrl("https://evil.example/"); return r; };
-        NetReply got; bool done = false;
-        net.get("kick", QUrl("https://id.kick.com/oauth/authorize"), [&](NetReply r) { got = r; done = true; }, plain);
-        QVERIFY(done && !got.error.isEmpty() && hits == 0);                                                               // plain get to a sign-in site: refused
-        done = false;
-        NetLimits bad = tokenReq;
-        net.get("kick", QUrl("https://evil.example/oauth/token"), [&](NetReply r) { got = r; done = true; }, bad);
-        QVERIFY(done && !got.error.isEmpty() && hits == 0);                                                               // a secret to another host: refused
-        done = false;
-        net.get("kick", QUrl("https://id.kick.com/oauth/token"), [&](NetReply r) { got = r; done = true; }, tokenReq);
-        QTRY_VERIFY(done);
-        QCOMPARE(hits, 1);
-        QVERIFY(got.error.contains("redirect"));                                                                          // the secret did not follow the redirect
-        QCOMPARE(ft->asked.size(), 1);
-    }
-
     void pastedNamesAndLinksJoinTheFollowListWithoutAskingKick()
     {
         fresh();
@@ -1459,6 +1409,25 @@ private slots:
         QVERIFY(!k.isInPlaylist(clips, "zulu"));
     }
 
+    void thereIsNoSignInAndTheGatewayOnlyEverGets()
+    {
+        QString why;
+        const NetLimits plain;
+        // the sign-in sites of an earlier version are not on any list: a request to them is refused, and nothing here can post or carry a token
+        QVERIFY(!AppNet::hostsFor("kick").contains("id.kick.com") && !AppNet::hostsFor("kick").contains("api.kick.com"));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://id.kick.com/oauth/authorize"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://api.kick.com/public/v1/users"), &why));
+        fresh();
+        int hits = 0;
+        ft->handler = [&hits](const QUrl &) { ++hits; return NetReply(); };
+        NetReply got; bool done = false;
+        net.get("kick", QUrl("https://id.kick.com/oauth/token"), [&](NetReply r) { got = r; done = true; }, plain);
+        QVERIFY(done && !got.error.isEmpty() && hits == 0);
+        done = false;
+        net.get("kick", QUrl("https://api.kick.com/public/v1/users"), [&](NetReply r) { got = r; done = true; }, plain);
+        QVERIFY(done && !got.error.isEmpty() && hits == 0);
+    }
+
     void anOldSavedSignInIsNeitherReadNorKept()
     {
         fresh();
@@ -1466,268 +1435,11 @@ private slots:
         // an earlier version kept a sign-in token in the profile: it is ignored, and the next save leaves it out
         k.setListsJson(QJsonObject{{"account", QJsonObject{{"token", "tok-OLD-SECRET"}, {"name", "me"}}}, {"following", QJsonArray{"keep_me"}}});
         QVERIFY(k.isFollowing("keep_me"));
-        QVERIFY(!k.signedIn() && !k.appConfigured());
         const QJsonObject saved = k.listsJson();
         QVERIFY(!saved.contains("account"));
         QVERIFY(!QJsonDocument(saved).toJson().contains("tok-OLD-SECRET"));
     }
 
-    // ---- Kick's official sign-in (own Kick app, PKCE, identity only) ----
-    void pkceMatchesTheRfcExample()
-    {
-        // RFC 7636 appendix B
-        QCOMPARE(KickAuth::pkceChallenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"), QString("E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"));
-        const QString v = KickAuth::randomToken(64, true), st = KickAuth::randomToken(32, false);
-        QCOMPARE(v.size(), 64);
-        QVERIFY(QRegularExpression("^[A-Za-z0-9\\-._~]{64}$").match(v).hasMatch());
-        QVERIFY(QRegularExpression("^[0-9a-f]{32}$").match(st).hasMatch());
-        QVERIFY(KickAuth::randomToken(64, true) != v);
-        QCOMPARE(QString::fromUtf8(KickAuth::form({{"a", "b c"}, {"d", "x&y=z"}})), QString("a=b%20c&d=x%26y%3Dz"));
-    }
-
-    // one pass through the whole flow with a browser played by a plain socket, and Kick played by the fake transport
-    static QByteArray callbackGet(quint16 port, const QByteArray &target)
-    {
-        // (the listener lives in this same thread, so the "browser" must wait through the event loop, never block it)
-        QTcpSocket s;
-        QByteArray all;
-        QObject::connect(&s, &QTcpSocket::readyRead, &s, [&] { all += s.readAll(); });
-        s.connectToHost(QHostAddress::LocalHost, port);
-        QElapsedTimer t; t.start();
-        while ((s.state() == QAbstractSocket::HostLookupState || s.state() == QAbstractSocket::ConnectingState) && t.elapsed() < 2000) QTest::qWait(5);
-        if (s.state() != QAbstractSocket::ConnectedState) return "no connection";
-        s.write("GET " + target + " HTTP/1.1\r\nHost: localhost\r\n\r\n");
-        while (s.state() == QAbstractSocket::ConnectedState && t.elapsed() < 3000) QTest::qWait(5);
-        all += s.readAll();
-        return all;
-    }
-
-    void signingInWithAnOwnKickAppIsPkceAndStaysOnThisComputer()
-    {
-        fresh();
-        ft->handler = [this](const QUrl &u) {
-            if (u.path() == "/oauth/token") {
-                const QByteArray f = ft->limitsAsked.last().formBody;
-                if (f.contains("grant_type=authorization_code")) return ok("{\"access_token\":\"acc-1\",\"refresh_token\":\"ref-1\",\"token_type\":\"Bearer\",\"expires_in\":3600,\"scope\":\"user:read\"}");
-                return ok("{\"access_token\":\"acc-2\",\"refresh_token\":\"ref-2\",\"expires_in\":3600}");
-            }
-            if (u.path() == "/public/v1/users") return ok("{\"data\":[{\"name\":\"Streamer One\",\"user_id\":42,\"email\":\"x@example.com\"}],\"message\":\"OK\"}");
-            if (u.path() == "/oauth/revoke") return ok("{}");
-            return ok("{}");
-        };
-        KickClient k(&net);
-        k.auth()->setPort(0);                                                        // any free port in the test
-        QSignalSpy saves(k.auth(), &KickAuth::saveRequested);
-        QCOMPARE(k.signInState(), QString());
-        k.startSignIn();                                                             // nothing set up yet
-        QCOMPARE(k.signInState(), QString());                                        // (the client needs the app open first)
-        k.open();
-        QTest::qWait(20);
-        k.startSignIn();
-        QCOMPARE(k.signInState(), QString("error"));
-        QVERIFY(k.signInMessage().contains("client ID"));
-        QVERIFY(ft->asked.indexOf(QUrl("https://id.kick.com/oauth/token")) < 0);     // nothing was sent
-        k.setAppCredentials("  my-client-id ", " my-secret ");
-        QVERIFY(k.appConfigured());
-        QCOMPARE(k.appClientId(), QString("my-client-id"));
-        QCOMPARE(k.signInState(), QString());                                        // (the old error is gone)
-        QVERIFY(saves.size() >= 1);
-        k.startSignIn();
-        QCOMPARE(k.signInState(), QString("waiting"));
-        // the address Kick's own page gets: exactly the parameters the docs list
-        const QUrl url(k.signInUrl());
-        QCOMPARE(url.scheme() + "://" + url.host() + url.path(), QString("https://id.kick.com/oauth/authorize"));
-        const QUrlQuery q(url);
-        QCOMPARE(q.queryItemValue("response_type"), QString("code"));
-        QCOMPARE(q.queryItemValue("client_id"), QString("my-client-id"));
-        QCOMPARE(q.queryItemValue("scope"), QString("user:read"));
-        QCOMPARE(q.queryItemValue("code_challenge_method"), QString("S256"));
-        QVERIFY(QRegularExpression("^[A-Za-z0-9_-]{43}$").match(q.queryItemValue("code_challenge")).hasMatch());
-        const QString state = q.queryItemValue("state", QUrl::FullyDecoded);
-        QVERIFY(state.size() >= 32);
-        const QString redirect = q.queryItemValue("redirect_uri", QUrl::FullyDecoded);
-        QVERIFY(redirect.startsWith("http://localhost:") && redirect.endsWith("/callback"));
-        QCOMPARE(redirect, k.redirectUrl());
-        const quint16 port = quint16(QUrl(redirect).port());
-        QVERIFY(port > 0);
-        // a browser's favicon request, a callback with the wrong state, and one with no state are all refused and the sign-in keeps waiting
-        QVERIFY(callbackGet(port, "/favicon.ico").contains("404"));
-        QVERIFY(callbackGet(port, "/callback?code=stolen&state=wrong").contains("404"));
-        QVERIFY(callbackGet(port, "/callback?code=stolen").contains("404"));
-        QCOMPARE(k.signInState(), QString("waiting"));
-        QVERIFY(ft->asked.indexOf(QUrl("https://id.kick.com/oauth/token")) < 0);
-        // the real callback
-        const QByteArray page = callbackGet(port, "/callback?code=the-code&state=" + QUrl::toPercentEncoding(state));
-        QVERIFY(page.startsWith("HTTP/1.1 200") && page.contains("go back to Hop-tunes"));
-        QVERIFY(!page.contains("the-code"));                                         // the code is never echoed
-        QTRY_VERIFY_WITH_TIMEOUT(k.signedIn(), 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(k.accountName(), QString("Streamer One"), 5000);
-        QCOMPARE(k.signInState(), QString());
-        QVERIFY(callbackGet(port, "/callback?code=again&state=" + QUrl::toPercentEncoding(state)).contains("no connection"));   // one-shot: the listener is closed
-        // what was sent to Kick: a form post with every field the docs list, then the bearer get
-        int tokenAt = -1, meAt = -1;
-        for (int i = 0; i < ft->asked.size(); ++i) { if (ft->asked.at(i).path() == "/oauth/token" && tokenAt < 0) tokenAt = i; if (ft->asked.at(i).path() == "/public/v1/users" && meAt < 0) meAt = i; }
-        QVERIFY(tokenAt >= 0 && meAt > tokenAt);
-        const NetLimits t = ft->limitsAsked.at(tokenAt);
-        QVERIFY(t.post && t.bearer.isEmpty());
-        const QUrlQuery form(QString::fromUtf8(t.formBody));
-        QCOMPARE(form.queryItemValue("grant_type"), QString("authorization_code"));
-        QCOMPARE(form.queryItemValue("client_id"), QString("my-client-id"));
-        QCOMPARE(form.queryItemValue("client_secret"), QString("my-secret"));
-        QCOMPARE(form.queryItemValue("code"), QString("the-code"));
-        QCOMPARE(form.queryItemValue("redirect_uri", QUrl::FullyDecoded), redirect);
-        QVERIFY(form.queryItemValue("code_verifier").size() == 64);
-        QCOMPARE(KickAuth::pkceChallenge(form.queryItemValue("code_verifier")), q.queryItemValue("code_challenge"));   // the verifier matches the challenge sent earlier
-        const NetLimits m = ft->limitsAsked.at(meAt);
-        QCOMPARE(m.bearer, QByteArray("acc-1"));
-        QVERIFY(!m.post && m.formBody.isEmpty());
-        // kept with the profile, and only there
-        const QJsonObject saved = k.listsJson();
-        const QJsonObject acc = saved.value("account").toObject();
-        QCOMPARE(acc.value("access").toString(), QString("acc-1"));
-        QCOMPARE(acc.value("refresh").toString(), QString("ref-1"));
-        QCOMPARE(acc.value("clientSecret").toString(), QString("my-secret"));
-        QCOMPARE(acc.value("name").toString(), QString("Streamer One"));
-        KickClient again(&net);
-        again.setListsJson(saved);
-        QVERIFY(again.signedIn() && again.appConfigured());
-        QCOMPARE(again.accountName(), QString("Streamer One"));
-        // a guest (or another profile) has none of it
-        KickClient guest(&net);
-        guest.setListsJson(QJsonObject{});
-        QVERIFY(!guest.signedIn() && !guest.appConfigured());
-        QVERIFY(!guest.listsJson().contains("account"));
-        // tokens without the app that made them are dropped, and junk is safe
-        guest.setListsJson(QJsonObject{{"account", QJsonObject{{"access", "x"}, {"refresh", "y"}}}});
-        QVERIFY(!guest.signedIn());
-        guest.setListsJson(QJsonObject{{"account", QJsonObject{{"clientId", QString(500, 'x')}, {"clientSecret", "s"}, {"access", QString(9000, 'a')}}}});
-        QVERIFY(!guest.signedIn() && !guest.appConfigured());
-        // signing out forgets the tokens at once, tells Kick to revoke both, and keeps the app's ID and secret
-        const int before = ft->asked.size();
-        k.signOut();
-        QVERIFY(!k.signedIn() && k.accountName().isEmpty());
-        QVERIFY(k.appConfigured());
-        QTRY_VERIFY(ft->asked.size() >= before + 2);
-        int revokes = 0;
-        for (int i = before; i < ft->asked.size(); ++i) if (ft->asked.at(i).path() == "/oauth/revoke") {
-            ++revokes;
-            QVERIFY(ft->limitsAsked.at(i).post && ft->limitsAsked.at(i).formBody.isEmpty());
-            QVERIFY(ft->asked.at(i).query().contains("token="));
-        }
-        QCOMPARE(revokes, 2);
-        QVERIFY(!QJsonDocument(k.listsJson()).toJson().contains("acc-1"));
-        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("kick", u) || u.host() == "id.kick.com" || u.host() == "api.kick.com", qPrintable(u.toString()));
-    }
-
-    void aSignInThatKickRefusesOrThePersonCancelsStopsCleanly()
-    {
-        fresh();
-        int mode = 0;                                                                // 0 token ok, 1 token refused (400)
-        ft->handler = [&mode](const QUrl &u) {
-            NetReply bad; bad.status = 400; bad.error = "the site answered 400";
-            if (u.path() == "/oauth/token") return mode == 1 ? bad : ok("{\"access_token\":\"a\",\"refresh_token\":\"r\",\"expires_in\":3600}");
-            return ok("{\"data\":[{\"name\":\"N\"}]}");
-        };
-        KickClient k(&net);
-        k.auth()->setPort(0);
-        k.open();
-        k.setAppCredentials("id", "secret");
-        auto stateOf = [&k] { return QUrlQuery(QUrl(k.signInUrl())).queryItemValue("state", QUrl::FullyDecoded); };
-        // the person says no on kick.com
-        k.startSignIn();
-        quint16 port = quint16(QUrl(k.redirectUrl()).port());
-        QVERIFY(callbackGet(port, "/callback?error=access_denied&state=" + QUrl::toPercentEncoding(stateOf())).startsWith("HTTP/1.1 200"));
-        QCOMPARE(k.signInState(), QString("error"));
-        QVERIFY(k.signInMessage().contains("did not allow"));
-        QVERIFY(!k.signedIn());
-        // Kick refuses the code: said in plain words, nothing is kept
-        mode = 1;
-        k.cancelSignIn();
-        k.startSignIn();
-        port = quint16(QUrl(k.redirectUrl()).port());
-        callbackGet(port, "/callback?code=c&state=" + QUrl::toPercentEncoding(stateOf()));
-        QTRY_COMPARE_WITH_TIMEOUT(k.signInState(), QString("error"), 5000);
-        QVERIFY(k.signInMessage().contains("client ID") && k.signInMessage().contains("secret"));
-        QVERIFY(!k.signedIn() && !QJsonDocument(k.listsJson()).toJson().contains("\"access\""));
-        // cancelling stops the listener
-        k.cancelSignIn();
-        QCOMPARE(k.signInState(), QString());
-        k.startSignIn();
-        port = quint16(QUrl(k.redirectUrl()).port());
-        QCOMPARE(k.signInState(), QString("waiting"));
-        k.cancelSignIn();
-        QCOMPARE(k.signInState(), QString());
-        QVERIFY(callbackGet(port, "/callback?code=c&state=x").contains("no connection"));
-        // closing the app while waiting stops the listener too
-        k.startSignIn();
-        port = quint16(QUrl(k.redirectUrl()).port());
-        k.close();
-        QVERIFY(callbackGet(port, "/callback?code=c&state=x").contains("no connection"));
-    }
-
-    void anExpiredTokenIsRefreshedOnceAndAFailedRefreshSignsOut()
-    {
-        fresh();
-        int usersMode = 0;                                                           // 0 ok, 1 first call 401 then ok, 2 always 401
-        int usersCalls = 0; bool refreshOk = true;
-        ft->handler = [&](const QUrl &u) {
-            NetReply un; un.status = 401; un.error = "the site answered 401";
-            if (u.path() == "/oauth/token") return refreshOk ? ok("{\"access_token\":\"fresh\",\"expires_in\":3600}") : un;
-            if (u.path() == "/public/v1/users") {
-                ++usersCalls;
-                if (usersMode == 2 || (usersMode == 1 && ft->limitsAsked.last().bearer != "fresh")) return un;
-                return ok("{\"data\":[{\"name\":\"Back Again\"}]}");
-            }
-            return ok("{}");
-        };
-        const QJsonObject account{{"clientId", "id"}, {"clientSecret", "sec"}, {"access", "old"}, {"refresh", "ref"}, {"expiresAt", double(QDateTime::currentSecsSinceEpoch() + 3600)}, {"name", "Streamer"}};
-        // opening the app while signed in asks who it is (one call to the sign-in site, only because the person is signed in)
-        usersMode = 1;
-        { KickClient k(&net); k.setListsJson(QJsonObject{{"account", account}}); k.open(); QTest::qWait(20);
-          QTRY_COMPARE_WITH_TIMEOUT(k.accountName(), QString("Back Again"), 5000);  // 401 -> refreshed once -> asked again
-          QVERIFY(k.signedIn());
-          QCOMPARE(k.listsJson().value("account").toObject().value("access").toString(), QString("fresh"));
-          QCOMPARE(k.listsJson().value("account").toObject().value("refresh").toString(), QString("ref"));   // (no new one handed out: the old stays) }
-        }
-        // a token about to run out is refreshed before it is used
-        usersMode = 0; usersCalls = 0;
-        QJsonObject soon = account; soon["expiresAt"] = double(QDateTime::currentSecsSinceEpoch() + 30);
-        { KickClient k(&net); k.setListsJson(QJsonObject{{"account", soon}}); k.open();
-          QTRY_VERIFY_WITH_TIMEOUT(k.listsJson().value("account").toObject().value("access").toString() == "fresh", 5000);
-          QTRY_VERIFY_WITH_TIMEOUT(k.accountName() == "Back Again", 5000); }
-        // the refresh fails too: signed out with a plain sentence, nothing kept but the app's ID and secret
-        usersMode = 2; refreshOk = false;
-        { KickClient k(&net); k.setListsJson(QJsonObject{{"account", account}}); k.open();
-          QTRY_VERIFY_WITH_TIMEOUT(!k.signedIn(), 5000);
-          QVERIFY(k.signInMessage().contains("expired"));
-          QVERIFY(!QJsonDocument(k.listsJson()).toJson().contains("\"old\"")); }
-        // offline or Kick down: the person stays signed in and the name stays
-        usersMode = 0; refreshOk = true;
-        ft->handler = [](const QUrl &) { NetReply r; r.error = "could not connect"; return r; };
-        { KickClient k(&net); k.setListsJson(QJsonObject{{"account", account}}); k.open(); QTest::qWait(100);
-          QVERIFY(k.signedIn()); QCOMPARE(k.accountName(), QString("Streamer")); }
-        // not signed in: opening the app never contacts the sign-in sites
-        fresh();
-        { KickClient k(&net); k.open(); QTest::qWait(50);
-          for (const QUrl &u : ft->asked) QVERIFY2(u.host() != "id.kick.com" && u.host() != "api.kick.com", qPrintable(u.toString())); }
-    }
-
-    void theSignInPortBeingBusyIsSaidPlainly()
-    {
-        fresh();
-        QTcpServer busy;
-        QVERIFY(busy.listen(QHostAddress::LocalHost, 0));
-        KickClient k(&net);
-        k.auth()->setPort(busy.serverPort());
-        k.open();
-        k.setAppCredentials("id", "secret");
-        k.startSignIn();
-        QCOMPARE(k.signInState(), QString("error"));
-        QVERIFY(k.signInMessage().contains("port"));
-        QVERIFY(k.signInUrl().isEmpty());
-    }
-
-private slots:
     // ---- searching by name: closest first, and phrases Kick finds nothing for ----
     void searchResultsAreRankedByHowCloseTheNameIs()
     {

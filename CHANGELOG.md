@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Removed
+- **Kick's optional sign-in.** The official sign-in (your own Kick app, tokens kept in your profile) is gone, along with its settings and the loopback listener. Kick is now purely a local viewing experience: your follows, blocks and playlists live in your Hop-tunes profile and are never tied to a Kick account. The network gateway is back to plain GET requests only (no posts, no tokens), and the two sign-in sites (id.kick.com and api.kick.com) are no longer contacted or listed on the permission card. Anything an older version saved for the sign-in (the app's ID and secret, tokens) is ignored and dropped from your profile the next time it is saved. Kick's own live chat is not offered (Kick has no way to read it without signing in); the chat beside a stream stays none or pretend.
+
 ## [1.11.0] - 2026-11-13: A stream that keeps playing
 
 ### Added

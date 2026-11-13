@@ -40,11 +40,9 @@ public:
         req.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
         req.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
         req.setTransferTimeout(limits.timeoutMs);
-        if (limits.post) req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArray("application/x-www-form-urlencoded"));
-        if (!limits.bearer.isEmpty()) req.setRawHeader("Authorization", "Bearer " + limits.bearer);
         if (limits.rangeStart >= 0 && limits.rangeLength > 0)
             req.setRawHeader("Range", "bytes=" + QByteArray::number(limits.rangeStart) + "-" + QByteArray::number(limits.rangeStart + limits.rangeLength - 1));
-        QNetworkReply *rep = limits.post ? m_nam.post(req, limits.formBody) : m_nam.get(req);
+        QNetworkReply *rep = m_nam.get(req);
         m_live.insert(rep);
         QObject::connect(rep, &QNetworkReply::readyRead, rep, [rep, limits] {
             if (rep->bytesAvailable() > limits.maxBody) rep->abort();           // too much: stop
@@ -102,27 +100,6 @@ bool AppNet::streamUrlAllowed(const QString &app, const QUrl &url, QString *why)
     return no(QStringLiteral("%1 is not a video site this app uses").arg(host));
 }
 
-QStringList AppNet::authHostsFor(const QString &app)
-{
-    return app == QLatin1String("kick") ? QStringList{QStringLiteral("id.kick.com"), QStringLiteral("api.kick.com")} : QStringList{};
-}
-
-bool AppNet::authUrlAllowed(const QString &app, const QUrl &url, const NetLimits &limits, QString *why)
-{
-    auto no = [&](const QString &m) { if (why) *why = m; return false; };
-    if (app != QLatin1String("kick")) return no(QStringLiteral("this app has no sign-in"));
-    if (!url.isValid() || url.scheme() != QLatin1String("https") || !url.userInfo().isEmpty() || (url.port() != -1 && url.port() != 443) || !url.fragment().isEmpty())
-        return no(QStringLiteral("that is not a sign-in address"));
-    const QString host = url.host().toLower(), path = url.path();
-    if (host == QLatin1String("id.kick.com") && path == QLatin1String("/oauth/token"))
-        return (limits.post && !limits.formBody.isEmpty() && limits.bearer.isEmpty() && url.query().isEmpty()) ? true : no(QStringLiteral("the token request is a form post"));
-    if (host == QLatin1String("id.kick.com") && path == QLatin1String("/oauth/revoke"))
-        return (limits.post && limits.formBody.isEmpty() && limits.bearer.isEmpty() && url.hasQuery()) ? true : no(QStringLiteral("the revoke request is a post with the token in its query"));
-    if (host == QLatin1String("api.kick.com") && path == QLatin1String("/public/v1/users"))
-        return (!limits.post && limits.formBody.isEmpty() && !limits.bearer.isEmpty() && !url.hasQuery()) ? true : no(QStringLiteral("the user request is a get with the token"));
-    return no(QStringLiteral("that is not a sign-in address"));
-}
-
 bool AppNet::urlAllowed(const QString &app, const QUrl &url, QString *why)
 {
     auto no = [&](const QString &m) { if (why) *why = m; return false; };
@@ -167,9 +144,7 @@ void AppNet::get(const QString &app, const QUrl &url, std::function<void(NetRepl
     QString why;
     if (!m_allowed.contains(app)) { NetReply r; r.error = QStringLiteral("this app is not allowed to use the internet (settings > apps)"); done(r); return; }
     if (!m_open.contains(app)) { NetReply r; r.error = QStringLiteral("the app is not open"); done(r); return; }
-    if (limits.isAuth()) {                                                      // sign-in: only its three exact requests
-        if (!authUrlAllowed(app, url, limits, &why)) { NetReply r; r.error = why; done(r); return; }
-    } else if (!urlAllowed(app, url, &why)) { NetReply r; r.error = why; done(r); return; }
+    if (!urlAllowed(app, url, &why)) { NetReply r; r.error = why; done(r); return; }
     if (!m_transport) m_transport = std::make_unique<QtTransport>();
     fetch(app, url, 0, m_epoch.value(app), limits, std::move(done));
 }
@@ -182,7 +157,6 @@ void AppNet::fetch(const QString &app, const QUrl &url, int hops, quint64 epoch,
     m_transport->get(url, userAgent(), "application/json, image/*;q=0.8, */*;q=0.5", limits,
         [self, app, url, hops, epoch, limits, done = std::move(done)](NetReply r) mutable {
             if (!self || self->m_epoch.value(app) != epoch) return;                 // the app was closed meanwhile: nothing is delivered
-            if (r.status >= 300 && r.status < 400 && limits.isAuth()) { NetReply e; e.error = QStringLiteral("kick answered with a redirect, which sign-in never follows"); done(e); return; }
             if (r.status >= 300 && r.status < 400 && r.location.isValid()) {
                 const QUrl next = url.resolved(r.location);
                 QString why;

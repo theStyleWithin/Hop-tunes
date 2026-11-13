@@ -2,7 +2,6 @@
 #pragma once
 
 #include "net/AppNet.h"
-#include "apps/KickAuth.h"
 
 #include <QTimer>
 
@@ -59,19 +58,10 @@ class KickClient : public QObject {
     Q_PROPERTY(bool connected READ isOpen NOTIFY openChanged)
     Q_PROPERTY(QString health READ health NOTIFY healthChanged)               // Kick's servers as seen from here: "" (not known yet) | "good" | "slow" (yellow) | "down" (red)
     Q_PROPERTY(QString healthText READ healthText NOTIFY healthChanged)
-    // What the chat beside the stream is: "off" (the start), "pretend" (Hop-tunes' made-up chat, nobody in it is real) or "kick" (Kick's own
-    // live chat). Kick's chat is only for someone who chose to sign in to Kick; without that the choice is no chat or the pretend one.
+    // What the chat beside the stream is: "off" (the start) or "pretend" (Hop-tunes' made-up chat, nobody in it is real). Kick's own chat is not
+    // available: Kick offers no way to read it without signing in, and Hop-tunes has no sign-in.
     Q_PROPERTY(QString chatMode READ chatMode WRITE setChatMode NOTIFY chatModeChanged)
     Q_PROPERTY(QString importMessage READ importMessage NOTIFY importChanged)       // what the last paste-import did
-    // Kick's official sign-in (optional; only shows who is signed in): see KickAuth
-    Q_PROPERTY(bool signedIn READ signedIn NOTIFY authChanged)
-    Q_PROPERTY(QString accountName READ accountName NOTIFY authChanged)
-    Q_PROPERTY(QString signInState READ signInState NOTIFY authChanged)             // "" | "waiting" | "working" | "error"
-    Q_PROPERTY(QString signInMessage READ signInMessage NOTIFY authChanged)
-    Q_PROPERTY(QString signInUrl READ signInUrl NOTIFY authChanged)                 // the id.kick.com page to open in the browser
-    Q_PROPERTY(bool appConfigured READ appConfigured NOTIFY authChanged)            // the person's own Kick app (client ID and secret) is filled in
-    Q_PROPERTY(QString appClientId READ appClientId NOTIFY authChanged)
-    Q_PROPERTY(QString redirectUrl READ redirectUrl NOTIFY authChanged)             // to register in their Kick app
 public:
     static constexpr const char *kApp = "kick";
     static constexpr int kPageSize = 36;
@@ -128,15 +118,6 @@ public:
     QString chatMode() const { return m_chatMode; }
     void setChatMode(const QString &mode);
     QString importMessage() const { return m_importMessage; }
-    bool signedIn() const { return m_auth->signedIn(); }
-    QString accountName() const { return m_auth->accountName(); }
-    QString signInState() const { return m_auth->state(); }
-    QString signInMessage() const { return m_auth->message(); }
-    QString signInUrl() const { return m_auth->authorizeUrl().toString(QUrl::FullyEncoded); }
-    bool appConfigured() const { return m_auth->configured(); }
-    QString appClientId() const { return m_auth->clientId(); }
-    QString redirectUrl() const { return m_auth->redirectUri(); }
-    KickAuth *auth() const { return m_auth; }
 
     // the app opens: the gateway opens and the first list is asked for. close() drops everything still on the way.
     Q_INVOKABLE void open();
@@ -149,14 +130,7 @@ public:
     Q_INVOKABLE void loadPastStreams();            // the open channel's finished broadcasts (only when asked)
     Q_INVOKABLE void loadClips();                  // and its clips
     Q_INVOKABLE bool streamAllowed(const QString &url) const;   // the Qt Multimedia player (Android) asks before it opens a stream
-    // Optional sign-in, the way Kick's TV-link page works: Hop-tunes shows a 6-digit code and an address on kick.com; you approve it there
-    // (signed in to Kick in your own browser) and Hop-tunes is given a session token, kept only in this profile. Nothing needs it to
-    // watch; it only lets you import your follow list into the local follow list. Unofficial: Kick can change it.
     // adds many channels at once from pasted names or kick.com links: to the follow list, or to a playlist of channels (its id). Nothing is sent to Kick.
-    Q_INVOKABLE void setAppCredentials(const QString &clientId, const QString &clientSecret) { m_auth->setCredentials(clientId, clientSecret); }
-    Q_INVOKABLE void startSignIn() { if (ready()) m_auth->signIn(); }
-    Q_INVOKABLE void cancelSignIn() { m_auth->cancel(); }
-    Q_INVOKABLE void signOut() { m_auth->signOut(); }
     Q_INVOKABLE QVariantMap importNames(const QString &text, const QString &playlistId = QString());
     Q_INVOKABLE void refreshFollowing();           // one lookup per followed channel, only when asked
 
@@ -221,7 +195,6 @@ signals:
     void openChanged();
     void chatModeChanged();
     void importChanged();
-    void authChanged();
 
 private:
     void requestList(bool more);
@@ -279,7 +252,6 @@ private:
     void refreshChannels(const QStringList &todo);
     QString m_chatMode = QStringLiteral("off");
     QString m_importMessage;
-    KickAuth *m_auth = nullptr;
     QHash<QString, QVariantMap> m_status;   // slug -> {live, viewers, name, avatar, checked}
     int m_followChecks = 0;
 };
