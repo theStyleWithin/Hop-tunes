@@ -12,6 +12,8 @@ Item {
     property string url: ""                      // the live stream's address ("" = nothing playing, no engine started)
     property string file: ""                     // a downloaded video on this device (plays from disk, nothing is fetched)
     readonly property bool local: file !== ""
+    readonly property bool showSeekMeter: local && !hop.inPictureInPicture && error === ""   // offline videos only, never a live stream
+    readonly property bool showLiveTag: !local
     readonly property var surface: mpvLoader.item ? mpvLoader.item : (gstLoader.item ? gstLoader.item : qtLoader.item)
     readonly property string error: blocked ? "that stream address is not one this app may open" : (surface ? String(surface.error) : "")
     readonly property bool started: surface !== null && (url !== "" || file !== "")
@@ -109,13 +111,14 @@ Item {
             text: "connecting…"; color: Qt.rgba(1, 1, 1, 0.7); font { family: Theme.font; pixelSize: Theme.fs(18) }
         }
 
-        // the seek meter along the top: drag left to rewind, right to skip ahead (a downloaded video: all of it; a live stream: the stretch Kick keeps)
+        // the seek meter along the top: drag left to rewind, right to skip ahead. Only for a video kept on this device (a download or a recording):
+        // a live stream is just watched, so it has no meter (it has the "live" tag below instead)
         SeekMeter {
+            objectName: "kickSeekMeter"
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 10 }
-            visible: root.started && !hop.inPictureInPicture && root.error === ""
+            visible: root.started && root.showSeekMeter
             position: root.surface ? root.surface.position : 0
             duration: root.surface && root.surface.duration > 0 ? root.surface.duration : 0
-            live: !root.local
             onSeekRequested: ms => { if (root.surface) root.surface.seek(ms) }
         }
 
@@ -131,6 +134,12 @@ Item {
                 Accessible.name: "pause or play"
                 background: Rectangle { radius: 18; color: Qt.rgba(0, 0, 0, 0.55); border { width: 1; color: Qt.rgba(1, 1, 1, 0.5) } }
                 contentItem: Label { text: root.surface && root.surface.paused ? "▶" : "❚❚"; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 13 }
+            }
+            Label {
+                objectName: "kickLiveTag"
+                visible: root.showLiveTag
+                text: "live"; color: "white"; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                leftPadding: 7; rightPadding: 7; topPadding: 2; bottomPadding: 2; background: Rectangle { color: "#e5484d"; radius: 3 }
             }
             Item { Layout.fillWidth: true }
             AbstractButton {   // a small window over the home screen and other apps (Android)

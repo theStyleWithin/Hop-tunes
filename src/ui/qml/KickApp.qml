@@ -101,7 +101,10 @@ FocusScope {
     function download(entry) {
         root.dlMessage = hop.downloads.enqueue({ id: entry.id, kind: entry.kind, title: entry.title, channel: kick.channel.slug || "", thumb: entry.thumb,
                                                  url: entry.url, maxHeight: root.dlHeight, estimate: entry.estimate, seconds: entry.seconds })
-    }    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
+    }    // who is followed, as a property that tells QML when it changes (calling kick.isFollowing() in a binding does not: the button kept saying "follow")
+    readonly property var followedSlugs: kick ? kick.following.map(function (f) { return String(f.slug).toLowerCase() }) : []
+    function isFollowed(slug) { return followedSlugs.indexOf(String(slug || "").toLowerCase()) >= 0 }
+    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
     // a phone turned sideways: watching becomes a widescreen "theatre" (the picture as big as it can be, the chat beside it, no bars around)
     readonly property bool landscape: phone && width > height * 1.25
     readonly property bool theatre: landscape && ((page === "watch" && watchTab === "live") || page === "play")
@@ -493,7 +496,7 @@ FocusScope {
                                         MouseArea { anchors.fill: parent; onClicked: cardMenu.popup() }
                                         Menu {
                                             id: cardMenu
-                                            MenuItem { text: kick.isFollowing(modelData.slug) ? "unfollow" : "follow"
+                                            MenuItem { text: root.isFollowed(modelData.slug) ? "unfollow" : "follow"
                                                        onTriggered: kick.isFollowing(modelData.slug) ? kick.unfollow(modelData.slug) : kick.follow(modelData.slug) }
                                             MenuItem { text: "open"; onTriggered: root.openChannel(modelData.slug) }
                                             MenuItem { objectName: "kickBlockMenu_" + modelData.slug; text: "block this streamer"
@@ -596,7 +599,9 @@ FocusScope {
                 RowLayout {
                     spacing: 8; Layout.fillWidth: root.phone
                     PlainButton { objectName: "kickFollowButton"; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 104 : -1
-                                  text: kick.isFollowing(kick.channel.slug || "") ? "★ following" : "☆ follow"
+                                  readonly property bool followed: root.isFollowed(kick.channel.slug)
+                                  primary: followed
+                                  text: followed ? "★ following" : "☆ follow"
                                   onClicked: kick.isFollowing(kick.channel.slug) ? kick.unfollow(kick.channel.slug) : kick.follow(kick.channel.slug) }
                     PlainButton { objectName: "kickAddToPlaylist"; text: root.phone ? "+ list" : "+ playlist"; implicitHeight: 36; Layout.minimumWidth: 0; Layout.preferredWidth: root.phone ? 84 : -1
                                   onClicked: root.addMenu("channels", ({ slug: kick.channel.slug }), kick.channel.slug || "", Qt.point(0, height)) }
