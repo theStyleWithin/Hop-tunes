@@ -82,6 +82,20 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.10.0" date="2026-11-13">
+      <description>
+        <p>Kick grows up: on Android, with downloads, recording, playlists and a lot of polish.</p>
+        <ul>
+          <li>Kick on Android, with the same promises as on the computer.</li>
+          <li>Download past streams and clips, and record a live stream (only when you press the button), kept inside Hop-tunes within a storage limit you set, optionally on another drive.</li>
+          <li>Playlists of favourite channels, clips and past streams; paste channel names or links to fill them.</li>
+          <li>A seek meter, pretend chat on downloads, widescreen when a phone is sideways, full screen and a pop-out window.</li>
+          <li>A green, yellow or red light for Kick's servers; live streams wait while it is red and the list refreshes when Kick is back.</li>
+          <li>Search as you type, by game, with your own category chips and an English-only switch.</li>
+          <li>Optional official Kick sign-in with your own Kick app (it only shows who is signed in). The unofficial TV-code sign-in is gone.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.9.0" date="2026-11-12">
       <description>
         <p>Giving power back to the ordinary: apps inside Hop-tunes, and Kick as the first one.</p>
