@@ -9,6 +9,18 @@
 > [!WARNING]
 > **Feature complete. Download at your own risk.** Hop-tunes 1.2 includes every planned feature — M7 video playback included — and passes its automated test suite on 16 Linux distributions. The developer has now tested it on real hardware (a Steam Deck running CachyOS Handheld Edition, AppImage only) — that testing is what found and fixed a video-playback bug for this release. Other install methods and hardware are still untested by the developer, so if you choose to try it, you do so at your own risk.
 
+> [!IMPORTANT]
+> **ANNOUNCEMENT FOR HOP-TUNES APP DEVELOPERS: YOU ARE NOW A QUALIFIED APP DEVELOPER FOR HOP-TUNES!**
+>
+> Got an idea for an app? **Fork Hop-tunes** and **fork the [Hop-tunes apps AI developer toolkit](https://github.com/theStyleWithin/Hoptunes-apps-AI-dev-toolkit)**.
+> The toolkit puts the power back in your hands to make all kinds of crazy projects you can dream of for Hop-tunes: if you can dream it, you can make it.
+>
+> If you use Hop-tunes, you are already a developer, even if you have made nothing yet. If you use AI with Hop-tunes, even if you have never used it to build
+> an app, you are a developer! That is all the skill you need to be an app developer for Hop-tunes.
+>
+> You do not need anyone's permission, and your app lives in your own fork and your own build (it is never added to the official Hop-tunes). The one rule:
+> do not credit the developer of Hop-tunes with your work. The toolkit explains the rest.
+
 ## Install
 
 ### [Download the latest release](https://github.com/theStyleWithin/Hop-tunes/releases/latest)
