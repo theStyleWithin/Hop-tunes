@@ -68,6 +68,8 @@ add_library(hoptunes_core STATIC
     src/game/SpectrumAnalyzer.h src/game/SpectrumAnalyzer.cpp
     src/game/AlbumFall.h      src/game/AlbumFall.cpp
     src/game/MusyNoteGame.h   src/game/MusyNoteGame.cpp
+    src/game/NekoCafe.h       src/game/NekoCafe.cpp
+    src/game/NekoCafeGame.h   src/game/NekoCafeGame.cpp
     src/game/PinTable.h       src/game/PinTable.cpp
     src/game/PinballGame.h    src/game/PinballGame.cpp
     src/game/Gamepad.h        src/game/Gamepad.cpp
@@ -274,6 +276,10 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_game tests/test_game.cpp)
     target_link_libraries(test_game PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME game COMMAND test_game)
+
+    add_executable(test_neko tests/test_neko.cpp)
+    target_link_libraries(test_neko PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME neko COMMAND test_neko)
 
     if(HOPTUNES_NET_APPS_ON)
         add_executable(test_net tests/test_net.cpp)
