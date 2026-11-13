@@ -15,6 +15,7 @@ class NekoCafeGame : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool started READ started NOTIFY stateChanged)       // false on the title screen
     Q_PROPERTY(bool paused READ paused WRITE setPaused NOTIFY stateChanged)
+    Q_PROPERTY(bool open READ isOpen WRITE setOpen NOTIFY stateChanged)   // the game's screen is up: Space is its A button, not play/pause
     Q_PROPERTY(int phase READ phase NOTIFY frameChanged)            // 0 playing, 1 results
     Q_PROPERTY(bool resultsReady READ resultsReady NOTIFY frameChanged)
     Q_PROPERTY(int frame READ frame NOTIFY frameChanged)            // bumps every step: bindings that read the scene depend on it
@@ -45,6 +46,8 @@ public:
     bool started() const { return m_started; }
     bool paused() const { return m_paused; }
     void setPaused(bool p);
+    bool isOpen() const { return m_open; }
+    void setOpen(bool o) { if (m_open != o) { m_open = o; emit stateChanged(); } }
     int phase() const { return m_g.phase(); }
     bool resultsReady() const { return m_g.resultsReady(); }
     int frame() const { return m_frame; }
@@ -93,7 +96,7 @@ private:
     QElapsedTimer m_clock;
     double m_acc = 0;
     int m_keys = 0, m_frame = 0;
-    bool m_started = false, m_paused = false, m_sentFinished = false;
+    bool m_started = false, m_paused = false, m_sentFinished = false, m_open = false;
 };
 
 } // namespace hop
