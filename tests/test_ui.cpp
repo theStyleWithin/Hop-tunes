@@ -1610,8 +1610,8 @@ private slots:
         // the drive is pulled out: its songs and books vanish from the lists at the next check, and are marked in settings
         QVERIFY(QDir().rename(drive, away));
         m_app->checkDrives();
-        QCOMPARE(m_app->librarySize(), songsBefore);
-        QCOMPARE(m_app->audiobooks()->count(), booksBefore);
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->librarySize(), songsBefore, 5000);                 // (the lists follow the check a moment later)
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->audiobooks()->count(), booksBefore, 5000);
         QVERIFY(!m_app->missingFolders().isEmpty());
         QVERIFY(m_app->folderMissing(QFileInfo(drive + QStringLiteral("/Songs")).absoluteFilePath()) || !m_app->missingFolders().isEmpty());
         window()->setProperty("view", QStringLiteral("settings"));
