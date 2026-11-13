@@ -1849,8 +1849,9 @@ void App::setVideoOrientation(const QString &mode)
 void App::requestOrientation(const QString &mode)
 {
 #ifdef Q_OS_ANDROID
-    // android.content.pm.ActivityInfo: SCREEN_ORIENTATION_LANDSCAPE 0, PORTRAIT 1, UNSPECIFIED -1 (follows the phone)
-    const jint v = mode == QLatin1String("landscape") ? 0 : (mode == QLatin1String("portrait") ? 1 : -1);
+    // android.content.pm.ActivityInfo: SCREEN_ORIENTATION_LANDSCAPE 0, PORTRAIT 1, SENSOR 4 (turns with the phone, even when the system
+    // rotation lock is on: for a wide video in full screen), UNSPECIFIED -1 (follows the phone's own setting)
+    const jint v = mode == QLatin1String("landscape") ? 0 : (mode == QLatin1String("portrait") ? 1 : (mode == QLatin1String("sensor") ? 4 : -1));
     const QJniObject activity = QNativeInterface::QAndroidApplication::context();
     if (activity.isValid()) activity.callMethod<void>("setRequestedOrientation", "(I)V", v);
 #else

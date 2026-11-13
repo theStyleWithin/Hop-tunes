@@ -12,6 +12,7 @@ ApplicationWindow {
     property bool forceMobile: false   // tests and screenshots
     readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
     property bool miniHidden: false                // the phone's mini player pushed away to the right for now
+    readonly property bool theatre: view === "collection" && collectionView.appTheatre      // an app has the whole window (Kick, phone sideways)
     readonly property bool tablet: Math.min(width, height) >= 600   // a phone turned sideways is still a phone
     Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
     readonly property int railWidth: !mobileNav || !tablet ? 0 : (hop.navStyle === "drawer" ? 240 : 84)
@@ -140,7 +141,7 @@ ApplicationWindow {
 
         // pivots, with the private status box at the right end (in the collection view)
         Item {   // phones with the side drawer: room for the ☰ header
-            visible: win.mobileNav && !win.tablet && hop.navStyle === "drawer"
+            visible: win.mobileNav && !win.tablet && hop.navStyle === "drawer" && !win.theatre
             implicitHeight: 56
         }
         Item {
@@ -214,7 +215,7 @@ ApplicationWindow {
             Layout.rightMargin: compactBar ? 12 : 0
             Layout.bottomMargin: compactBar ? 6 : 0
             implicitHeight: mini.implicitHeight
-            visible: win.view !== "now playing" && !(compactBar && win.miniHidden)
+            visible: win.view !== "now playing" && !(compactBar && win.miniHidden) && !win.theatre
             MiniPlayer {
                 id: mini
                 objectName: "miniPlayer"
@@ -243,14 +244,14 @@ ApplicationWindow {
             }
         }
         Item {   // room for the phone's bottom bar
-            visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer" && win.view !== "now playing"
+            visible: win.mobileNav && !win.tablet && hop.navStyle !== "drawer" && win.view !== "now playing" && !win.theatre
             implicitHeight: 72
         }
     }
 
     MobileNav {
         anchors.fill: parent
-        visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen && !(win.view === "now playing" && !win.tablet)
+        visible: win.mobileNav && hop.profileReady && !hop.videoPlayerOpen && !win.theatre && !(win.view === "now playing" && !win.tablet)
         views: win.navViews
         view: win.view === "quickplay" || win.view === "settings" ? "profile" : (win.view === "collection" && collectionView.appSearching ? "search" : win.view)
         tablet: win.tablet
@@ -264,7 +265,7 @@ ApplicationWindow {
     Item {   // the little tab that brings a pushed-away mini player back: it floats at the right edge above the bottom bar and takes no room of its own
         id: miniTab
         objectName: "miniPullTab"
-        visible: win.mobileNav && !win.tablet && win.miniHidden && win.view !== "now playing" && hop.profileReady && !hop.videoPlayerOpen
+        visible: win.mobileNav && !win.tablet && win.miniHidden && win.view !== "now playing" && hop.profileReady && !hop.videoPlayerOpen && !win.theatre
         width: 14; height: 64                              // slimmer than the page's side margin: it never sits on top of a page's content
         anchors { right: parent.right; bottom: parent.bottom; bottomMargin: (hop.navStyle !== "drawer" ? 72 : 0) + 16 }
         z: 50

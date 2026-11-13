@@ -6,6 +6,15 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ### Added
 - **Kick: official sign-in (optional).** Streams page > **sign in**: Kick's own OAuth sign-in (PKCE) with your own free Kick app, so no secret is built into Hop-tunes. It only shows who is signed in for now (it cannot import follows: Kick has no such API; use **add channels**). Your browser goes to id.kick.com and back to a one-shot listener on this computer; the tokens and your app's ID and secret are kept in your profile on this device; **sign out** revokes them. The network gateway lets exactly three sign-in requests carry a body or a token. Details: docs/kick-sign-in.md. Untried against real Kick and on Android: please test with your own app.
+- **A seek meter on the video (Kick).** A wide meter along the top of the picture: drag it left to rewind or right to skip ahead, or tap **−10** / **+10**. For a downloaded stream or clip it spans the whole video. On a live stream it spans what Kick keeps behind "now" (about half a minute), and the **live** pill jumps back to the front; if a phone's player cannot rewind a stream it says so instead of showing a dead bar.
+- **Pretend chat on downloaded streams.** Playing a download now has the same **none / pretend** chat as a live channel, beside the picture (under it on a phone); moving around in the video recalculates the chat for that moment.
+- **Widescreen on a sideways phone.** Turn the phone sideways while watching a stream or a download and the bars around it go away: the picture takes all the room, the chat sits beside it, and a **‹** button leaves. Held upright again, everything comes back.
+- **Full screen turns with the phone for a normal video** and stays upright for a tall, shorts-style one (Android).
+
+### Fixed
+- **Black screen in full screen and in the pop-out window (Android).** The picture is now set up again once the window has settled after full screen, pop-out or turning the phone. (Not yet confirmed on a phone: please try it.)
+
+### Added
 - **Kick: a health light.** The dot in the status bar is now green when Kick is up, yellow when it is slow or partly down, red when it is not answering. While the app is open it asks Kick two tiny questions (the list and a channel page, nothing about you) about once a minute, more often when something looks wrong. When it is red nothing live can be loaded or watched (a cover says so, with a button to your downloads), your downloads and recordings keep playing, and as soon as Kick answers again the list (and an open channel) refreshes by itself. The permission card says so up front.
 
 ### Changed

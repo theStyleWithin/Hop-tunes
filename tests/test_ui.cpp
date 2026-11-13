@@ -27,6 +27,7 @@
 #include <QHostAddress>
 #include <QUrlQuery>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QQuickItem>
 #include <QQuickStyle>
@@ -2433,6 +2434,54 @@ private slots:
         QVERIFY(click("subTab_music"));
     }
 
+    // The seek meter along the top of a video (Kick): drag or tap to rewind and skip ahead; on a live stream it spans what Kick keeps and a
+    // "live" pill jumps back to the front; a video that cannot be moved around in says so.
+    void seekMeterMovesAVideoAndKnowsLive()
+    {
+        QQmlComponent comp(m_engine.get(), QUrl(QStringLiteral("qrc:/qml/SeekMeter.qml")));
+        QVERIFY2(comp.status() == QQmlComponent::Ready, qPrintable(comp.errorString()));
+        std::unique_ptr<QObject> obj(comp.create(m_engine->rootContext()));
+        QVERIFY(obj);
+        QSignalSpy sink(obj.get(), SIGNAL(seekRequested(double)));
+        QVERIFY(sink.isValid());
+        auto last = [&] { return sink.last().at(0).toDouble(); };
+        auto call = [&](const char *fn, QVariant a = {}) {
+            QVariant r;
+            if (a.isValid()) QMetaObject::invokeMethod(obj.get(), fn, Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, a));
+            else QMetaObject::invokeMethod(obj.get(), fn, Q_RETURN_ARG(QVariant, r));
+            return r;
+        };
+        // a downloaded video: all of it, "0:30 / 2:00:00", skips are clamped to the ends
+        obj->setProperty("duration", 7200000.0); obj->setProperty("position", 30000.0); obj->setProperty("live", false);
+        QVERIFY(obj->property("seekable").toBool());
+        QCOMPARE(obj->property("text").toString(), QString("0:30 / 2:00:00"));
+        call("skip", 10000);  QCOMPARE(last(), 40000.0);
+        call("skip", -10000); QCOMPARE(last(), 20000.0);
+        call("skip", -999999); QCOMPARE(last(), 0.0);
+        obj->setProperty("position", 7195000.0);
+        call("skip", 10000);  QCOMPARE(last(), 7200000.0);
+        // a live stream: the stretch Kick keeps; at the front it says "live", behind it says how far, and the pill goes back to the front
+        obj->setProperty("live", true); obj->setProperty("duration", 28000.0); obj->setProperty("position", 27000.0);
+        QCOMPARE(obj->property("text").toString(), QString("live"));
+        obj->setProperty("position", 14000.0);
+        QCOMPARE(obj->property("text").toString(), QString("-0:14 behind live"));
+        const int n = sink.size();
+        call("goLive");
+        QCOMPARE(sink.size(), n + 1);
+        QCOMPARE(last(), 26500.0);
+        obj->setProperty("position", 27000.0);
+        call("goLive");                                                              // already there: nothing is sent
+        QCOMPARE(sink.size(), n + 1);
+        // not movable (the engine gives no length): the buttons do nothing and it says why
+        obj->setProperty("duration", 0.0);
+        QVERIFY(!obj->property("seekable").toBool());
+        QVERIFY(obj->property("text").toString().contains("cannot be rewound"));
+        call("skip", 10000); call("goLive");
+        QCOMPARE(sink.size(), n + 1);
+        obj->setProperty("live", false);
+        QCOMPARE(obj->property("text").toString(), QString());
+    }
+
     // Kick on a phone held upright: one column of cards that fits the screen, touch-sized, and on the watch page the picture on top
     // with the chat under it.
     void kickAppFitsAPhone()
@@ -2577,6 +2626,67 @@ private slots:
         QVERIFY(click("navTab_search"));
         QTRY_COMPARE(w->property("view").toString(), QStringLiteral("search"));
         w->setProperty("view", QStringLiteral("collection"));
+    }
+#endif
+
+#ifdef HOPTUNES_NET_APPS
+    // A phone turned sideways: watching a stream is a widescreen "theatre": no bars around it, the picture as big as it can be, the chat beside it.
+    void kickLandscapePhoneIsAWidescreenTheatre()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        const QSize before = w->size();
+        struct Restore {
+            QWindow *w; QSize size; App *app; KickClient *k;
+            ~Restore() { w->setProperty("forceMobile", false); w->resize(size); k->clearBlocked(); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); w->setProperty("view", QStringLiteral("collection")); }
+        } restore{w, before, m_app.get(), kick};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        w->setProperty("forceMobile", true);
+        w->resize(844, 390);                                                          // held sideways
+        QTRY_COMPARE(w->width(), 844);
+        QTRY_VERIFY(item("pillTab_apps") != nullptr);
+        item("collectionView")->setProperty("collectionTab", QStringLiteral("apps"));
+        QTRY_VERIFY(item("appTile_kick") && item("appTile_kick")->isVisible());
+        QVERIFY(QMetaObject::invokeMethod(item("appHost"), "open", Q_ARG(QVariant, QStringLiteral("kick"))));   // (the tile may sit below the short sideways screen)
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QQuickItem *app = item("kickApp");
+        QVERIFY(!app->property("theatre").toBool());                                  // browsing keeps its bars
+        QVERIFY(item("navTab_collection")->isVisible());
+        QVERIFY(QMetaObject::invokeMethod(app, "openChannel", Q_ARG(QVariant, QStringLiteral("alpha"))));   // (what a tap on the card does)
+        QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QTRY_VERIFY(app->property("theatre").toBool());
+        // the bars around it are gone: the app's own title bar, the status line, the mini player and the bottom bar
+        QTRY_VERIFY(!item("appBack")->isVisible());
+        QVERIFY(!item("kickStatusBar")->isVisible());
+        QVERIFY(!item("miniPlayer")->isVisible());
+        QVERIFY(!item("navTab_collection")->isVisible());
+        // the picture takes the room: tall as the window, wide next to the chat, and the chat sits to its right
+        QQuickItem *player = item("kickPlayer");
+        QTRY_VERIFY(player->height() > w->height() * 0.9);
+        QVERIFY(player->width() > w->width() * 0.55);
+        QTRY_VERIFY(item("kickPretendChat") != nullptr);
+        QVERIFY(item("kickTheatreBack") && item("kickTheatreBack")->isVisible());
+        shot("phone-kick-theatre");
+        QTRY_VERIFY(item("kickTheatreBack")->mapToScene(QPointF(0, 0)).x() >= player->mapToScene(QPointF(player->width(), 0)).x() - 1);   // (the layout may still be settling)
+        // back (the on-screen button, same as the phone's back gesture) leaves the theatre for the streams, bars back
+        QVERIFY(click("kickTheatreBack"));
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTRY_VERIFY(!app->property("theatre").toBool());
+        QTRY_VERIFY(item("navTab_collection")->isVisible());
+        QTRY_VERIFY(item("appBack")->isVisible());
+        // held upright again: the one-column page, not the theatre
+        QVERIFY(QMetaObject::invokeMethod(app, "openChannel", Q_ARG(QVariant, QStringLiteral("alpha"))));
+        QTRY_VERIFY(item("kickWatch")->isVisible());
+        w->resize(390, 844);
+        QTRY_VERIFY(!app->property("theatre").toBool());
+        QTRY_VERIFY(item("navTab_collection")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }
 #endif
 
@@ -3126,6 +3236,21 @@ private slots:
         QVERIFY(click("kickDlPlay_clip_abc"));
         QTRY_VERIFY(item("kickLocalPlay") && item("kickLocalPlay")->isVisible());
         QTRY_VERIFY(item("kickLocalPlayer") != nullptr);
+        // the pretend chat is there for a downloaded stream too: it shows in "pretend" and is gone in "none"
+        {
+            const QString was = kick->chatMode();
+            kick->setChatMode(QStringLiteral("pretend"));
+            QTRY_VERIFY(item("kickLocalPretendChat") && item("kickLocalPretendChat")->isVisible());
+            QVERIFY(item("kickLocalChat_pretend") && item("kickLocalChat_off"));
+            QTRY_VERIFY2(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
+                     qPrintable(QStringLiteral("chat %1x%2, column %3x%4, play page %5x%6").arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height())
+                                .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())));
+            QVERIFY(item("kickLocalPretendChat")->mapToItem(item("kickLocalPlay"), QPointF(0, 0)).x() > item("kickLocalPlayer")->x());   // beside the picture
+            shot("kick-local-chat");
+            QVERIFY(click("kickLocalChat_off"));
+            QTRY_VERIFY(!item("kickLocalPretendChat")->isVisible());
+            kick->setChatMode(was);
+        }
         // full screen: the picture (with its controls) moves to cover the whole window; Esc (the phone's back button) brings it back first
         QQuickItem *kickApp = item("kickApp");
         auto stage = [&]() -> QQuickItem * {            // the item that holds the picture: inside the player normally, directly in the window when staged
