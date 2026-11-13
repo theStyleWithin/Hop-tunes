@@ -65,7 +65,7 @@ ApplicationWindow {
     // switched off in settings.
     function maybeOpenNowPlaying() {
         if (win.view === "collection" && hop.profileReady && hop.player.playing && hop.gamepad.connected
-            && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen && !collectionView.appActive)   // (an app that is open, a game, keeps the screen)
+            && hop.gameSettings.autoNowPlaying && !hop.videoPlayerOpen && !hop.neko.open)   // (neko cafe, which listens to the controller itself, keeps the screen)
             win.view = "now playing"
     }
     Connections { target: hop.player; function onPlayingChanged() { win.maybeOpenNowPlaying() } }
