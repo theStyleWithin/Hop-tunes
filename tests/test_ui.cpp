@@ -2264,6 +2264,8 @@ private slots:
     {
         auto *w = window();
         w->setProperty("view", QStringLiteral("collection"));
+        m_app->playSongs(0);                                                   // music is playing, as it usually is
+        QTRY_VERIFY(m_app->player()->isPlaying());
         m_app->setAppsEnabled(true);
         QTRY_VERIFY(item("subTab_apps")->isVisible());
         QVERIFY(click("subTab_apps"));
@@ -2277,6 +2279,11 @@ private slots:
         NekoCafeGame *neko = m_app->neko();
         QVERIFY(!neko->started());
         QVERIFY(neko->isOpen());                                               // Space is the game's A now, not play/pause
+        m_app->gamepad()->setDevice(QStringLiteral("Test Pad"));                // a controller shows up while music plays: the game is not yanked away
+        QTest::qWait(100);
+        QVERIFY(host->property("active").toBool());
+        QCOMPARE(w->property("view").toString(), QStringLiteral("collection"));
+        m_app->gamepad()->setDevice(QString());
         QVERIFY(item("nekoTitle")->isVisible());
         shot("neko-title");
         QTest::keyClick(w, Qt::Key_Return);                                    // A starts the day
