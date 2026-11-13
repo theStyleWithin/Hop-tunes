@@ -82,6 +82,16 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.11.0" date="2026-11-13">
+      <description>
+        <p>A stream that keeps playing, and small Kick fixes.</p>
+        <ul>
+          <li>On the computer, leaving a stream shrinks it to a small draggable window that keeps playing until you close it, start a song or a video, or quit.</li>
+          <li>The mini player says kick on the streams list and now playing the channel while a stream runs.</li>
+          <li>The follow button now shows when you followed, and a live stream no longer shows the seek meter.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.10.0" date="2026-11-13">
       <description>
         <p>Kick grows up: on Android, with downloads, recording, playlists and a lot of polish.</p>
