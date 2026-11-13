@@ -3242,6 +3242,7 @@ private slots:
             kick->setChatMode(QStringLiteral("pretend"));
             QTRY_VERIFY(item("kickLocalPretendChat") && item("kickLocalPretendChat")->isVisible());
             QVERIFY(item("kickLocalChat_pretend") && item("kickLocalChat_off"));
+            window()->grabWindow();                                                    // draw a frame now: that is when the layouts are laid out (a slow headless run may not have drawn one yet)
             QTRY_VERIFY2(item("kickLocalPretendChat")->width() > 100 && item("kickLocalPretendChat")->height() > 100,
                      qPrintable(QStringLiteral("chat %1x%2, column %3x%4, play page %5x%6").arg(item("kickLocalPretendChat")->width()).arg(item("kickLocalPretendChat")->height())
                                 .arg(item("kickLocalChatColumn")->width()).arg(item("kickLocalChatColumn")->height()).arg(item("kickLocalPlay")->width()).arg(item("kickLocalPlay")->height())));
