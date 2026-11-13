@@ -10,6 +10,9 @@ FocusScope {
     objectName: "appHost"
     property string appId: ""
     readonly property bool active: appId !== ""
+    // an app may say what is "playing" (nowPlayingTitle / nowPlayingSub on its root item): the mini player shows it when no song is playing
+    readonly property string nowPlayingTitle: active && !!appLoader.item && appLoader.item.nowPlayingTitle !== undefined ? String(appLoader.item.nowPlayingTitle) : ""
+    readonly property string nowPlayingSub: active && !!appLoader.item && appLoader.item.nowPlayingSub !== undefined ? String(appLoader.item.nowPlayingSub) : ""
     readonly property bool theatre: active && !!appLoader.item && appLoader.item.theatre === true     // the app wants the whole window (a phone turned sideways, watching)
     readonly property var names: ({ "kick": "kick" })
     visible: active

@@ -8,7 +8,10 @@ Rectangle {
     id: root
     signal openNowPlaying()
     readonly property var player: hop.player
-    property bool compact: false   // phones: song, play button and a thin progress line only
+    property bool compact: false
+    // What an open app says is "playing" when no song is (Kick: "kick" on its hub, "now playing <channel>" while a stream plays). A song always wins.
+    property string appTitle: ""
+    property string appSub: ""   // phones: song, play button and a thin progress line only
     color: compact ? Theme.panel : Theme.bar
     radius: compact ? 14 : 0
     clip: compact
@@ -36,8 +39,8 @@ Rectangle {
                 ColumnLayout {
                     spacing: 0
                     Layout.fillWidth: true
-                    Label { text: player.hasTrack ? player.title : "nothing playing"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: player.artist; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack }
+                    Label { objectName: "miniTitle"; text: player.hasTrack ? player.title : (root.appTitle !== "" ? root.appTitle : "nothing playing"); color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { objectName: "miniSubtitle"; text: player.hasTrack ? player.artist : root.appSub; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(14) } elide: Text.ElideRight; Layout.fillWidth: true; visible: player.hasTrack || root.appSub !== "" }
                     Rectangle {   // phones: how far into the song, under the text
                         visible: root.compact && player.hasTrack
                         Layout.fillWidth: true; Layout.topMargin: 6; implicitHeight: 3; radius: 2; color: Theme.track

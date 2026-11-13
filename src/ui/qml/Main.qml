@@ -12,6 +12,8 @@ ApplicationWindow {
     property bool forceMobile: false   // tests and screenshots
     readonly property bool mobileNav: forceMobile || Qt.platform.os === "android"
     property bool miniHidden: false                // the phone's mini player pushed away to the right for now
+    readonly property string appNowTitle: view === "collection" ? collectionView.appNowTitle : ""     // what the open app says is playing (the mini player shows it when no song is)
+    readonly property string appNowSub: view === "collection" ? collectionView.appNowSub : ""
     readonly property bool theatre: view === "collection" && collectionView.appTheatre      // an app has the whole window (Kick, phone sideways)
     readonly property bool tablet: Math.min(width, height) >= 600   // a phone turned sideways is still a phone
     Binding { target: Theme; property: "compact"; value: win.mobileNav && !win.tablet }
@@ -221,6 +223,8 @@ ApplicationWindow {
                 objectName: "miniPlayer"
                 width: parent.width; height: parent.height
                 compact: miniWrap.compactBar
+                appTitle: win.appNowTitle
+                appSub: win.appNowSub
                 onOpenNowPlaying: win.view = "now playing"
                 opacity: 1 - Math.min(0.6, Math.max(0, x) / Math.max(1, width))
                 DragHandler {

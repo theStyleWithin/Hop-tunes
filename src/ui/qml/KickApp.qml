@@ -101,7 +101,22 @@ FocusScope {
     function download(entry) {
         root.dlMessage = hop.downloads.enqueue({ id: entry.id, kind: entry.kind, title: entry.title, channel: kick.channel.slug || "", thumb: entry.thumb,
                                                  url: entry.url, maxHeight: root.dlHeight, estimate: entry.estimate, seconds: entry.seconds })
-    }    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
+    }    // what the mini player says while Kick is open and no song plays: "kick" on the hub, "now playing <channel>" while a live stream is on,
+    // "now playing <title>" for a download. A channel that is offline, or a stream that failed, is just "kick": it never claims more than is true.
+    function nowPlayingFor(s) {
+        if (!s.open) return { title: "", sub: "" }
+        if (s.page === "watch" && s.tab === "live" && s.live && s.wanted && !s.error) return { title: "now playing " + s.channel, sub: "live on kick" }
+        if (s.page === "play" && s.wanted && !s.error && s.dlTitle) return { title: "now playing " + s.dlTitle, sub: s.dlChannel || "" }
+        return { title: "kick", sub: "" }
+    }
+    readonly property var nowPlaying: nowPlayingFor({
+        open: !!kick && allowed, page: page, tab: watchTab, live: !!kick && kick.channel.live === true,
+        wanted: page === "play" ? localPlayer.wanted : livePlayer.wanted, error: page === "play" ? localPlayer.error : livePlayer.error,
+        channel: !!kick ? (kick.channel.name || kick.channel.slug || "") : "",
+        dlTitle: root.dlById[root.playId] ? root.dlById[root.playId].title : "", dlChannel: root.dlById[root.playId] ? root.dlById[root.playId].channel : "" })
+    readonly property string nowPlayingTitle: nowPlaying.title
+    readonly property string nowPlayingSub: nowPlaying.sub
+    readonly property bool phone: Theme.compact   // a phone held upright: one column, touch-sized, no hover
     // a phone turned sideways: watching becomes a widescreen "theatre" (the picture as big as it can be, the chat beside it, no bars around)
     readonly property bool landscape: phone && width > height * 1.25
     readonly property bool theatre: landscape && ((page === "watch" && watchTab === "live") || page === "play")

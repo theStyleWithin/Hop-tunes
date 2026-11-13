@@ -26,6 +26,7 @@
 #include <QTcpSocket>
 #include <QHostAddress>
 #include <QUrlQuery>
+#include <QJSValue>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -2480,6 +2481,71 @@ private slots:
         QCOMPARE(sink.size(), n + 1);
         obj->setProperty("live", false);
         QCOMPARE(obj->property("text").toString(), QString());
+    }
+
+    // The mini player says what the open app is doing when no song plays: "kick" on the hub, "now playing <channel>" while a live stream is on.
+    void miniPlayerSaysWhatKickIsDoing()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        KickClient *kick = m_app->kickClient();
+        struct Restore { App *app; ~Restore() { app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get()};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        m_app->setAppNetAllowed("kick", true);
+        auto mini = [this] { return item("miniPlayer"); };
+        QVERIFY(mini());
+        QCOMPARE(mini()->property("appTitle").toString(), QString());                   // not in Kick: nothing to add
+        QTRY_VERIFY(item("subTab_apps") && item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        // the hub: "kick" (a song that is playing would still win in the mini player's own label)
+        QTRY_COMPARE(mini()->property("appTitle").toString(), QString("kick"));
+        QCOMPARE(mini()->property("appSub").toString(), QString());
+        if (!m_app->player()->hasTrack()) QCOMPARE(item("miniTitle")->property("text").toString(), QString("kick"));
+        // an offline channel's page is still just "kick": nothing is playing there
+        QVERIFY(QMetaObject::invokeMethod(item("kickApp"), "openChannel", Q_ARG(QVariant, QStringLiteral("alpha"))));
+        QTRY_VERIFY(item("kickWatch") && item("kickWatch")->isVisible());
+        QTRY_VERIFY(item("kickChannelState")->isVisible());
+        QCOMPARE(mini()->property("appTitle").toString(), QString("kick"));
+        // the rule itself (the live picture needs a video engine, which differs per machine, so the rule is tested directly)
+        auto say = [this](QVariantMap st) {
+            QVariant r;
+            QMetaObject::invokeMethod(item("kickApp"), "nowPlayingFor", Q_RETURN_ARG(QVariant, r), Q_ARG(QVariant, st));
+            return r.value<QJSValue>().toVariant().toMap();
+        };
+        const QVariantMap live{{"open", true}, {"page", "watch"}, {"tab", "live"}, {"live", true}, {"wanted", true}, {"error", ""}, {"channel", "LumielleVT"}};
+        QCOMPARE(say(live).value("title").toString(), QString("now playing LumielleVT"));
+        QCOMPARE(say(live).value("sub").toString(), QString("live on kick"));
+        for (const QPair<QString, QVariant> &change : {qMakePair(QString("live"), QVariant(false)),            // offline
+                                                       qMakePair(QString("wanted"), QVariant(false)),          // the picture is not on
+                                                       qMakePair(QString("error"), QVariant("could not play")),   // it failed: never claim more than is true
+                                                       qMakePair(QString("tab"), QVariant("clips")),           // looking at clips, not watching
+                                                       qMakePair(QString("page"), QVariant("browse"))}) {
+            QVariantMap st = live; st[change.first] = change.second;
+            QCOMPARE(say(st).value("title").toString(), QString("kick"));
+            QCOMPARE(say(st).value("sub").toString(), QString());
+        }
+        const QVariantMap dl{{"open", true}, {"page", "play"}, {"wanted", true}, {"error", ""}, {"dlTitle", "a funny moment"}, {"dlChannel", "alpha"}};
+        QCOMPARE(say(dl).value("title").toString(), QString("now playing a funny moment"));
+        QCOMPARE(say(dl).value("sub").toString(), QString("alpha"));
+        QVariantMap broken = dl; broken["error"] = "x";
+        QCOMPARE(say(broken).value("title").toString(), QString("kick"));
+        QVariantMap closed = live; closed["open"] = false;
+        QCOMPARE(say(closed).value("title").toString(), QString());
+        // leaving Kick: back to what it was
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("kickBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QTRY_COMPARE(mini()->property("appTitle").toString(), QString());
+        if (!m_app->player()->hasTrack()) QCOMPARE(item("miniTitle")->property("text").toString(), QString("nothing playing"));
+        Q_UNUSED(kick);
+        m_app->setAppNetAllowed("kick", false);
+        m_app->setAppsEnabled(false);
+        QVERIFY(click("subTab_music"));
     }
 
     // Kick on a phone held upright: one column of cards that fits the screen, touch-sized, and on the watch page the picture on top
