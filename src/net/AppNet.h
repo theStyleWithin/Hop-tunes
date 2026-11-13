@@ -35,6 +35,13 @@ struct NetLimits {
     int timeoutMs = 15000;
     qint64 rangeStart = -1;      // with rangeLength: ask only for this slice of the file (HTTP Range)
     qint64 rangeLength = -1;
+    // Sign-in requests only (Kick's official OAuth): a form POST, or a GET carrying a bearer token. The gateway refuses these for every
+    // address except the three on the app's sign-in list (AppNet::authUrlAllowed), never follows a redirect for them, and sends no
+    // other header: so a token or a secret can only ever go where it belongs.
+    bool post = false;
+    QByteArray formBody;         // application/x-www-form-urlencoded
+    QByteArray bearer;           // the access token, for the one address that takes it
+    bool isAuth() const { return post || !formBody.isEmpty() || !bearer.isEmpty(); }
 };
 
 class NetTransport : public QObject {
@@ -59,6 +66,10 @@ public:
     static QStringList hostsFor(const QString &app);
     // the rules above for one address (without the permission): https, port, user info, host
     static bool urlAllowed(const QString &app, const QUrl &url, QString *why = nullptr);
+    // The sign-in sites (only contacted when the person signs in) and the exact requests they may receive: POST id.kick.com/oauth/token
+    // (form body), POST id.kick.com/oauth/revoke (token in the query), GET api.kick.com/public/v1/users (bearer). Nothing else, ever.
+    static QStringList authHostsFor(const QString &app);
+    static bool authUrlAllowed(const QString &app, const QUrl &url, const NetLimits &limits, QString *why = nullptr);
     // The video itself is fetched by the video engine (libmpv or GStreamer), not by this gateway: it may only be given an address of
     // the video host the app declared (https, standard port, no user name). Inside the engine the host cannot be enforced any further.
     static QStringList streamSuffixesFor(const QString &app);

@@ -191,6 +191,11 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
+### Signing in to Kick (optional)
+
+Nothing needs an account. If you want to, **sign in** (streams page) uses Kick's official sign-in with your own free Kick app (a client ID and secret you create on kick.com;
+nothing secret ships with Hop-tunes). For now it only shows who is signed in. Step by step, and exactly what is sent and kept: [kick-sign-in.md](kick-sign-in.md).
+
 ### Adding many channels at once
 
 There is no sign-in. To bring your favourite channels in, press **add channels** on the streams page, paste channel names or kick.com links (one per line, or separated by

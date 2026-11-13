@@ -94,6 +94,7 @@ if(HOPTUNES_NET_APPS_ON)
     target_sources(hoptunes_core PRIVATE src/net/AppNet.h src/net/AppNet.cpp src/apps/KickClient.h src/apps/KickClient.cpp
                                          src/apps/WebpDecode.h src/apps/WebpDecode.cpp
                                          src/apps/OfflineStore.h src/apps/OfflineStore.cpp
+                                         src/apps/KickAuth.h src/apps/KickAuth.cpp
                                          src/apps/Hls.h src/apps/Hls.cpp src/apps/OfflineDownloads.h src/apps/OfflineDownloads.cpp)
     # libwebp reads Kick's WebP pictures without depending on Qt's optional WebP plugin (missing on Android and some Linux installs)
     if(ANDROID)

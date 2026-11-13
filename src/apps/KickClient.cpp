@@ -31,6 +31,9 @@ QJsonObject object(const QByteArray &json, bool *ok)
 KickClient::KickClient(AppNet *net, QObject *parent) : QObject(parent), m_net(net)
 {
     connect(m_net, &AppNet::contactedChanged, this, [this](const QString &app) { if (app == QLatin1String(kApp)) emit contactedChanged(); });
+    m_auth = new KickAuth(m_net, this);
+    connect(m_auth, &KickAuth::changed, this, &KickClient::authChanged);
+    connect(m_auth, &KickAuth::saveRequested, this, &KickClient::listsEdited);          // the tokens are kept with the profile
 }
 
 // ---- reading the replies ----------------------------------------------------------------------------
@@ -294,6 +297,7 @@ void KickClient::open()
     requestCategories();
     refresh();
     refreshFollowing();
+    m_auth->refreshAndVerify();                    // only when the person is signed in: a fresh token, and who it is
 }
 
 void KickClient::close()
@@ -304,6 +308,7 @@ void KickClient::close()
     if (m_healthTimer) m_healthTimer->stop();
     m_healthLast.clear(); m_health.clear();
     m_net->close(kApp);
+    m_auth->cancel();                              // a sign-in waiting for the browser stops listening
     m_pending = 0;
     m_followChecks = 0;
     m_streams.clear(); m_raw.clear(); m_next.clear(); m_channel.clear(); m_status.clear(); m_searchChannels.clear();
@@ -775,9 +780,12 @@ void KickClient::setChatMode(const QString &mode)
 
 QJsonObject KickClient::listsJson() const
 {
-    return QJsonObject{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
+    QJsonObject out{{QStringLiteral("following"), QJsonArray::fromStringList(m_following)}, {QStringLiteral("blocked"), QJsonArray::fromStringList(m_blocked)},
                        {QStringLiteral("chatMode"), m_chatMode}, {QStringLiteral("playlists"), playlistsJson()},
-                       {QStringLiteral("englishOnly"), m_englishOnly}, {QStringLiteral("askBeforeOpening"), m_askBeforeOpening}, {QStringLiteral("pinnedCategories"), pinnedJson()}};      // (an older version kept a sign-in token here: it is not read and not written back)
+                       {QStringLiteral("englishOnly"), m_englishOnly}, {QStringLiteral("askBeforeOpening"), m_askBeforeOpening}, {QStringLiteral("pinnedCategories"), pinnedJson()}};
+    const QJsonObject account = m_auth->toJson();           // (only when the person set up their own Kick app)
+    if (!account.isEmpty()) out.insert(QStringLiteral("account"), account);
+    return out;
 }
 
 QJsonObject KickClient::pinnedJson() const
@@ -834,6 +842,7 @@ void KickClient::setListsJson(const QJsonObject &o)
     }
     m_importMessage.clear();
     emit importChanged();
+    m_auth->fromJson(o.value(QStringLiteral("account")).toObject());
     {   // your category chips; anything not well formed is left out
         m_pinned.clear();
         const QJsonObject pc = o.value(QStringLiteral("pinnedCategories")).toObject();
