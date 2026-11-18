@@ -4,6 +4,8 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-11-13: neko cafe
+
 ### Added
 - **neko cafe, a little game in the apps tab.** Run a cafe as a neko maid: customers walk in and sit, you take their order, hand the slip to the cook, fetch the coffee from the counter and serve the right customer, fast (a quick serve earns a bigger tip; a slow one leaves them upset and you earn nothing from them). The day lasts five minutes, then a results screen shows the orders, bills, tips, profit, happiness and a grade from A to D; your profit goes on the best list. Arrow keys or WASD walk, Space, Enter or Z is the A button, Esc pauses (and again leaves); a game controller and a touch pad on phones work too. It works offline, sends nothing anywhere, and has no music or sound of its own, so your music (or a stream playing in its small window) carries on. Space is the game's A button while it is open; it does not pause the music there.
 
