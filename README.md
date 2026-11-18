@@ -138,6 +138,34 @@ Optional extras on Now playing, under the **games** chip and the visualizer: a *
 | **Cover Pinball** | **Cover Pinball (visualizer behind the table)** |
 | ![Cover Pinball](design/app/games-pinball.png) | ![Cover Pinball with the visualizer behind](design/app/games-pinball-visualizer.png) |
 
+**neko cafe** (a game in the apps tab, desktop and phone)
+
+Hop-tunes has a little cafe of its own now. In **apps** you will find **neko cafe**: you are a neko maid running a tiny cafe. Customers walk in and sit, you take their order, hand the slip to the cook, grab the coffee when he holds it out and serve the *right* customer, fast. A quick serve earns a bigger tip, a slow one leaves them upset (and you earn nothing from them), and a few are grumpy no matter what you do. The day lasts five minutes, then the results show your orders, bills, tips, profit, happiness and a grade from A to D, and your profit goes on the best list. It is drawn in a classic handheld green, works fully offline, sends nothing anywhere and has **no music or sound of its own**: your music (or a stream playing in its small window) keeps going while you play. Arrow keys or wasd walk, space / enter / z is the A button, esc pauses; a game controller works, and phones get a touch pad under the picture.
+
+| the apps tab: kick and neko cafe | the title screen |
+|---|---|
+| ![the apps tab](design/app/apps-tab-neko-cafe.png) | ![neko cafe title screen](design/app/neko-cafe-title.png) |
+| a customer orders | the coffee is ready |
+| ![a customer orders](design/app/neko-cafe-order.png) | ![picking up the coffee](design/app/neko-cafe-pickup.png) |
+| the end of a good day | |
+| ![the results of a day](design/app/neko-cafe-results.png) | |
+
+*(These pictures are made by the test harness, which plays a scripted game; nothing in them is a real score.)*
+
+**the Kick app** (apps tab, desktop and phone)
+
+The other app is **Kick**: browse and watch live streams from kick.com inside Hop-tunes, with no account. It is **off until you switch apps on**, it **asks before it uses the internet** (the card lists every site it will contact), and it only connects while it is open. The streams page has a status light for Kick's servers (green, yellow or red), search as you type, category chips, language and "english only" filters, and your own **follows, blocks and playlists**, which live in your Hop-tunes profile on this device and are never tied to a Kick account (there is no sign-in). A channel page has live, past streams and clips: you can **download** a past stream or clip, or **record** a live one, into a storage limit you set, and watch it offline later. On a live stream the chat beside the picture is **none** or a clearly labelled **pretend** one you can post in; leave a stream and it shrinks to a small draggable window that keeps playing (desktop) until you close it or start a song or a video.
+
+| the streams page | a channel: live, past streams, clips |
+|---|---|
+| ![kick streams page](design/app/kick-streams.png) | ![a kick channel page](design/app/kick-channel.png) |
+| it asks first, and lists every site | downloads, kept on your device |
+| ![kick asks before it connects](design/app/kick-asks-first.png) | ![kick downloads](design/app/kick-downloads.png) |
+| on a phone: streams | on a phone: watching, with the pretend chat |
+| ![kick on a phone: streams](design/app/kick-phone-streams.png) | ![kick on a phone: watching](design/app/kick-phone-watch.png) |
+
+*(Rendered by the test harness with made-up channels and a made-up music library, so no real streamer appears here. Real streaming depends on Kick being up and on your video engine.)*
+
 **On Android: the phone layout**
 
 Renders of the Android app's phone layout (it adapts to tablets, and has a side drawer as an alternative to the bottom bar).
