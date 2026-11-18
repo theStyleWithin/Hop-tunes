@@ -85,6 +85,7 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
 #endif
 #ifdef HOPTUNES_NET_APPS
     connect(&m_kick, &KickClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    connect(&m_da, &DeviantArtClient::listsEdited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
     // the live stream that outlives the Kick app: it waits for a song that is playing, and gives way to the next song or video
     m_dock.setSongControl([this] { return m_player.isPlaying(); }, [this] { m_player.pause(); });
     connect(&m_player, &Player::playingChanged, &m_dock, [this] { if (m_player.isPlaying()) m_dock.songStarted(); });
@@ -478,11 +479,14 @@ void App::activate(const QString &id, bool guest)
     m_dock.stop();
     m_kick.close();
     m_kick.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("kick")).toObject());
+    m_da.close();
+    m_da.setListsJson(guest ? QJsonObject{} : s.value(QStringLiteral("deviantart")).toObject());
     m_offline.setProfileId(guest ? QStringLiteral("guest") : m_profileId);
     m_offline.fromJson(guest ? QJsonObject{} : s.value(QStringLiteral("offline")).toObject());
     m_downloads.setEnabled(!guest);
     m_downloads.reload();
     m_appNet.setAllowed(QStringLiteral("kick"), m_netAllowed.contains(QStringLiteral("kick")));
+    m_appNet.setAllowed(QStringLiteral("deviantart"), m_netAllowed.contains(QStringLiteral("deviantart")));
 #endif
     emit appNetChanged();
     m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
@@ -579,6 +583,9 @@ void App::leaveProfile()
     m_kick.close();
     m_appNet.setAllowed(QStringLiteral("kick"), false);
     m_kick.setListsJson(QJsonObject{});
+    m_da.close();
+    m_appNet.setAllowed(QStringLiteral("deviantart"), false);
+    m_da.setListsJson(QJsonObject{});
 #endif
     emit appNetChanged();
     m_videoOrientation = QStringLiteral("auto");
@@ -653,6 +660,7 @@ void App::saveProfileSettings()
         s.insert(QStringLiteral("appsNet"), net);
 #ifdef HOPTUNES_NET_APPS
         s.insert(QStringLiteral("kick"), m_kick.listsJson());
+        s.insert(QStringLiteral("deviantart"), m_da.listsJson());
         s.insert(QStringLiteral("offline"), m_offline.toJson());
 #endif
     }
@@ -1991,7 +1999,7 @@ void App::setAppsEnabled(bool on)
     if (on == m_appsEnabled) return;
     m_appsEnabled = on;
 #ifdef HOPTUNES_NET_APPS
-    if (!on) { m_dock.stop(); m_kick.close(); }   // switching apps off drops any connection (and the stream window)
+    if (!on) { m_dock.stop(); m_kick.close(); m_da.close(); }   // switching apps off drops any connection (and the stream window)
 #endif
     saveProfileSettings();
     emit appsEnabledChanged();
@@ -2001,6 +2009,7 @@ void App::installImageProviders(QQmlEngine *engine)
 {
 #ifdef HOPTUNES_NET_APPS
     engine->addImageProvider(QStringLiteral("kick"), new KickImageProvider(&m_appNet));
+    engine->addImageProvider(QStringLiteral("deviantart"), new KickImageProvider(&m_appNet, QStringLiteral("deviantart")));
 #else
     Q_UNUSED(engine)
 #endif
@@ -2008,10 +2017,10 @@ void App::installImageProviders(QQmlEngine *engine)
 
 void App::setAppNetAllowed(const QString &app, bool on)
 {
-    if (app != QLatin1String("kick") || on == m_netAllowed.contains(app)) return;
+    if ((app != QLatin1String("kick") && app != QLatin1String("deviantart")) || on == m_netAllowed.contains(app)) return;
     if (on) m_netAllowed.insert(app); else m_netAllowed.remove(app);
 #ifdef HOPTUNES_NET_APPS
-    if (!on) { m_dock.stop(); m_kick.close(); }
+    if (!on) { if (app == QLatin1String("kick")) { m_dock.stop(); m_kick.close(); } else m_da.close(); }
     m_appNet.setAllowed(app, on);
 #endif
     saveProfileSettings();                    // (guests keep nothing: this holds for the session only)
