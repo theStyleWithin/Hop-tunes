@@ -470,6 +470,8 @@ void App::activate(const QString &id, bool guest)
     emit appsEnabledChanged();
     m_appHints = guest || s.value(QStringLiteral("appHints")).toBool(true);
     emit appHintsChanged();
+    m_appsLook = !guest && s.value(QStringLiteral("appsLook")).toString() == QLatin1String("coffee") ? QStringLiteral("coffee") : QStringLiteral("auto");
+    emit appsLookChanged();
     m_netAllowed.clear();
     if (!guest) {
         const QJsonObject net = s.value(QStringLiteral("appsNet")).toObject();
@@ -654,6 +656,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
     s.insert(QStringLiteral("appHints"), m_appHints);
+    s.insert(QStringLiteral("appsLook"), m_appsLook);
     {
         QJsonObject net;
         for (const QString &a : m_netAllowed) net.insert(a, true);
@@ -1992,6 +1995,15 @@ void App::setAppHints(bool on)
     m_appHints = on;
     saveProfileSettings();
     emit appHintsChanged();
+}
+
+void App::setAppsLook(const QString &look)
+{
+    const QString v = look == QLatin1String("coffee") ? look : QStringLiteral("auto");
+    if (v == m_appsLook) return;
+    m_appsLook = v;
+    saveProfileSettings();
+    emit appsLookChanged();
 }
 
 void App::setAppsEnabled(bool on)

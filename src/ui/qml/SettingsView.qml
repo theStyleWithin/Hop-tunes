@@ -527,6 +527,18 @@ Item {
                 onPicked: function (v) { hop.appsEnabled = v === "appsOn" }
             }
         }
+        SRow {   // how the apps page looks (the glass grid): it follows the theme, or the anime coffee look
+            objectName: "appsLookRow"
+            visible: hop.appsEnabled
+            spacing: 16
+            Label { text: "apps page"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "appsLookChoice"
+                options: [["lookAuto", "match the theme"], ["lookCoffee", "anime coffee"]]
+                value: hop.appsLook === "coffee" ? "lookCoffee" : "lookAuto"
+                onPicked: function (v) { hop.appsLook = v === "lookCoffee" ? "coffee" : "auto" }
+            }
+        }
         SRow {   // the little description that pops up on an app's tile
             objectName: "appHintsRow"
             visible: hop.appsEnabled

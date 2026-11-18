@@ -240,7 +240,13 @@ class TestUi : public QObject {
         QQuickItem *i = waitItem(name);
         if (!i || !i->isVisible() || !i->isEnabled()) { qWarning("cannot click %s", name); return false; }
         ensureVisible(i);
-        const QPointF c = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
+        QPointF c;                               // wait until the item stands still: a layout that is still settling would send the click where it used to be
+        for (int k = 0; k < 12; ++k) {
+            const QPointF now = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
+            if (k > 0 && now == c) break;
+            c = now;
+            QTest::qWait(25);
+        }
         QTest::mouseClick(window(), Qt::LeftButton, Qt::NoModifier, c.toPoint());
         return true;
     }

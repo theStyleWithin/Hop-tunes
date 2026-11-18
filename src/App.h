@@ -167,6 +167,7 @@ class App : public QObject {
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
     Q_PROPERTY(QStringList netAllowedApps READ netAllowedApps NOTIFY appNetChanged)   // the apps the person has allowed to use the internet
     Q_PROPERTY(QObject *appNetGateway READ gatewayObject CONSTANT)
+    Q_PROPERTY(QString appsLook READ appsLook WRITE setAppsLook NOTIFY appsLookChanged)   // how the apps page looks: "auto" (follows the light or dark theme) or "coffee"
     Q_PROPERTY(bool appHints READ appHints WRITE setAppHints NOTIFY appHintsChanged)   // the one-line descriptions that pop up on the apps tiles (on at first, the person can hide them)
     Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
@@ -371,6 +372,8 @@ public:
     Q_INVOKABLE bool appNetAllowed(const QString &app) const { return m_netAllowed.contains(app); }
     Q_INVOKABLE void setAppNetAllowed(const QString &app, bool on);
     bool appsEnabled() const { return m_appsEnabled; }
+    QString appsLook() const { return m_appsLook; }
+    void setAppsLook(const QString &look);
     bool appHints() const { return m_appHints; }
     void setAppHints(bool on);
     void setAppsEnabled(bool on);
@@ -575,6 +578,7 @@ signals:
     void videoViewStyleChanged();
     void appsEnabledChanged();
     void appHintsChanged();
+    void appsLookChanged();
     void inPictureInPictureChanged();
     void appNetChanged();
     void videoChatChanged();
@@ -626,6 +630,7 @@ private:
     QString m_videoViewStyle = QStringLiteral("window");
     bool m_appsEnabled = false;
     bool m_appHints = true;
+    QString m_appsLook = QStringLiteral("auto");
     bool m_inPip = false;
     QSet<QString> m_netAllowed;
 #ifdef HOPTUNES_NET_APPS

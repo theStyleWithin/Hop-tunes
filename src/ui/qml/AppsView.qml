@@ -9,6 +9,8 @@ Item {
     id: root
     objectName: "appsView"
     signal openApp(string appId)
+    // how the page looks: "light" and "dark" follow the theme, "coffee" is the anime coffee look (settings > apps settings > apps page)
+    readonly property string look: hop.appsLook === "coffee" ? "coffee" : (Theme.light ? "light" : "dark")
 
     // id, the name under the tile, a line for the tooltip, an icon (a url, or "" for the plain glass)
     // net: the app uses the internet (it says so on its tile, and is left out of builds without networked apps)
@@ -26,6 +28,18 @@ Item {
             gradient: Gradient { GradientStop { position: 0.0; color: "#26272b" } GradientStop { position: 1.0; color: "#1d1e22" } }
             border { width: 1.5; color: "#313238" }
             Rectangle { anchors.fill: parent; anchors.margins: parent.width * 0.05; radius: parent.radius * 0.8; color: "transparent"; border { width: 1; color: "#2b2c31" } }
+        }
+    }
+
+    // the coffee look's glass square: warm, see-through cream glass with a bright rim
+    component CoffeeGlass: Item {
+        Rectangle { y: 3; width: parent.width; height: parent.height; radius: width * 0.2; color: "#66401a00"; }   // its soft shadow
+        Rectangle {
+            anchors.fill: parent; radius: width * 0.2
+            gradient: Gradient { GradientStop { position: 0.0; color: "#70fff3df" } GradientStop { position: 1.0; color: "#30ffd9a0" } }
+            border { width: 2; color: "#b8ffffff" }
+            Rectangle { anchors.fill: parent; anchors.margins: parent.width * 0.05; radius: parent.radius * 0.8; color: "transparent"; border { width: 1.5; color: "#55ffffff" } }
+            Rectangle { x: parent.width * 0.12; y: parent.height * 0.08; width: parent.width * 0.5; height: parent.height * 0.12; radius: height / 2; color: "#40ffffff" }   // a glint
         }
     }
 
@@ -54,10 +68,11 @@ Item {
                 width: tile.side; height: tile.side
                 scale: tile.pressed ? 0.96 : (tile.hovered || tile.activeFocus ? 1.05 : 1.0)
                 Behavior on scale { NumberAnimation { duration: Theme.reduceMotion ? 0 : 140; easing.type: Easing.OutQuad } }
-                DarkGlass { anchors.fill: parent; visible: !Theme.light }
+                DarkGlass { anchors.fill: parent; visible: root.look === "dark" }
+                CoffeeGlass { anchors.fill: parent; visible: root.look === "coffee" }
                 Image {   // the glass bubble (light theme)
                     anchors.fill: parent
-                    visible: Theme.light
+                    visible: root.look === "light"
                     source: "qrc:/images/app-tile.png"
                     sourceSize.width: tile.side * 2; sourceSize.height: tile.side * 2
                     smooth: true; mipmap: true
@@ -83,13 +98,13 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 elide: Text.ElideRight
                 text: tile.app.name
-                color: tile.hovered || tile.activeFocus ? Theme.text : Theme.text2
+                color: root.look === "coffee" ? "#4b2a12" : (tile.hovered || tile.activeFocus ? Theme.text : Theme.text2)
                 font { family: Theme.font; pixelSize: Theme.fs(16) }
             }
             Label {   // honest about the network
                 visible: tile.app.net === true
                 anchors { top: glass.bottom; topMargin: 30; horizontalCenter: parent.horizontalCenter }
-                text: "uses the internet"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(11) }
+                text: "uses the internet"; color: root.look === "coffee" ? "#7a4a22" : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(11) }
             }
         }
         background: Item {}
@@ -121,12 +136,68 @@ Item {
         anchors.fill: parent
         radius: 18
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Theme.light ? "#f6f7f5" : "#1b1c20" }
-            GradientStop { position: 1.0; color: Theme.light ? "#e8ebe8" : "#27282d" }
+            GradientStop { position: 0.0; color: root.look === "coffee" ? "#e98a2c" : (Theme.light ? "#f6f7f5" : "#1b1c20") }
+            GradientStop { position: 1.0; color: root.look === "coffee" ? "#f2ad58" : (Theme.light ? "#e8ebe8" : "#27282d") }
         }
         // a few soft glass shapes floating behind the tiles
+        Canvas {   // the anime coffee look: wood, a big cup and saucer, steam (all drawn here, nothing borrowed)
+            id: coffee
+            anchors.fill: parent
+            visible: root.look === "coffee"
+            onVisibleChanged: if (visible) requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                const ctx = getContext("2d"), w = width, h = height
+                ctx.reset()
+                function ell(cx, cy, rx, ry) { ctx.save(); ctx.translate(cx, cy); ctx.scale(rx, ry); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.restore() }
+                // keep to the rounded corners of the page
+                const r = 18
+                ctx.beginPath(); ctx.moveTo(r, 0); ctx.lineTo(w - r, 0); ctx.quadraticCurveTo(w, 0, w, r); ctx.lineTo(w, h - r); ctx.quadraticCurveTo(w, h, w - r, h)
+                ctx.lineTo(r, h); ctx.quadraticCurveTo(0, h, 0, h - r); ctx.lineTo(0, r); ctx.quadraticCurveTo(0, 0, r, 0); ctx.closePath(); ctx.clip()
+                // wood grain
+                for (let i = 0; i < 70; ++i) {
+                    const y = (i + 0.5) * h / 70, a = 0.03 + 0.05 * Math.abs(Math.sin(i * 12.9898))
+                    ctx.fillStyle = (i % 3 === 0) ? "rgba(120,50,0," + a + ")" : "rgba(255,240,200," + a + ")"
+                    ctx.fillRect(0, y, w, 1 + (i * 7) % 3)
+                }
+                const line = Math.max(2, w / 520), outline = "#6b4352"
+                ctx.lineWidth = line; ctx.strokeStyle = outline
+                // the saucer
+                ctx.beginPath(); ell(w * 0.5, h * 0.80, w * 0.46, h * 0.20); ctx.fillStyle = "#f7f0e8"; ctx.fill(); ctx.stroke()
+                ctx.beginPath(); ell(w * 0.5, h * 0.79, w * 0.30, h * 0.12); ctx.fillStyle = "#ebe0d4"; ctx.fill(); ctx.stroke()
+                // the spoon
+                ctx.save(); ctx.translate(w * 0.78, h * 0.93); ctx.rotate(-0.07)
+                ctx.beginPath(); ctx.moveTo(-w * 0.25, -h * 0.012); ctx.lineTo(w * 0.17, -h * 0.02); ctx.lineTo(w * 0.17, h * 0.02); ctx.lineTo(-w * 0.25, h * 0.012); ctx.closePath()
+                ctx.fillStyle = "#f3ece4"; ctx.fill(); ctx.stroke(); ctx.restore()
+                // the handle
+                const cx = w * 0.5, cy = h * 0.40, rx = w * 0.27, ry = h * 0.115
+                ctx.beginPath(); ell(cx + rx * 0.97, cy + h * 0.15, w * 0.075, h * 0.12)
+                ctx.lineWidth = h * 0.050; ctx.strokeStyle = outline; ctx.stroke()
+                ctx.lineWidth = h * 0.034; ctx.strokeStyle = "#fbf7f2"; ctx.stroke()
+                // the cup
+                ctx.lineWidth = line; ctx.strokeStyle = outline
+                ctx.beginPath(); ctx.moveTo(cx - rx, cy)
+                ctx.bezierCurveTo(cx - rx, cy + h * 0.31, cx - w * 0.14, cy + h * 0.43, cx, cy + h * 0.43)
+                ctx.bezierCurveTo(cx + w * 0.14, cy + h * 0.43, cx + rx, cy + h * 0.31, cx + rx, cy); ctx.closePath()
+                ctx.fillStyle = "#fbf7f2"; ctx.fill(); ctx.stroke()
+                ctx.beginPath(); ell(cx, cy, rx, ry); ctx.fillStyle = "#fffaf5"; ctx.fill(); ctx.stroke()
+                ctx.beginPath(); ell(cx, cy + ry * 0.05, rx * 0.9, ry * 0.8); ctx.fillStyle = "#5a2f22"; ctx.fill()
+                ctx.beginPath(); ell(cx - rx * 0.25, cy - ry * 0.1, rx * 0.35, ry * 0.25); ctx.fillStyle = "rgba(255,210,170,0.28)"; ctx.fill()
+                ctx.beginPath(); ctx.moveTo(cx - rx * 0.4, cy + ry * 0.1); ctx.bezierCurveTo(cx - rx * 0.1, cy - ry * 0.35, cx + rx * 0.1, cy + ry * 0.55, cx + rx * 0.45, cy)
+                ctx.lineWidth = line * 2; ctx.strokeStyle = "rgba(255,225,190,0.35)"; ctx.stroke()
+                // the steam
+                ctx.lineCap = "round"; ctx.lineWidth = w * 0.011; ctx.strokeStyle = "rgba(255,255,255,0.55)"
+                for (let i = 0; i < 3; ++i) {
+                    const x = cx + (i - 1) * w * 0.12
+                    ctx.beginPath(); ctx.moveTo(x, cy - ry * 1.1)
+                    ctx.bezierCurveTo(x - w * 0.04, cy - h * 0.22, x + w * 0.05, cy - h * 0.30, x - w * 0.01, cy - h * 0.40); ctx.stroke()
+                }
+            }
+        }
         Repeater {
-            model: [[0.06, 0.42, 70], [0.93, 0.08, 110], [0.88, 0.62, 60], [0.46, 0.93, 40], [0.12, 0.88, 34]]
+            visible: root.look !== "coffee"
+            model: root.look === "coffee" ? [] : [[0.06, 0.42, 70], [0.93, 0.08, 110], [0.88, 0.62, 60], [0.46, 0.93, 40], [0.12, 0.88, 34]]
             delegate: Rectangle {
                 required property var modelData
                 x: parent.width * modelData[0] - width / 2; y: parent.height * modelData[1] - height / 2
@@ -137,8 +208,8 @@ Item {
         }
     }
 
-    Rectangle {   // (a light strip behind the dots in the dark theme, so the grey ones can be seen)
-        visible: !Theme.light
+    Rectangle {   // (a light strip behind the dots in the dark look, so the grey ones can be seen)
+        visible: root.look === "dark"
         anchors { horizontalCenter: dots.horizontalCenter; verticalCenter: dots.verticalCenter }
         width: dots.width + 14; height: dots.height + 14; radius: 3; color: "#eceef0"
     }
@@ -153,7 +224,7 @@ Item {
                 required property int index
                 objectName: "appsDot_" + index
                 width: 14; height: 14; radius: 3
-                color: index === root.page ? "#12a0f4" : "#b9bdc0"
+                color: root.look === "coffee" ? (index === root.page ? "#3f4aa0" : "#8a5a2a") : (index === root.page ? "#12a0f4" : "#b9bdc0")
                 Accessible.name: "page " + (index + 1)
                 MouseArea { anchors.fill: parent; anchors.margins: -8; onClicked: root.goTo(index) }
             }
@@ -190,17 +261,23 @@ Item {
                         readonly property var app: appIndex < root.apps.length ? root.apps[appIndex] : null
                         width: root.cellW; height: root.cellH
                         DarkGlass {   // a free spot in the dark theme
-                            visible: slot.app === null && !Theme.light
+                            visible: slot.app === null && root.look === "dark"
                             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Math.max(0, (parent.height - (root.tileSide + 52)) / 2) }
                             width: root.tileSide; height: root.tileSide
                         }
+                        CoffeeGlass {   // a free spot in the coffee look
+                            visible: slot.app === null && root.look === "coffee"
+                            anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Math.max(0, (parent.height - (root.tileSide + 52)) / 2) }
+                            width: root.tileSide; height: root.tileSide
+                            opacity: 0.8
+                        }
                         Image {   // a free spot in the light theme: faded empty glass
-                            visible: slot.app === null && Theme.light
+                            visible: slot.app === null && root.look === "light"
                             anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: Math.max(0, (parent.height - (root.tileSide + 52)) / 2) }
                             width: root.tileSide; height: root.tileSide
                             source: "qrc:/images/app-tile.png"
                             sourceSize.width: root.tileSide * 2; sourceSize.height: root.tileSide * 2
-                            opacity: Theme.light ? 0.5 : 0.18
+                            opacity: 0.5
                             smooth: true; mipmap: true
                         }
                         Loader {
