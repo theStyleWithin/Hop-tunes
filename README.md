@@ -91,6 +91,7 @@ The [user guide](docs/user-guide.md) covers everything from the first run to tro
 - An **Android port**, same local-only/always-offline vision with the UI revised for touch.
 - New Collection sections for **audiobooks**, **pictures**, **ebooks** and local-file **podcasts**.
 - A free **Steam listing**, mainly so Steam Deck users can launch it from Gaming Mode.
+- More **apps**: see the [roadmap](#roadmap-more-apps-planned-nothing-below-is-built-yet) (Internet Archive, Odysee, DeviantArt and Blaze Stream are planned).
 
 **New in M7: video**
 
@@ -180,9 +181,28 @@ Renders of the Android app's phone layout (it adapts to tablets, and has a side 
 
 Hop-tunes now has an **apps** tab: small programs built into Hop-tunes that open inside its window. It is off until you switch it on in
 **settings → apps settings**, so nothing changes for anyone who doesn't want it. The first app, **Kick**, browses and watches live streams
-from kick.com with a follow list and a block list that stay on your computer (no Kick account needed). It is the one part of Hop-tunes that
+from kick.com with a follow list and a block list that stay on your computer (no Kick account needed). The second, **neko cafe**, is a little game
+that works fully offline. Kick is the one part of Hop-tunes that
 uses the internet: it asks first, lists the exact sites it contacts, connects only while it is open, and every connection goes through one
 gateway (secure connections, only those sites, no cookies, nothing kept). Details in the [user guide](docs/user-guide.md#apps-off-until-you-switch-them-on).
+
+### Roadmap: more apps (planned, nothing below is built yet)
+
+These are the apps planned next, in this order. It is a plan, not a promise: the order and the details can change, and any of them can be dropped if it
+cannot be done honestly. Every one would keep the promises Kick keeps: **off until you switch apps on**, it **asks before it uses the internet** and lists
+the exact sites, it connects only while it is open and only through the one gateway (secure connections, plain reads, no cookies, nothing kept), **no
+account or sign-in is needed**, and your follows, favourites and playlists live in your Hop-tunes profile on your device. A service that cannot be used
+within those promises (for example one that needs a login, a wallet or a private, undocumented interface) is not built as an app, or it is built only if it
+is clearly labelled and you choose it.
+
+| app | what it would do | what I found so far, and the catch |
+|---|---|---|
+| **1. Internet Archive** ([archive.org](https://archive.org)) | Search and browse the Internet Archive's free collections (public-domain films and radio, live music recordings, audio, books), play them, and keep what you choose offline within your storage limit; favourites and playlists stay local. | The best fit to start with: it has documented public endpoints for searching, reading an item's details and downloading its files, and they need no account. The catch: rights differ from item to item, so every item would show its licence and anything that is not downloadable stays stream-only. |
+| **2. Odysee** ([odysee.com](https://odysee.com)) | Browse and search channels, watch videos, download for offline, local follows and playlists (like Kick). | I found no official public API documentation, only the interface its own website uses, which is unofficial and can change without notice. It may also need requests the gateway does not allow today, which would need a narrow, tested exception first. It is only worth building if that can be done read-only, with no login. |
+| **3. DeviantArt** ([deviantart.com](https://www.deviantart.com)) | Browse artwork and galleries (art, not video), with local favourites and, where the artist's licence allows it, pictures kept offline. | It has an official API, but it is an OAuth interface: as far as I could tell from its developer documentation (read through secondary sources, still to be checked on deviantart.com), even public browsing needs an app registered on the site, so each person would have to register their own free app and keep its key on their device. That sits badly with "no accounts", and its terms for storing artwork offline are still to be read. It may end up as browse-only, or not at all. |
+| **4. Blaze Stream** ([blaze.stream](https://blaze.stream)) | A live-stream app like Kick: the live list, watching, the pretend chat, the small stream window, local follows. | Its own site describes it as "a web3 livestream platform for gaming, entertainment and creator content onchain". I could not find public API documentation or say what video format it uses. The first step is to check whether it offers a documented, public way to list live streams and play them without a login or a wallet; if it needs either, it will not be built as a no-account app. |
+
+Each app would arrive the way neko cafe and Kick did: one small step at a time, with tests, renders you can look at, and an honest note on what could not be tried.
 
 ## Building
 
