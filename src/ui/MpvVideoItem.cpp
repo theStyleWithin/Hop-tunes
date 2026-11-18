@@ -16,9 +16,7 @@
 
 namespace hop {
 
-#ifdef HOPTUNES_HAVE_MPV
-
-// ---- the actual GL glue: render-thread only, follows mpv's documented render API -------
+// ---- the lifetime of the render context (shared by the item, the renderer and a render job) -------
 //
 // Lifetime (this was a real crash: closing a video that is not the whole window, such as the small stream window, aborted inside
 // libmpv): mpv requires mpv_render_context_free() BEFORE the handle is destroyed (mpv_terminate_destroy aborts otherwise), and the
@@ -43,10 +41,14 @@ struct MpvVideoItem::RenderState {
             c = ctx; ctx = nullptr;
             dead = pendingCore; pendingCore = nullptr;
         }
+#ifdef HOPTUNES_HAVE_MPV
         if (c) {
             mpv_render_context_set_update_callback(c, nullptr, nullptr);
             mpv_render_context_free(c);
         }
+#else
+        Q_UNUSED(c)
+#endif
         if (!dead) return;
         if (QCoreApplication *app = QCoreApplication::instance())
             QMetaObject::invokeMethod(app, [dead] { delete dead; }, Qt::QueuedConnection);   // mpv's own teardown on the GUI thread, after the context
@@ -54,6 +56,10 @@ struct MpvVideoItem::RenderState {
             delete dead;
     }
 };
+
+// ---- the GL glue: render-thread only, follows mpv's documented render API -------
+
+#ifdef HOPTUNES_HAVE_MPV
 
 namespace {
 class FreeContextJob : public QRunnable {
