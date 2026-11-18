@@ -32,6 +32,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QImage>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFileInfo>
@@ -470,8 +471,20 @@ void App::activate(const QString &id, bool guest)
     emit appsEnabledChanged();
     m_appHints = guest || s.value(QStringLiteral("appHints")).toBool(true);
     emit appHintsChanged();
-    m_appsLook = !guest && s.value(QStringLiteral("appsLook")).toString() == QLatin1String("coffee") ? QStringLiteral("coffee") : QStringLiteral("auto");
-    emit appsLookChanged();
+    m_appsBgs.clear(); m_appsBg.clear(); m_appsDim = 25;
+    if (!guest) {   // the person's own pictures behind the apps grid (a guest keeps none)
+        static const QRegularExpression okId(QStringLiteral("^bg[0-9]{6,20}$"));
+        for (const QJsonValue &v : s.value(QStringLiteral("appsBackgrounds")).toArray()) {
+            const QJsonObject o = v.toObject();
+            const QString id = o.value(QStringLiteral("id")).toString();
+            if (m_appsBgs.size() < kMaxAppsBackgrounds && okId.match(id).hasMatch() && QFile::exists(appsBgDir() + QLatin1Char('/') + id + QStringLiteral(".jpg")))
+                m_appsBgs.append({id, qBound(0.0, o.value(QStringLiteral("luma")).toDouble(0.5), 1.0)});
+        }
+        const QString chosen = s.value(QStringLiteral("appsBackground")).toString();
+        for (const AppsBg &b : std::as_const(m_appsBgs)) if (b.id == chosen) m_appsBg = chosen;
+        m_appsDim = qBound(0, s.value(QStringLiteral("appsDim")).toInt(25), 60);
+    }
+    emit appsBackgroundChanged();
     m_netAllowed.clear();
     if (!guest) {
         const QJsonObject net = s.value(QStringLiteral("appsNet")).toObject();
@@ -656,7 +669,13 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
     s.insert(QStringLiteral("appHints"), m_appHints);
-    s.insert(QStringLiteral("appsLook"), m_appsLook);
+    s.insert(QStringLiteral("appsBackground"), m_appsBg);
+    s.insert(QStringLiteral("appsDim"), m_appsDim);
+    {
+        QJsonArray bgs;
+        for (const AppsBg &b : std::as_const(m_appsBgs)) bgs.append(QJsonObject{{QStringLiteral("id"), b.id}, {QStringLiteral("luma"), b.luma}});
+        s.insert(QStringLiteral("appsBackgrounds"), bgs);
+    }
     {
         QJsonObject net;
         for (const QString &a : m_netAllowed) net.insert(a, true);
@@ -1997,13 +2016,78 @@ void App::setAppHints(bool on)
     emit appHintsChanged();
 }
 
-void App::setAppsLook(const QString &look)
+QString App::appsBgDir() const { return m_store.dirFor(m_profileId) + QStringLiteral("/apps-backgrounds"); }
+
+QVariantList App::appsBackgrounds() const
 {
-    const QString v = look == QLatin1String("coffee") ? look : QStringLiteral("auto");
-    if (v == m_appsLook) return;
-    m_appsLook = v;
+    QVariantList out;
+    for (const AppsBg &b : m_appsBgs)
+        out << QVariantMap{{QStringLiteral("id"), b.id}, {QStringLiteral("url"), QUrl::fromLocalFile(appsBgDir() + QLatin1Char('/') + b.id + QStringLiteral(".jpg")).toString()}, {QStringLiteral("luma"), b.luma}};
+    return out;
+}
+
+void App::setAppsDim(int percent)
+{
+    const int v = qBound(0, percent, 60);
+    if (v == m_appsDim) return;
+    m_appsDim = v;
     saveProfileSettings();
-    emit appsLookChanged();
+    emit appsBackgroundChanged();
+}
+
+void App::setAppsBackground(const QString &id)
+{
+    bool known = id.isEmpty();
+    for (const AppsBg &b : std::as_const(m_appsBgs)) if (b.id == id) known = true;
+    if (!known || id == m_appsBg) return;
+    m_appsBg = id;
+    saveProfileSettings();
+    emit appsBackgroundChanged();
+}
+
+QString App::addAppsBackground(const QUrl &image)
+{
+    if (m_guest || m_profileId.isEmpty()) return QStringLiteral("a guest keeps nothing: open your profile to add pictures");
+    if (m_appsBgs.size() >= kMaxAppsBackgrounds) return QStringLiteral("that is the most pictures you can keep (%1): remove one first").arg(kMaxAppsBackgrounds);
+    const QString path = image.isLocalFile() ? image.toLocalFile() : image.toString();
+    const QFileInfo fi(path);
+    if (!fi.isFile()) return QStringLiteral("that file could not be found");
+    if (fi.size() > 40LL * 1024 * 1024) return QStringLiteral("that picture is too big (over 40 MB)");
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    const QSize sz = reader.size();
+    if (sz.isValid() && qint64(sz.width()) * sz.height() > 120LL * 1000 * 1000) return QStringLiteral("that picture is too big (over 120 megapixels)");
+    QImage img = reader.read();
+    if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    if (img.width() > 2560 || img.height() > 1600) img = img.scaled(2560, 1600, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    // how bright it is (a 24x24 average), so the grid can pick dark or light glass for it
+    const QImage tiny = img.scaled(24, 24, Qt::IgnoreAspectRatio, Qt::SmoothTransformation).convertToFormat(QImage::Format_RGB32);
+    double sum = 0;
+    for (int y = 0; y < tiny.height(); ++y) for (int x = 0; x < tiny.width(); ++x) { const QRgb p = tiny.pixel(x, y); sum += (0.2126 * qRed(p) + 0.7152 * qGreen(p) + 0.0722 * qBlue(p)) / 255.0; }
+    const double luma = sum / (tiny.width() * tiny.height());
+    QDir().mkpath(appsBgDir());
+    const QString id = QStringLiteral("bg") + QString::number(QDateTime::currentMSecsSinceEpoch());
+    const QString file = appsBgDir() + QLatin1Char('/') + id + QStringLiteral(".jpg");
+    if (!img.convertToFormat(QImage::Format_RGB32).save(file, "JPG", 88)) return QStringLiteral("could not save the picture");
+    QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    m_appsBgs.append({id, luma});
+    m_appsBg = id;
+    saveProfileSettings();
+    emit appsBackgroundChanged();
+    return {};
+}
+
+void App::removeAppsBackground(const QString &id)
+{
+    for (int i = 0; i < m_appsBgs.size(); ++i) {
+        if (m_appsBgs.at(i).id != id) continue;
+        QFile::remove(appsBgDir() + QLatin1Char('/') + id + QStringLiteral(".jpg"));
+        m_appsBgs.removeAt(i);
+        if (m_appsBg == id) m_appsBg.clear();
+        saveProfileSettings();
+        emit appsBackgroundChanged();
+        return;
+    }
 }
 
 void App::setAppsEnabled(bool on)

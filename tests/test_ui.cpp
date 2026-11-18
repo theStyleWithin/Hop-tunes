@@ -242,6 +242,8 @@ class TestUi : public QObject {
         ensureVisible(i);
         QPointF c;                               // wait until the item stands still: a layout that is still settling would send the click where it used to be
         for (int k = 0; k < 12; ++k) {
+            i = item(name);                      // (looked up again each time: a layout that settles can replace the item itself)
+            if (!i) { qWarning("cannot click %s: it went away", name); return false; }
             const QPointF now = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
             if (k > 0 && now == c) break;
             c = now;
@@ -2219,16 +2221,32 @@ private slots:
         QVERIFY(item("appsPages") && item("appsDots"));
         QVERIFY(item("appsDot_0") && !item("appsDot_1"));                       // two apps: one page
         QTRY_VERIFY(item("appTile_nekocafe")->x() > 0 || item("appTile_nekocafe")->parentItem());
-        QCOMPARE(m_app->appsLook(), QStringLiteral("auto"));
+        QCOMPARE(m_app->appsBackground(), QString());
         m_app->setTheme(QStringLiteral("light"));
-        QTest::qWait(150);
+        QTest::qWait(600);
         shot("apps-grid-light");
-        m_app->setAppsLook(QStringLiteral("coffee"));
-        QTest::qWait(250);
-        shot("apps-grid-coffee");
-        m_app->setAppsLook(QStringLiteral("auto"));
+        {   // a picture of the person's own behind the grid
+            QImage pic(1600, 900, QImage::Format_RGB32);
+            QPainter pp(&pic);
+            QLinearGradient g(0, 0, 1600, 900); g.setColorAt(0, QColor("#2b5876")); g.setColorAt(0.55, QColor("#c06c84")); g.setColorAt(1, QColor("#f8b195"));
+            pp.fillRect(pic.rect(), g);
+            pp.setPen(Qt::NoPen); pp.setBrush(QColor(255, 255, 255, 60));
+            for (int i = 0; i < 9; ++i) pp.drawEllipse(QPointF(150 + i * 170, 300 + 220 * ((i * 37) % 5) / 5.0), 60 + i * 9, 60 + i * 9);
+            pp.end();
+            const QString file = m_home.filePath(QStringLiteral("backdrop.png"));
+            QVERIFY(pic.save(file));
+            QCOMPARE(m_app->addAppsBackground(QUrl::fromLocalFile(file)), QString());
+            QTest::qWait(300);
+            shot("apps-grid-custom");
+            QVERIFY(click("appsCustomThemes"));
+            QTRY_VERIFY(item("appsThemesPanel")->isVisible());
+            shot("apps-custom-themes-panel");
+            QVERIFY(click("appsCustomThemes"));
+            m_app->removeAppsBackground(m_app->appsBackground());
+        }
+        QCOMPARE(m_app->appsBackground(), QString());
         m_app->setTheme(QStringLiteral("dark"));
-        QTest::qWait(150);
+        QTest::qWait(600);                                                      // (the theme fades over a moment)
         shot("apps-grid-dark");
         QVERIFY(click("appTile_kick"));
         QObject *host = item("appHost");
@@ -2278,6 +2296,58 @@ private slots:
         QVERIFY(click("subTab_music"));
     }
 
+
+    // Custom themes: the person's own pictures behind the apps grid. A resized copy lives in the profile, there are limits, a bad file says
+    // so plainly, and a guest keeps nothing.
+    void customThemePicturesAreKeptInTheProfileAndLimited()
+    {
+        const QString id = m_app->profile().value("id").toString();
+        const QString dir = m_app->profileStore()->dirFor(id) + QStringLiteral("/apps-backgrounds");
+        auto writePic = [&](const QString &name, int w, int h, QColor c) { QImage im(w, h, QImage::Format_RGB32); im.fill(c); const QString f = m_home.filePath(name); [&] { QVERIFY(im.save(f)); }(); return f; };
+        QCOMPARE(m_app->appsBackgrounds().size(), 0);
+        const QString big = writePic(QStringLiteral("wide.png"), 4000, 1000, QColor("#202020"));
+        QCOMPARE(m_app->addAppsBackground(QUrl::fromLocalFile(big)), QString());
+        QCOMPARE(m_app->appsBackgrounds().size(), 1);
+        const QVariantMap first = m_app->appsBackgrounds().first().toMap();
+        QCOMPARE(m_app->appsBackground(), first.value("id").toString());                 // a new picture is used at once
+        QVERIFY(first.value("luma").toDouble() < 0.2);                                    // a dark picture
+        QImage copy(QUrl(first.value("url").toString()).toLocalFile());
+        QVERIFY(!copy.isNull() && copy.width() <= 2560);                                  // a resized copy
+        QVERIFY(QFile::exists(big));                                                      // the original is not touched
+        QVERIFY(m_app->profileStore()->settings(id).value("appsBackground").toString() == first.value("id").toString());
+        // a bright one reads as bright; the file that is not a picture and the missing one say so plainly
+        QCOMPARE(m_app->addAppsBackground(QUrl::fromLocalFile(writePic(QStringLiteral("white.png"), 200, 100, Qt::white))), QString());
+        QVERIFY(m_app->appsBackgrounds().last().toMap().value("luma").toDouble() > 0.9);
+        QFile txt(m_home.filePath(QStringLiteral("notes.png"))); QVERIFY(txt.open(QIODevice::WriteOnly)); txt.write("not a picture"); txt.close();
+        QVERIFY(m_app->addAppsBackground(QUrl::fromLocalFile(txt.fileName())).contains("not a picture"));
+        QVERIFY(m_app->addAppsBackground(QUrl::fromLocalFile(m_home.filePath(QStringLiteral("missing.png")))).contains("could not be found"));
+        QCOMPARE(m_app->appsBackgrounds().size(), 2);
+        // the limit
+        const QString small = writePic(QStringLiteral("small.png"), 64, 36, QColor("#808080"));
+        for (int i = m_app->appsBackgrounds().size(); i < App::kMaxAppsBackgrounds; ++i) { QTest::qWait(3); QCOMPARE(m_app->addAppsBackground(QUrl::fromLocalFile(small)), QString()); }
+        QVERIFY(m_app->addAppsBackground(QUrl::fromLocalFile(small)).contains("most pictures"));
+        QCOMPARE(QDir(dir).entryList(QStringList{"*.jpg"}, QDir::Files).size(), App::kMaxAppsBackgrounds);
+        // dimming stays between 0 and 60, choosing and going back to the theme's own look
+        m_app->setAppsDim(99); QCOMPARE(m_app->appsDim(), 60);
+        m_app->setAppsDim(-4); QCOMPARE(m_app->appsDim(), 0);
+        m_app->setAppsDim(25);
+        m_app->setAppsBackground(QStringLiteral("nonsense")); QVERIFY(m_app->appsBackground() != QLatin1String("nonsense"));
+        m_app->setAppsBackground(QString()); QCOMPARE(m_app->appsBackground(), QString());
+        QVERIFY(m_app->profileStore()->settings(id).value("appsBackground").toString().isEmpty());
+        // removing deletes the copy; everything is removed in the end
+        const QVariantList all = m_app->appsBackgrounds();
+        for (const QVariant &v : all) m_app->removeAppsBackground(v.toMap().value("id").toString());
+        QCOMPARE(m_app->appsBackgrounds().size(), 0);
+        QCOMPARE(QDir(dir).entryList(QStringList{"*.jpg"}, QDir::Files).size(), 0);
+        // a guest keeps nothing
+        m_app->leaveProfile();
+        m_app->openGuest();
+        QTRY_VERIFY(m_app->profileReady());
+        QVERIFY(m_app->addAppsBackground(QUrl::fromLocalFile(small)).contains("guest"));
+        QCOMPARE(m_app->appsBackgrounds().size(), 0);
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(id), QString());
+    }
 
     // neko cafe: a game inside the apps tab. It opens from its tile, starts on A, the maid walks, a whole day ends in the results
     // screen, and Esc pauses first and leaves second.

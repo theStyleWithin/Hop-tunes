@@ -167,7 +167,9 @@ class App : public QObject {
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
     Q_PROPERTY(QStringList netAllowedApps READ netAllowedApps NOTIFY appNetChanged)   // the apps the person has allowed to use the internet
     Q_PROPERTY(QObject *appNetGateway READ gatewayObject CONSTANT)
-    Q_PROPERTY(QString appsLook READ appsLook WRITE setAppsLook NOTIFY appsLookChanged)   // how the apps page looks: "auto" (follows the light or dark theme) or "coffee"
+    Q_PROPERTY(QString appsBackground READ appsBackground NOTIFY appsBackgroundChanged)        // the picture behind the apps grid ("" = the theme's own look)
+    Q_PROPERTY(QVariantList appsBackgrounds READ appsBackgrounds NOTIFY appsBackgroundChanged)  // the person's own pictures: {id, url, luma}
+    Q_PROPERTY(int appsDim READ appsDim WRITE setAppsDim NOTIFY appsBackgroundChanged)           // how much a picture is darkened, 0 to 60 percent
     Q_PROPERTY(bool appHints READ appHints WRITE setAppHints NOTIFY appHintsChanged)   // the one-line descriptions that pop up on the apps tiles (on at first, the person can hide them)
     Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
@@ -372,8 +374,14 @@ public:
     Q_INVOKABLE bool appNetAllowed(const QString &app) const { return m_netAllowed.contains(app); }
     Q_INVOKABLE void setAppNetAllowed(const QString &app, bool on);
     bool appsEnabled() const { return m_appsEnabled; }
-    QString appsLook() const { return m_appsLook; }
-    void setAppsLook(const QString &look);
+    QString appsBackground() const { return m_appsBg; }
+    QVariantList appsBackgrounds() const;
+    int appsDim() const { return m_appsDim; }
+    void setAppsDim(int percent);
+    static constexpr int kMaxAppsBackgrounds = 12;
+    Q_INVOKABLE QString addAppsBackground(const QUrl &image);   // a resized copy goes in the profile; returns "" or a plain sentence about what went wrong
+    Q_INVOKABLE void removeAppsBackground(const QString &id);
+    Q_INVOKABLE void setAppsBackground(const QString &id);      // "" = back to the theme's own look
     bool appHints() const { return m_appHints; }
     void setAppHints(bool on);
     void setAppsEnabled(bool on);
@@ -578,7 +586,7 @@ signals:
     void videoViewStyleChanged();
     void appsEnabledChanged();
     void appHintsChanged();
-    void appsLookChanged();
+    void appsBackgroundChanged();
     void inPictureInPictureChanged();
     void appNetChanged();
     void videoChatChanged();
@@ -630,7 +638,11 @@ private:
     QString m_videoViewStyle = QStringLiteral("window");
     bool m_appsEnabled = false;
     bool m_appHints = true;
-    QString m_appsLook = QStringLiteral("auto");
+    QString m_appsBg;                              // id of the chosen picture, or ""
+    int m_appsDim = 25;
+    struct AppsBg { QString id; double luma = 0.5; };
+    QVector<AppsBg> m_appsBgs;
+    QString appsBgDir() const;
     bool m_inPip = false;
     QSet<QString> m_netAllowed;
 #ifdef HOPTUNES_NET_APPS
