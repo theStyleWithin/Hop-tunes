@@ -2213,8 +2213,23 @@ private slots:
         QTRY_VERIFY(item("appsView") && item("appsView")->isVisible());
         QQuickItem *tile = item("appTile_kick");
         QVERIFY(tile && tile->isVisible());
-        QVERIFY(tile->width() >= 100 && tile->height() > tile->width());       // a glass square with its name under it
+        QTRY_VERIFY(tile->width() >= 100 && tile->height() > tile->width());   // a glass square with its name under it
         shot("apps-tab");
+        // the grid: five across and three down, page dots on top (the page you are on is the first), and the three looks
+        QVERIFY(item("appsPages") && item("appsDots"));
+        QVERIFY(item("appsDot_0") && !item("appsDot_1"));                       // two apps: one page
+        QTRY_VERIFY(item("appTile_nekocafe")->x() > 0 || item("appTile_nekocafe")->parentItem());
+        QCOMPARE(m_app->appsLook(), QStringLiteral("auto"));
+        m_app->setTheme(QStringLiteral("light"));
+        QTest::qWait(150);
+        shot("apps-grid-light");
+        m_app->setAppsLook(QStringLiteral("coffee"));
+        QTest::qWait(250);
+        shot("apps-grid-coffee");
+        m_app->setAppsLook(QStringLiteral("auto"));
+        m_app->setTheme(QStringLiteral("dark"));
+        QTest::qWait(150);
+        shot("apps-grid-dark");
         QVERIFY(click("appTile_kick"));
         QObject *host = item("appHost");
         QVERIFY(host);
