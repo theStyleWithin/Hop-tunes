@@ -81,11 +81,14 @@ QStringList AppNet::hostsFor(const QString &app)
 {
     if (app == QLatin1String("kick"))
         return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("stream.kick.com"), QStringLiteral("files.kick.com"), QStringLiteral("clips.kick.com")};
+    if (app == QLatin1String("deviantart"))   // the public RSS feeds (the pictures come from the media host below)
+        return {QStringLiteral("backend.deviantart.com")};
     return {};
 }
 
 QStringList AppNet::streamSuffixesFor(const QString &app)
 {
+    if (app == QLatin1String("deviantart")) return {QStringLiteral("wixmp.com")};   // the artwork pictures (not video: the name is older than this app)
     return app == QLatin1String("kick") ? QStringList{QStringLiteral("live-video.net")} : QStringList{};
 }
 

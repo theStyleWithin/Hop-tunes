@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
 #include "apps/Hls.h"
+#include "apps/DeviantArtClient.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
 #include "apps/OfflineDownloads.h"
@@ -81,6 +82,28 @@ QByteArray channelJson(const QString &slug, bool live, bool mature = false)
                                                     {"thumbnail", QJsonObject{{"url", "https://stream.kick.com/thumbnails/x.jpg"}}},
                                                     {"categories", QJsonArray{QJsonObject{{"name", "Music"}}}}}) : QJsonValue();
     return QJsonDocument(o).toJson();
+}
+
+// A DeviantArt RSS feed like the real one: items with a title, artist, page, rating, a picture and thumbnails (made-up artists and pictures)
+struct DaItem { QString title, artist, rating = "nonadult", desc = "a drawing", keywords; QString license; };
+QByteArray daRss(const QList<DaItem> &items, const QString &next = {})
+{
+    QString x = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\" xmlns:atom=\"http://www.w3.org/2005/Atom\" xmlns:creativeCommons=\"http://backend.userland.com/creativeCommonsRssModule\">\n<channel><title>DeviantArt</title>";
+    if (!next.isEmpty()) x += "<atom:link rel=\"next\" href=\"" + next + "\"/>";
+    for (const DaItem &i : items) {
+        const QString slug = i.title.toLower().replace(' ', '-');
+        x += "<item><title>" + i.title + "</title><link>https://www.deviantart.com/" + i.artist + "/art/" + slug + "-1</link><guid isPermaLink=\"true\">https://www.deviantart.com/" + i.artist + "/art/" + slug + "-1</guid>"
+             "<pubDate>Thu, 08 Oct 2026 02:54:21 PDT</pubDate><media:title type=\"plain\">" + i.title + "</media:title><media:keywords>" + i.keywords + "</media:keywords>"
+             "<media:rating>" + i.rating + "</media:rating><media:credit role=\"author\" scheme=\"urn:ebu\">" + i.artist + "</media:credit>"
+             "<media:credit role=\"author\" scheme=\"urn:ebu\">https://a.deviantart.net/avatars/x/y/" + i.artist + ".jpg</media:credit><media:copyright url=\"https://www.deviantart.com/" + i.artist + "\">Copyright 2026 " + i.artist + "</media:copyright>"
+             "<media:description type=\"html\">&lt;p&gt;" + i.desc + "&lt;/p&gt;</media:description>"
+             + (i.license.isEmpty() ? QString() : "<creativeCommons:license>" + i.license + "</creativeCommons:license>") +
+             "<media:content url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + ".jpg?token=t\" medium=\"image\"/>"
+             "<media:thumbnail url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + "-150.jpg\" width=\"150\" height=\"100\"/>"
+             "<media:thumbnail url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + "-300.jpg\" width=\"300\" height=\"200\"/>"
+             "<media:thumbnail url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + "-828.jpg\" width=\"828\" height=\"552\"/></item>\n";
+    }
+    return (x + "</channel></rss>").toUtf8();
 }
 
 } // namespace
@@ -1407,6 +1430,154 @@ private slots:
         QVERIFY(k.importMessage().contains("playlist of channels"));
         QCOMPARE(k.importNames("zulu", "nope").value("added").toInt(), 0);
         QVERIFY(!k.isInPlaylist(clips, "zulu"));
+    }
+
+    // ---- the DeviantArt app: public RSS feeds, no account; the person's own filters ----
+    void deviantArtFeedIsParsedAndOnlyKnownAddressesSurvive()
+    {
+        QString next;
+        QByteArray xml = daRss({{"Mountain Lake", "alice", "nonadult", "a lake", "", "http://creativecommons.org/licenses/by-nc-nd/3.0/"}, {"Night Owl", "bob", "adult"}}, "https://backend.deviantart.com/rss.xml?type=deviation&amp;q=lake&amp;offset=60");
+        const auto works = DeviantArtClient::parseRss(xml, &next);
+        QCOMPARE(works.size(), 2);
+        QCOMPARE(works[0].title, QString("Mountain Lake"));
+        QCOMPARE(works[0].artist, QString("alice"));                                   // the avatar address is not the artist
+        QCOMPARE(works[0].license, QString("CC BY-NC-ND"));
+        QVERIFY(!works[0].mature && works[1].mature);
+        QVERIFY(works[0].thumb.contains("-300.jpg"));                                  // the thumbnail nearest 300 pixels
+        QVERIFY(works[0].image.contains(".jpg?token=t"));
+        QCOMPARE(works[0].description, QString("a lake"));                              // no markup
+        QCOMPARE(next, QString("https://backend.deviantart.com/rss.xml?type=deviation&q=lake&offset=60"));
+        // an address on another host (a picture, a page or the next page) never gets through
+        QByteArray bad = daRss({{"Evil", "mallory"}});
+        bad.replace("https://images-wixmp-abc123.wixmp.com", "https://evil.example");
+        QVERIFY(DeviantArtClient::parseRss(bad).isEmpty());                              // no usable picture: no work
+        QByteArray badPage = daRss({{"Evil", "mallory"}});
+        badPage.replace("https://www.deviantart.com/mallory", "https://evil.example/mallory");
+        QVERIFY(DeviantArtClient::parseRss(badPage).isEmpty());
+        QString n2;
+        DeviantArtClient::parseRss(daRss({}, "https://evil.example/rss.xml?offset=60"), &n2);
+        QVERIFY(n2.isEmpty());
+        QVERIFY(DeviantArtClient::parseRss("<rss><channel><item><title>broken").isEmpty());   // broken XML: nothing, no crash
+        QVERIFY(DeviantArtClient::parseRss(QByteArray()).isEmpty());
+    }
+
+    void deviantArtGatewayAllowsOnlyItsFeedAndPictureHosts()
+    {
+        QString why;
+        QVERIFY(AppNet::urlAllowed("deviantart", QUrl("https://backend.deviantart.com/rss.xml?q=owl"), &why));
+        QVERIFY(AppNet::urlAllowed("deviantart", QUrl("https://images-wixmp-abc123.wixmp.com/f/1/a.jpg"), &why));
+        QVERIFY(!AppNet::urlAllowed("deviantart", QUrl("https://www.deviantart.com/x/art/y"), &why));           // pages open in the browser, never here
+        QVERIFY(!AppNet::urlAllowed("deviantart", QUrl("http://backend.deviantart.com/rss.xml"), &why));
+        QVERIFY(!AppNet::urlAllowed("deviantart", QUrl("https://notwixmp.com/a.jpg"), &why));                    // ends alike, is not the domain
+        QVERIFY(!AppNet::urlAllowed("deviantart", QUrl("https://kick.com/"), &why));
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://backend.deviantart.com/rss.xml"), &why));              // the sites are per app
+    }
+
+    void deviantArtListsAreFilteredByYourSwitchesAndBlocks()
+    {
+        fresh();
+        net.setAllowed("deviantart", true);
+        ft->handler = [](const QUrl &) {
+            return ok(daRss({{"Mountain Lake", "alice"}, {"Night Owl", "bob", "adult"}, {"Spider Study", "carol", "nonadult", "a big spider"}, {"Plain Cat", "dave"}, {"Category Chart", "erin"}}));
+        };
+        DeviantArtClient da(&net);
+        da.open();
+        QTRY_VERIFY(da.works().size() > 0);
+        QVERIFY(ft->asked.last().toString().contains("q=boost%3Apopular"));
+        QCOMPARE(da.works().size(), 4);                                                 // the adult one is hidden at the start
+        QCOMPARE(da.hiddenCount(), 1);
+        da.setShowMature(true);
+        QCOMPARE(da.works().size(), 5);
+        QCOMPARE(da.hiddenCount(), 0);
+        da.setShowMature(false);
+        da.blockArtist("Alice");                                                        // case does not matter
+        QCOMPARE(da.works().size(), 3);
+        QVERIFY(da.isBlockedArtist("alice"));
+        QVERIFY(da.blockTag("spider"));                                                 // in the description
+        QVERIFY(!da.blockTag("Spider"));                                                // not twice
+        QVERIFY(da.blockTag("cat"));                                                    // a whole word: "Category" stays
+        QStringList titles;
+        for (const QVariant &v : da.works()) titles << v.toMap().value("title").toString();
+        QVERIFY2(titles == QStringList({"Category Chart"}), qPrintable(titles.join(",")));
+        da.unblockArtist("alice"); da.unblockTag("spider"); da.unblockTag("cat");
+        QCOMPARE(da.works().size(), 4);
+        QVERIFY(!da.blockTag("   "));
+        // searching a blocked word or a blocked artist asks the network nothing
+        da.blockTag("owl");
+        const int asked = ft->asked.size();
+        da.search("cute owl");
+        QVERIFY(da.message().contains("blocked"));
+        QCOMPARE(ft->asked.size(), asked);
+        da.blockArtist("frank");
+        da.search("@frank");
+        QVERIFY(da.message().contains("blocked"));
+        QCOMPARE(ft->asked.size(), asked);
+        da.search("@bad name!");                                                        // never becomes part of the address
+        QVERIFY(da.message().contains("not an artist"));
+        QCOMPARE(ft->asked.size(), asked);
+        da.search("@dave");
+        QVERIFY(ft->asked.last().toString().contains("q=gallery%3Adave"));
+        da.search("landscape");
+        QVERIFY(ft->asked.last().toString().endsWith("q=landscape"));
+    }
+
+    void deviantArtPagesLoadMoreAndErrorsAreSaidPlainly()
+    {
+        fresh();
+        net.setAllowed("deviantart", true);
+        ft->handler = [](const QUrl &u) {
+            if (u.toString().contains("offset=60")) return ok(daRss({{"Second Page", "gina"}}));
+            return ok(daRss({{"First Page", "hank"}}, "https://backend.deviantart.com/rss.xml?type=deviation&amp;q=boost%3Apopular&amp;offset=60"));
+        };
+        DeviantArtClient da(&net);
+        da.open();
+        QTRY_COMPARE(da.works().size(), 1);
+        QVERIFY(da.canLoadMore());
+        da.loadMore();
+        QTRY_COMPARE(da.works().size(), 2);
+        QVERIFY(!da.canLoadMore());                                                      // the second page named no next one
+        ft->handler = [](const QUrl &) { NetReply r; r.error = "kick did not answer in time"; return r; };
+        da.search("anything");
+        QTRY_VERIFY(da.message().startsWith("could not load"));
+        QCOMPARE(da.works().size(), 0);
+        ft->handler = [](const QUrl &) { return ok(daRss({})); };
+        da.search("nothing here");
+        QTRY_VERIFY(da.message().contains("nothing found"));
+        // closing drops what is on screen, and an answer still on its way is not delivered
+        ft->delayMs = 100;
+        ft->handler = [](const QUrl &) { return ok(daRss({{"Late", "ivy"}})); };
+        da.search("late");
+        da.close();
+        QTest::qWait(300);
+        QCOMPARE(da.works().size(), 0);
+        QVERIFY(!da.isOpen());
+        ft->delayMs = 0;
+    }
+
+    void deviantArtListsAreKeptInTheProfileAndOnlyWhatIsSafe()
+    {
+        fresh();
+        DeviantArtClient da(&net);
+        QSignalSpy edits(&da, &DeviantArtClient::listsEdited);
+        da.setShowMature(true);
+        da.blockArtist("zed"); da.blockTag("gore"); da.toggleFavouriteArtist("alice");
+        QVariantMap w{{"id", "https://www.deviantart.com/alice/art/x-1"}, {"title", "X"}, {"artist", "alice"}, {"page", "https://www.deviantart.com/alice/art/x-1"}, {"thumb", "https://images-wixmp-a.wixmp.com/t.jpg"}};
+        da.toggleFavouriteWork(w);
+        QVERIFY(da.isFavouriteWork(w["id"].toString()));
+        QVERIFY(edits.count() >= 4);
+        QVariantMap bad{{"id", "evil"}, {"title", "E"}, {"page", "https://evil.example/x"}};
+        da.toggleFavouriteWork(bad);                                                     // a page that is not on deviantart.com is not kept
+        QVERIFY(!da.isFavouriteWork("evil"));
+        const QJsonObject saved = da.listsJson();
+        DeviantArtClient again(&net);
+        again.setListsJson(saved);
+        QVERIFY(again.showMature() && again.isBlockedArtist("zed") && again.blockedTags() == QStringList{"gore"} && again.isFavouriteArtist("alice") && again.isFavouriteWork(w["id"].toString()));
+        // a guest keeps nothing, and odd saved data is ignored
+        DeviantArtClient guest(&net);
+        guest.setListsJson(QJsonObject{});
+        QVERIFY(!guest.showMature() && guest.blockedArtists().isEmpty() && guest.favouriteWorks().isEmpty());
+        guest.setListsJson(QJsonObject{{"blockedArtists", 5}, {"favouriteWorks", QJsonArray{QJsonObject{{"id", "q"}, {"page", "javascript:alert(1)"}}, 7, "x"}}, {"showMature", "yes"}});
+        QVERIFY(!guest.showMature() && guest.blockedArtists().isEmpty() && guest.favouriteWorks().isEmpty());
     }
 
     void thereIsNoSignInAndTheGatewayOnlyEverGets()

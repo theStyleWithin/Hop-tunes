@@ -18,15 +18,15 @@ namespace hop {
 // cannot be loaded or read gives an error, and the screen shows a plain tile instead.
 class KickImageResponse : public QQuickImageResponse {
 public:
-    KickImageResponse(AppNet *net, const QString &id, const QSize &size) : m_size(size)
+    KickImageResponse(AppNet *net, const QString &id, const QSize &size, const QString &app = QStringLiteral("kick")) : m_size(size)
     {
         QString address = id;
         if (!address.startsWith(QLatin1String("https:"))) address = QUrl::fromPercentEncoding(id.toUtf8());
         const QUrl url(address);
         // AppNet lives in the main thread; ask from there whatever thread this was created in
-        QTimer::singleShot(0, net, [this, net, url, self = QPointer<KickImageResponse>(this)] {
+        QTimer::singleShot(0, net, [this, net, url, app, self = QPointer<KickImageResponse>(this)] {
             if (!self) return;
-            net->get(QStringLiteral("kick"), url, [self](NetReply r) {
+            net->get(app, url, [self](NetReply r) {
                 if (!self) return;
                 if (!r.error.isEmpty()) { self->finish(QImage(), r.error); return; }
                 QImage img = QImage::fromData(r.body);
@@ -45,8 +45,11 @@ private:
     {
         if (m_cancelled) { m_error = QStringLiteral("cancelled"); }
         else {
-            if (!img.isNull() && m_size.isValid() && (img.width() > m_size.width() || img.height() > m_size.height()))
-                img = img.scaled(m_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            // a size with only a width (or only a height) asked for has a 0 for the other: that side is not limited (it used to shrink the picture to nothing)
+            if (!img.isNull() && m_size.width() >= 0 && m_size.height() >= 0 && (m_size.width() > 0 || m_size.height() > 0)) {
+                const QSize box(m_size.width() > 0 ? m_size.width() : img.width(), m_size.height() > 0 ? m_size.height() : img.height());
+                if (img.width() > box.width() || img.height() > box.height()) img = img.scaled(box, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            }
             m_image = img;
             m_error = error;
         }
@@ -60,13 +63,14 @@ private:
 
 class KickImageProvider : public QQuickAsyncImageProvider {
 public:
-    explicit KickImageProvider(AppNet *net) : m_net(net) {}
+    explicit KickImageProvider(AppNet *net, const QString &app = QStringLiteral("kick")) : m_net(net), m_app(app) {}   // (image://deviantart/ is the same, for that app)
     QQuickImageResponse *requestImageResponse(const QString &id, const QSize &requestedSize) override
     {
-        return new KickImageResponse(m_net, id, requestedSize);
+        return new KickImageResponse(m_net, id, requestedSize, m_app);
     }
 private:
     AppNet *m_net;
+    QString m_app;
 };
 
 } // namespace hop

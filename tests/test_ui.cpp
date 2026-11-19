@@ -5,6 +5,7 @@
 #include "core/Paths.h"
 #include "ui/MpvVideoItem.h"
 #ifdef HOPTUNES_NET_APPS
+#include "apps/DeviantArtClient.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
 #include "net/AppNet.h"
@@ -139,6 +140,37 @@ public:
         QTimer::singleShot(0, this, [done, r] { done(r); });
     }
     void abortAll() override { ++aborted; }
+};
+
+// A DeviantArt feed like the real one, with made-up artists and works, and a small picture for every picture address
+class FakeDeviantArt : public NetTransport {
+public:
+    QList<QUrl> asked;
+    static QByteArray feed()
+    {
+        struct W { const char *title, *artist, *rating, *desc; };
+        const W works[] = {{"Mountain Lake", "alice", "nonadult", "a lake at dawn"}, {"Night Owl", "bob", "adult", "an owl"}, {"Spider Study", "carol", "nonadult", "a big spider"},
+                           {"Quiet Harbour", "dave", "nonadult", "boats"}, {"Paper Cranes", "erin", "nonadult", "origami"}, {"Red Fox", "alice", "nonadult", "a fox"}};
+        QString x = "<?xml version=\"1.0\" encoding=\"utf-8\"?><rss version=\"2.0\" xmlns:media=\"http://search.yahoo.com/mrss/\" xmlns:atom=\"http://www.w3.org/2005/Atom\" xmlns:creativeCommons=\"http://backend.userland.com/creativeCommonsRssModule\"><channel><title>DeviantArt</title>";
+        for (const W &w : works) {
+            const QString t = QString::fromLatin1(w.title), a = QString::fromLatin1(w.artist), slug = QString(t).toLower().replace(' ', '-');
+            x += "<item><title>" + t + "</title><link>https://www.deviantart.com/" + a + "/art/" + slug + "-1</link><guid isPermaLink=\"true\">https://www.deviantart.com/" + a + "/art/" + slug + "-1</guid>"
+                 "<media:rating>" + QString::fromLatin1(w.rating) + "</media:rating><media:credit role=\"author\" scheme=\"urn:ebu\">" + a + "</media:credit>"
+                 "<media:copyright url=\"https://www.deviantart.com/" + a + "\">Copyright 2026 " + a + "</media:copyright><media:description type=\"html\">&lt;p&gt;" + QString::fromLatin1(w.desc) + "&lt;/p&gt;</media:description>"
+                 "<creativeCommons:license>http://creativecommons.org/licenses/by-nc-nd/3.0/</creativeCommons:license>"
+                 "<media:content url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + ".jpg\" medium=\"image\"/>"
+                 "<media:thumbnail url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + "-300.jpg\" width=\"300\" height=\"200\"/></item>";
+        }
+        return (x + "</channel></rss>").toUtf8();
+    }
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, NetLimits, Done done) override
+    {
+        asked << url;
+        NetReply r; r.status = 200;
+        r.body = url.host() == QLatin1String("backend.deviantart.com") ? feed() : FakeKick::pngBytes();
+        QTimer::singleShot(0, [done, r] { done(r); });
+    }
+    void abortAll() override {}
 };
 #endif
 
@@ -2429,6 +2461,93 @@ private slots:
     }
 
 #ifdef HOPTUNES_NET_APPS
+    // DeviantArt: asks first, shows the artwork of a public feed, the 18+ switch, a work full size, favourites, blocked artists and words, Esc.
+    void deviantArtAsksThenBrowsesAndKeepsYourFiltersLocally()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeDeviantArt>();
+        FakeDeviantArt *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        DeviantArtClient *da = m_app->deviantArtClient();
+        struct Restore { App *app; DeviantArtClient *d; ~Restore() { d->setListsJson(QJsonObject{}); app->setAppNetAllowed("deviantart", false); app->setAppsEnabled(false); } } restore{m_app.get(), da};
+        da->setListsJson(QJsonObject{});
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        QVERIFY(!m_app->appNetAllowed(QStringLiteral("deviantart")));
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appTile_deviantart") && item("appTile_deviantart")->isVisible());
+        QVERIFY(click("appTile_deviantart"));
+        QTRY_VERIFY(item("deviantArtApp") && item("deviantArtApp")->isVisible());
+        // it asks first, lists its sites, and has contacted nothing
+        QTRY_VERIFY(item("daPermission")->isVisible());
+        QVERIFY(ft->asked.isEmpty());
+        shot("deviantart-permission");
+        QVERIFY(click("daAllow"));
+        QTRY_VERIFY(item("daCard_0") && item("daCard_0")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("deviantart", u), qPrintable(u.toString()));
+        QCOMPARE(da->works().size(), 5);                                          // the adult one is hidden at the start
+        QVERIFY(item("daHidden")->isVisible());
+        QTRY_VERIFY(item("daCard_4") != nullptr);
+        QTRY_VERIFY(item("daThumb_0") && item("daThumb_0")->property("status").toInt() == 1);   // the pictures come through the gateway (Image.Ready)
+        QTRY_VERIFY(item("daThumb_4") && item("daThumb_4")->property("status").toInt() == 1);
+        QTest::qWait(400);                                                           // (a frame or two for the pictures to reach the screen)
+        {   // and they are really painted: the middle of the first card is the fixture picture's purple, not the empty tile
+            const QImage frame = window()->grabWindow();
+            QQuickItem *thumb = item("daThumb_0");
+            const QPoint c = thumb->mapToScene(QPointF(thumb->width() / 2, thumb->height() / 2)).toPoint();
+            const QColor px = frame.pixelColor(c * int(frame.devicePixelRatio()));
+            QVERIFY2(px.red() > 70 && px.blue() > 130 && px.green() < 90, qPrintable(px.name()));
+        }
+        shot("deviantart-browse");
+        // the 18+ switch shows it, and hides it again
+        QVERIFY(click("daMature"));
+        QTRY_COMPARE(da->works().size(), 6);
+        QVERIFY(click("daMature"));
+        QTRY_COMPARE(da->works().size(), 5);
+        // a work, full size, with the next and the previous
+        QVERIFY(click("daCard_0"));
+        QTRY_VERIFY(item("daWork")->isVisible());
+        QCOMPARE(item("daWorkTitle")->property("text").toString(), QStringLiteral("Mountain Lake"));
+        QCOMPARE(item("daWorkArtist")->property("text").toString(), QStringLiteral("by alice"));
+        QTRY_VERIFY(item("daWorkImage")->property("status").toInt() == 1);        // Image.Ready
+        QVERIFY(item("daWorkInfo")->property("text").toString().contains("CC BY-NC-ND"));
+        shot("deviantart-work");
+        QVERIFY(click("daNext"));
+        QCOMPARE(item("daWorkTitle")->property("text").toString(), QStringLiteral("Spider Study"));   // (the adult one is not in the list)
+        QVERIFY(click("daPrev"));
+        QCOMPARE(item("daWorkTitle")->property("text").toString(), QStringLiteral("Mountain Lake"));
+        // favourites
+        QVERIFY(click("daFavourite"));
+        QVERIFY(click("daFavouriteArtist"));
+        QCOMPARE(da->favouriteWorks().size(), 1);
+        QVERIFY(da->isFavouriteArtist(QStringLiteral("alice")));
+        // block this artist: back to the list, and both of alice's works are gone
+        QVERIFY(click("daBlockArtist"));
+        QTRY_VERIFY(item("daBrowse")->isVisible());
+        QCOMPARE(da->works().size(), 3);
+        QVERIFY(da->isBlockedArtist(QStringLiteral("alice")));
+        // my lists: block a word, then take both back
+        QVERIFY(click("daListsButton"));
+        QTRY_VERIFY(item("daLists")->isVisible());
+        item("daBlockWordField")->setProperty("text", QStringLiteral("spider"));
+        QVERIFY(click("daBlockWordAdd"));
+        QTRY_COMPARE(da->works().size(), 2);
+        QTRY_VERIFY(item("daBlockedWord_spider") != nullptr);
+        QTRY_VERIFY(item("daBlockedArtist_alice") != nullptr);
+        shot("deviantart-lists");
+        QVERIFY(click("daBlockedWord_spider"));
+        QVERIFY(click("daBlockedArtist_alice"));
+        QTRY_COMPARE(da->works().size(), 5);
+        // a profile keeps them (and not the pictures), Esc steps back and then leaves
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("deviantart").toObject().value("favouriteWorks").toArray().size() == 1);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("daBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(!da->isOpen());
+    }
+
     // Kick: asks before it connects, browses without playing anything, follow and block stay local, and everything it reaches goes
     // through the gateway (answered here from fixtures).
     void kickAppAsksThenBrowsesFollowsAndBlocksLocally()
