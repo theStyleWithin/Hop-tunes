@@ -15,6 +15,8 @@ FocusScope {
     // Android: switching to another app pauses the phone's video player and the stream's address (it carries a time-limited token) goes stale,
     // which showed "Demuxing failed" on coming back. So the stream is let go while the app is away and asked for again (with a fresh address) on return.
     property bool inBackground: false
+    // Android: the stream's sound goes on while the app is out of sight (a foreground service keeps the app alive); coming back asks for a fresh address
+    readonly property bool soundInBackground: Qt.platform.os === "android"
     property bool videoFullscreen: false          // the picture fills the whole window (Esc / the back button / its own button leave it)
     // the small pop-out window (picture in picture, Android): allowed while a stream or a download is playing
     readonly property bool canPopOut: hop.videoEngine !== "none" && ((livePlayer.wanted && livePlayer.error === "") || (localPlayer.wanted && localPlayer.error === ""))
@@ -36,11 +38,8 @@ FocusScope {
     }
     Connections {
         target: hop
-        function onPictureInPictureClosed() {       // the small window's X closes the stream and only the stream: the app goes back to its lists
-            root.videoFullscreen = false
-            if (root.page === "watch") root.page = "browse"
-            else if (root.page === "play") root.page = "downloads"
-        }
+        // the small window's X closes only the picture: the app is left as it is (suspended), and the sound goes on in the background
+        function onPictureInPictureClosed() { root.videoFullscreen = false }
     }
     Connections {
         target: Qt.application
@@ -772,7 +771,7 @@ FocusScope {
                         anchors.fill: parent
                         fullscreen: root.videoFullscreen
                         onFullscreenToggled: root.videoFullscreen = !root.videoFullscreen
-                        url: !root.useDock && root.page === "watch" && root.watchTab === "live" && !root.inBackground && kick.health !== "down" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
+                        url: !root.useDock && root.page === "watch" && root.watchTab === "live" && (!root.inBackground || root.soundInBackground) && kick.health !== "down" && kick.channel.live === true ? (kick.channel.playbackUrl || "") : ""
                         onRetryRequested: { if ((kick.channel.slug || "") !== "") kick.openChannel(kick.channel.slug) }
                     }
                     Rectangle {

@@ -68,6 +68,7 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     connect(&m_driveTimer, &QTimer::timeout, this, &App::checkDrives);
     m_driveTimer.start();
     connect(&m_player, &Player::spectrum, &m_audio, &AudioAnalyzer::onSpectrum);
+    connect(&m_player, &Player::playingChanged, this, [this] { updatePlaybackService(); });
 #ifdef Q_OS_ANDROID
     // a breadcrumb for every song that starts, with how much memory the app holds: after a crash "copy last run" shows how many songs it had
     // played and whether memory had been growing from song to song
@@ -1141,6 +1142,10 @@ void jniPip(JNIEnv *, jclass, jboolean inPip)
 {
     if (App *a = g_pipApp) QMetaObject::invokeMethod(a, [a, inPip] { a->setInPictureInPicture(inPip); }, Qt::QueuedConnection);
 }
+void jniPipToggle(JNIEnv *, jclass)
+{
+    if (App *a = g_pipApp) QMetaObject::invokeMethod(a, [a] { a->pipToggle(); }, Qt::QueuedConnection);
+}
 void jniPipClosed(JNIEnv *, jclass)
 {
     if (App *a = g_pipApp) QMetaObject::invokeMethod(a, [a] { a->pipClosed(); }, Qt::QueuedConnection);
@@ -1161,8 +1166,9 @@ void App::registerPictureInPicture()
     QJniEnvironment env;
     const JNINativeMethod methods[] = {{"nativePip", "(Z)V", reinterpret_cast<void *>(jniPip)},
                                        {"nativePipClosed", "()V", reinterpret_cast<void *>(jniPipClosed)},
+                                       {"nativePipToggle", "()V", reinterpret_cast<void *>(jniPipToggle)},
                                        {"nativeLife", "(Ljava/lang/String;)V", reinterpret_cast<void *>(jniLife)}};
-    env.registerNativeMethods("io/github/thestylewithin/hoptunes/HopActivity", methods, 3);
+    env.registerNativeMethods("io/github/thestylewithin/hoptunes/HopActivity", methods, 4);
 #endif
 }
 
@@ -1174,10 +1180,45 @@ void App::setInPictureInPicture(bool on)
     emit inPictureInPictureChanged();
 }
 
+void App::pipToggle()
+{
+    DiagLog::note(QStringLiteral("picture in picture: play/pause pressed"));
+    emit pictureInPictureToggle();
+}
+
+void App::diagNote(const QString &text) const { DiagLog::note(text); }
+
+void App::setPictureInPicturePlaying(bool playing)
+{
+#ifdef Q_OS_ANDROID
+    QJniObject::callStaticMethod<void>("io/github/thestylewithin/hoptunes/HopActivity", "setPipPlaying", "(Z)V", jboolean(playing));
+#else
+    Q_UNUSED(playing);
+#endif
+}
+
+void App::setStreamPlaying(bool playing)
+{
+    if (playing == m_streamPlaying) return;
+    m_streamPlaying = playing;
+    updatePlaybackService();
+}
+
+// Android: sound is playing (a song, or a stream) -> a foreground service keeps the app alive while it is out of sight; it ends with the sound
+void App::updatePlaybackService()
+{
+#ifdef Q_OS_ANDROID
+    const bool on = m_player.isPlaying() || m_streamPlaying;
+    if (on == m_serviceOn) return;
+    m_serviceOn = on;
+    DiagLog::note(QStringLiteral("background playback service: %1").arg(on ? QStringLiteral("on") : QStringLiteral("off")));
+    QJniObject::callStaticMethod<void>("io/github/thestylewithin/hoptunes/HopActivity", "setPlaybackService", "(Z)V", jboolean(on));
+#endif
+}
+
 void App::pipClosed()
 {
-    DiagLog::note(QStringLiteral("picture in picture: closed with its X (the stream is let go, the app stays)"));
-    m_dock.stop();
+    DiagLog::note(QStringLiteral("picture in picture: closed with its X (only the picture goes: the app stays, the sound goes on)"));
     setInPictureInPicture(false);
     emit pictureInPictureClosed();
 }

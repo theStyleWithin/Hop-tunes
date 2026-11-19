@@ -229,6 +229,11 @@ of the watch page and the chat below it. The Android app carries the internet pe
 On a phone, the **search** button in the bottom bar searches Kick while the Kick app is open (type a streamer's name and press enter, or paste a kick.com link);
 leave the app and it is the music search again.
 
+#### The small pop-out window (Android)
+
+While a Kick stream plays, the home gesture (or the pop-out button) turns the picture into a small window over other apps. It has its own **play/pause** button; the system's expand control brings back the whole screen. The **X** closes only the picture: Hop-tunes stays suspended and the sound keeps playing in the background (with a small notification, which you can tap to open the app). Android 13 and newer ask once whether Hop-tunes may show that notification; if you say no, the sound may stop when the app is out of sight.
+
+
 ### No Kick account, no sign-in
 
 Kick in Hop-tunes is a local viewing experience. You never sign in to Kick: your follows, blocks and playlists belong to your Hop-tunes profile (built into the player,
