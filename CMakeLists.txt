@@ -333,6 +333,17 @@ if(HOPTUNES_BUILD_TESTS)
     add_test(NAME video COMMAND test_video)
     set_tests_properties(video PROPERTIES TIMEOUT 120)
 
+    # Closing a video while the window lives on must not abort mpv (needs a display with OpenGL: Xvfb with Qt 6.4, or a Qt whose xcb plugin has
+    # its libraries). Only registered where xvfb-run exists.
+    find_program(XVFB_RUN xvfb-run)
+    find_library(XCB_CURSOR_LIB xcb-cursor)
+    if(HOPTUNES_BUILD_APP AND XVFB_RUN AND (Qt6_VERSION VERSION_LESS 6.5 OR XCB_CURSOR_LIB))
+        add_executable(test_video_teardown tests/test_video_teardown.cpp src/ui/MpvVideoItem.cpp)
+        target_link_libraries(test_video_teardown PRIVATE hoptunes_playback Qt6::Gui Qt6::Quick Qt6::OpenGL Qt6::Test)
+        add_test(NAME videoteardown COMMAND ${XVFB_RUN} -a -s "-screen 0 1280x800x24" $<TARGET_FILE:test_video_teardown>)
+        set_tests_properties(videoteardown PROPERTIES TIMEOUT 120 ENVIRONMENT "QT_QPA_PLATFORM=xcb")
+    endif()
+
     # Profile flows driven through the real QML UI, offscreen.
     if(HOPTUNES_BUILD_APP)
         add_executable(test_ui tests/test_ui.cpp src/App.cpp src/ui/MpvVideoItem.cpp src/ui/qml.qrc assets/assets.qrc)
