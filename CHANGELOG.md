@@ -4,6 +4,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **A new look for the apps page.** The apps are now pages of glass tiles (five across and three down on a computer, three across on a phone) with page dots at the top: the blue one is the page you are on. Swipe, turn the mouse wheel, use the arrow keys or click a dot to change page. Free spots are drawn as faded empty glass. It follows your theme: pale in the light theme, dark glass in the dark theme.
+- **Custom themes.** The **custom themes** button at the top right of the apps page lets you put one of your own pictures behind the apps. Hop-tunes keeps a resized copy in your profile on this computer (up to 12 pictures; nothing is uploaded or shared, and a guest keeps none), you can choose or remove a picture, and a **dim** slider (0 to 60%) darkens it. The glass and the labels switch between dark and light to suit how bright the picture is.
+
 ## [1.12.0] - 2026-11-13: neko cafe
 
 ### Added
