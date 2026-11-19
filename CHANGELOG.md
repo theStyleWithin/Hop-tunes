@@ -5,6 +5,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 ## [Unreleased]
 
 ### Added
+- **Internet Archive, a new app (the fourth).** Find music, films and books on archive.org inside Hop-tunes, with no account and nothing to register: **play the music** (an album's tracks in order), **watch the videos** (seek bar, full screen, the small window) and **read the books** (the EPUB, or the plain text of a scanned book, page by page with a text size button), and keep favourites in your profile on this computer. The media preserver **normand64**'s picks come first, marked with his tag, then everyone else's results; filter by music, films or books. It is off until you switch apps on, asks before it uses the internet, lists the sites it contacts (archive.org and its file servers), connects only while it is open, and saves nothing (streamed, read from memory). His row comes from his public favourites collection on archive.org (his own uploads cannot be listed without an account). Scanned books that only have a PDF open on archive.org. Not made or endorsed by the Internet Archive; items keep their makers' rights and each shows its licence.
 - **DeviantArt, a new app (the third).** Browse artwork from DeviantArt's public feeds inside Hop-tunes, with no account and nothing to register: search a word or an artist (`@name`), look at a work full size (next, previous, a slideshow, its licence and copyright, and a button that opens it on deviantart.com in your browser), and keep **favourite works and artists**, **blocked artists**, **blocked words** and an **18+ switch** (off at the start) in your profile on this computer. It is off until you switch apps on, asks before it uses the internet, lists the two sites it contacts (backend.deviantart.com and the picture host wixmp.com), connects only while it is open, and saves no picture ever (only a title and a link for a favourite). View-only for now: no offline saving. Not made or endorsed by DeviantArt, and the public feeds can change or stop at any time. Blocked words are a word filter on titles and descriptions (the feed carries no tag list).
 
 ### Added
@@ -12,6 +13,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 - **Custom themes.** The **custom themes** button at the top right of the apps page lets you put one of your own pictures behind the apps. Hop-tunes keeps a resized copy in your profile on this computer (up to 12 pictures; nothing is uploaded or shared, and a guest keeps none), you can choose or remove a picture, and a **dim** slider (0 to 60%) darkens it. The glass and the labels switch between dark and light to suit how bright the picture is.
 
 ### Fixed
+- Streams of the networked apps can now be played for any app's gateway, not only Kick's (the video engines take the app's name when they check an address).
 - **Pictures asked for with only a width were drawn as nothing.** The picture loader for the apps shrank a picture to a zero height when only one side was asked for. A side that is not asked for is now left free.
 
 ## [1.12.0] - 2026-11-13: neko cafe

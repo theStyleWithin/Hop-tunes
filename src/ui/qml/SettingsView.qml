@@ -587,6 +587,24 @@ Item {
             text: "deviantart contacts backend.deviantart.com and the artwork picture host (wixmp.com), only while the deviantart app is open. your blocked artists and words and favourites stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
+        SRow {
+            objectName: "archiveNetRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            spacing: 16
+            Label { text: "internet archive"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "archiveNetChoice"
+                options: [["iaNetOff", "not allowed to use the internet"], ["iaNetOn", "allowed"]]
+                value: hop.netAllowedApps.indexOf("archive") >= 0 ? "iaNetOn" : "iaNetOff"
+                onPicked: function (v) { hop.setAppNetAllowed("archive", v === "iaNetOn") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "the internet archive app contacts archive.org and its file servers (like ia800000.us.archive.org), only while it is open. music and films are streamed and books are read from memory: nothing is saved. your favourites stay on this computer (in this profile) and are never sent anywhere."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         SRow {   // phones: ask before opening a stream that was tapped
             objectName: "kickAskRow"
             visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact

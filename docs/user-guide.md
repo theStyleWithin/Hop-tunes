@@ -182,6 +182,15 @@ Hop-tunes is not made or endorsed by DeviantArt, the art belongs to its artists,
 - **my lists**: **blocked words** (a work is hidden when one is in its title or description, and searching one is refused; the feed has no tag list, so this is a word filter, not a perfect tag filter), **blocked artists**, **favourite artists** and **favourite works** (only a title and a link are kept, never the picture). They stay in your Hop-tunes profile on this computer, and a guest keeps none.
 - For now it is view-only: nothing is saved for offline.
 
+### Internet Archive
+
+Find music, films and books on archive.org, with no archive.org account and nothing to register. Like the other apps it is off until you switch apps on, it **asks before it uses the internet** (the card lists archive.org and its file servers), it connects only while it is open, and nothing is saved: music and films are streamed and books are read from memory. Hop-tunes is not made or endorsed by the Internet Archive; what is there belongs to the people who made it, and each item shows its licence.
+
+- The media preserver **normand64** is shown first: his picks (from his public favourites collection on archive.org) come before everyone else's results and carry a ★ tag. His own uploads cannot be listed without an account, so this row is his favourites.
+- **Search** a word, or just look at what is popular; the chips narrow it to **music**, **films** or **books**. **more** loads the next page.
+- **Music**: open an album and pick a track (playing one pauses the library's own music). **Films**: pick a video; it has a seek bar, full screen and the small window. **Books**: **read it here** shows the EPUB, or the plain text of a scanned book in pages; **A−/A+** changes the text size. A book that only has a scanned PDF opens on archive.org instead.
+- **favourites** keeps the title and address of what you star in your profile on this computer (nothing is sent anywhere).
+
 ### Kick
 
 Kick is the first app. It browses the live streams on kick.com in a wide menu and plays the one you pick, inside Hop-tunes. Nothing plays
