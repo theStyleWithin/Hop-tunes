@@ -2677,7 +2677,7 @@ private slots:
     }
 
     // Android's small pop-out window: being popped out means the stream is wanted (an "app hidden" that arrived just before must not leave it
-    // dropped and black), and closing the window with its X ends only the stream, back to the lists.
+    // dropped and black), closing the window with its X closes only the picture, and its play/pause button reaches the app.
     void popOutWindowKeepsTheStreamAndItsXLeavesOnlyTheStream()
     {
         auto *w = window();
@@ -2700,10 +2700,16 @@ private slots:
         // ...and popping out gets it back
         m_app->setInPictureInPicture(true);
         QVERIFY(!item("kickApp")->property("inBackground").toBool());
-        // the X: only the stream ends, the app is back on its list
+        // the X closes only the picture: the app stays where it was (the sound goes on in the background)
+        QSignalSpy closed(m_app.get(), &App::pictureInPictureClosed);
         m_app->pipClosed();
         QVERIFY(!m_app->inPictureInPicture());
-        QTRY_COMPARE(item("kickApp")->property("page").toString(), QStringLiteral("browse"));
+        QCOMPARE(closed.count(), 1);
+        QCOMPARE(item("kickApp")->property("page").toString(), QStringLiteral("watch"));
+        QSignalSpy toggled(m_app.get(), &App::pictureInPictureToggle);       // and the small window's play/pause button reaches the app
+        m_app->pipToggle();
+        QCOMPARE(toggled.count(), 1);
+        QVERIFY(QMetaObject::invokeMethod(item("kickApp"), "goBack"));
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
     }

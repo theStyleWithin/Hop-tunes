@@ -33,7 +33,6 @@ Item {
         else if (!windowAway) holdTimer.restart()
     }
     onWantedChanged: syncSurface()
-    onWindowAwayChanged: if (!windowAway && !wanted) holdTimer.restart()
     Timer { id: holdTimer; interval: 1500; onTriggered: if (!root.wanted && !root.windowAway) root.surfaceOn = false }
     property bool recreating: false
     property real resumeAt: 0
@@ -92,6 +91,10 @@ Item {
         else startStream()
     }
     function surfaceLoaded(item) {
+        hop.diagNote("picture: " + hop.videoEngine + " surface built (window " + Math.round(root.Window.width) + "x" + Math.round(root.Window.height) + ", in small window " + hop.inPictureInPicture + ")")
+        startCheck.restart()
+        // Qt Multimedia (Android) needs no drawn frame, and the small pop-out window may never draw one: waiting for it left that window black
+        if (hop.videoEngine === "qt") { root.startStream(); return }
         // the GStreamer engine wraps Qt's GL context, which exists once the window has drawn one frame (as in the video player)
         const win = root.Window.window
         if (win) {
@@ -100,7 +103,22 @@ Item {
             win.requestUpdate()
         } else root.startStream()
     }
-    Component.onDestruction: { if (surface) surface.stop(); if (fullscreen) { hop.setImmersive(false); hop.requestOrientation("auto") } }
+    // a picture that was built but is still not playing a moment later is started again (and the person's phone log says so)
+    Timer { id: startCheck; interval: 1200; onTriggered: {
+        if (root.wanted && root.surface && root.surface.idle) { hop.diagNote("picture: still idle 1.2 s after it was built, starting it again"); root.loadedUrl = ""; root.startStream() }
+        else if (root.wanted && root.surface) hop.diagNote("picture: playing=" + !root.surface.paused + " error='" + root.error + "'")
+    } }
+    // what the small window's button shows, and the sound that keeps the app alive in the background
+    readonly property bool playing: started && !!surface && !surface.idle && !surface.paused && error === ""
+    onPlayingChanged: { hop.setPictureInPicturePlaying(playing); hop.setStreamPlaying(playing) }
+    onErrorChanged: if (error !== "" && wanted) hop.diagNote("picture: error '" + error + "'")
+    Connections {
+        target: hop
+        enabled: root.staged                       // only the picture that is in the small window (or full screen) answers its button
+        function onPictureInPictureToggle() { if (root.surface) root.surface.togglePause() }
+    }
+    onWindowAwayChanged: { if (!windowAway && !wanted) holdTimer.restart(); if (!windowAway && started) { settleTimer.restart(); lateTimer.restart() } }   // back from away (or the small window closed): the picture is built again
+    Component.onDestruction: { if (playing) hop.setStreamPlaying(false); if (surface) surface.stop(); if (fullscreen) { hop.setImmersive(false); hop.requestOrientation("auto") } }
 
     // the picture and its controls live in `content`, which moves to cover the whole window for full screen and for the small pop-out window
     Item {
