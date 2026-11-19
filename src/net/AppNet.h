@@ -42,6 +42,9 @@ public:
     using Done = std::function<void(NetReply)>;
     explicit NetTransport(QObject *parent = nullptr) : QObject(parent) {}
     virtual void get(const QUrl &url, const QByteArray &userAgent, const QByteArray &accept, NetLimits limits, Done done) = 0;
+    // One kind of POST exists, for an app's public search interface (see AppNet::postJson): JSON in, JSON out, nothing else. A transport that cannot
+    // do it (the test fakes that only answer GETs) says so.
+    virtual void post(const QUrl &, const QByteArray &, const QByteArray &, NetLimits, Done done) { NetReply r; r.error = QStringLiteral("posting is not supported"); done(std::move(r)); }
     virtual void abortAll() = 0;
 };
 
@@ -74,6 +77,15 @@ public:
     void close(const QString &app);
     bool isOpen(const QString &app) const { return m_open.contains(app); }
     QStringList contacted(const QString &app) const { QStringList l = m_contacted.value(app).values(); l.sort(); return l; }
+
+    // The one POST: a few public search interfaces only answer to a JSON request (Odysee's claim_search). It is allowed to exactly the one address an
+    // app declares here (https, that host, that path and query, nothing else), for a small JSON object that names the one read-only method
+    // that address is for. No cookies, no token, no redirects, the same size and time limits. The person's permission and the app being open apply as for a GET.
+    static QUrl postEndpointFor(const QString &app);
+    static QString postMethodFor(const QString &app);
+    static constexpr int kMaxPostBody = 4096;
+    static bool postAllowed(const QString &app, const QUrl &url, const QByteArray &body, QString *why = nullptr);
+    void postJson(const QString &app, const QUrl &url, const QByteArray &body, std::function<void(NetReply)> done, NetLimits limits = {});
 
     // GET one address for an app; `done` is called once, on the main thread, and never after close()
     void get(const QString &app, const QUrl &url, std::function<void(NetReply)> done, NetLimits limits = {});

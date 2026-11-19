@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "net/AppNet.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkAccessManager>
 #include <QNetworkCookie>
 #include <QNetworkCookieJar>
@@ -61,6 +63,33 @@ public:
             done(std::move(r));
         });
     }
+    void post(const QUrl &url, const QByteArray &ua, const QByteArray &body, NetLimits limits, Done done) override
+    {
+        QNetworkRequest req(url);
+        req.setRawHeader("User-Agent", ua);
+        req.setRawHeader("Accept", "application/json");
+        req.setRawHeader("Content-Type", "application/json");
+        req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+        req.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+        req.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
+        req.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
+        req.setTransferTimeout(limits.timeoutMs);
+        QNetworkReply *rep = m_nam.post(req, body);
+        m_live.insert(rep);
+        QObject::connect(rep, &QNetworkReply::readyRead, rep, [rep, limits] { if (rep->bytesAvailable() > limits.maxBody) rep->abort(); });
+        QObject::connect(rep, &QNetworkReply::finished, rep, [this, rep, done, limits] {
+            m_live.remove(rep);
+            NetReply r;
+            r.status = rep->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            if (rep->error() == QNetworkReply::OperationCanceledError) r.error = QStringLiteral("stopped");
+            else if (rep->error() == QNetworkReply::TimeoutError) r.error = QStringLiteral("the site did not answer in time");
+            else if (rep->error() != QNetworkReply::NoError && r.status == 0) r.error = QStringLiteral("could not connect: ") + rep->errorString();
+            else r.body = rep->readAll().left(limits.maxBody);
+            if (r.error.isEmpty() && (r.status < 200 || r.status >= 300)) r.error = QStringLiteral("the site answered %1").arg(r.status);   // (a redirect is an error here)
+            rep->deleteLater();
+            done(std::move(r));
+        });
+    }
     void abortAll() override
     {
         const auto live = m_live.values();
@@ -83,6 +112,8 @@ QStringList AppNet::hostsFor(const QString &app)
         return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("stream.kick.com"), QStringLiteral("files.kick.com"), QStringLiteral("clips.kick.com")};
     if (app == QLatin1String("archive"))      // the Internet Archive: search, details, covers, and the files themselves (they come from servers under archive.org: see below)
         return {QStringLiteral("archive.org")};
+    if (app == QLatin1String("odysee"))       // the public search interface (claim_search, the one POST) and the cover pictures
+        return {QStringLiteral("api.na-backend.odysee.com"), QStringLiteral("thumbs.odycdn.com")};
     if (app == QLatin1String("deviantart"))   // the public RSS feeds (the pictures come from the media host below)
         return {QStringLiteral("backend.deviantart.com")};
     return {};
@@ -91,6 +122,7 @@ QStringList AppNet::hostsFor(const QString &app)
 QStringList AppNet::streamSuffixesFor(const QString &app)
 {
     if (app == QLatin1String("archive")) return {QStringLiteral("archive.org")};            // the file servers (ia800000.us.archive.org and the like): the domain and its subdomains
+    if (app == QLatin1String("odysee")) return {QStringLiteral("odycdn.com")};                // the video files (player.odycdn.com) and the covers
     if (app == QLatin1String("deviantart")) return {QStringLiteral("wixmp.com")};   // the artwork pictures (not video: the name is older than this app)
     return app == QLatin1String("kick") ? QStringList{QStringLiteral("live-video.net")} : QStringList{};
 }
@@ -118,6 +150,46 @@ bool AppNet::urlAllowed(const QString &app, const QUrl &url, QString *why)
     for (const QString &suffix : streamSuffixesFor(app))
         if (host == suffix || host.endsWith(QLatin1Char('.') + suffix)) return true;
     return no(QStringLiteral("%1 is not one of the sites this app uses").arg(url.host()));
+}
+
+QUrl AppNet::postEndpointFor(const QString &app)
+{
+    return app == QLatin1String("odysee") ? QUrl(QStringLiteral("https://api.na-backend.odysee.com/api/v1/proxy?m=claim_search")) : QUrl();
+}
+
+QString AppNet::postMethodFor(const QString &app) { return app == QLatin1String("odysee") ? QStringLiteral("claim_search") : QString(); }
+
+bool AppNet::postAllowed(const QString &app, const QUrl &url, const QByteArray &body, QString *why)
+{
+    auto no = [&](const QString &m) { if (why) *why = m; return false; };
+    const QUrl ep = postEndpointFor(app);
+    if (!ep.isValid()) return no(QStringLiteral("this app may not post anything"));
+    if (url.scheme() != ep.scheme() || url.host().toLower() != ep.host() || url.path() != ep.path() || url.query() != ep.query() || !url.userInfo().isEmpty()
+        || (url.port() != -1 && url.port() != 443) || url.hasFragment())
+        return no(QStringLiteral("that address is not the one this app may post to"));
+    if (body.size() > kMaxPostBody) return no(QStringLiteral("that request is too big"));
+    QJsonParseError pe;
+    const QJsonDocument d = QJsonDocument::fromJson(body, &pe);
+    if (pe.error != QJsonParseError::NoError || !d.isObject() || d.object().value(QStringLiteral("method")).toString() != postMethodFor(app))
+        return no(QStringLiteral("that request is not the one read-only search this app may make"));
+    return true;
+}
+
+void AppNet::postJson(const QString &app, const QUrl &url, const QByteArray &body, std::function<void(NetReply)> done, NetLimits limits)
+{
+    QString why;
+    if (!m_allowed.contains(app)) { NetReply r; r.error = QStringLiteral("this app is not allowed to use the internet (settings > apps)"); done(r); return; }
+    if (!m_open.contains(app)) { NetReply r; r.error = QStringLiteral("the app is not open"); done(r); return; }
+    if (!postAllowed(app, url, body, &why)) { NetReply r; r.error = why; done(r); return; }
+    if (!m_transport) m_transport = std::make_unique<QtTransport>();
+    m_contacted[app].insert(url.host().toLower());
+    emit contactedChanged(app);
+    const quint64 epoch = m_epoch.value(app);
+    QPointer<AppNet> self(this);
+    m_transport->post(url, userAgent(), body, limits, [self, app, epoch, done = std::move(done)](NetReply r) mutable {
+        if (!self || self->m_epoch.value(app) != epoch) return;                      // the app was closed meanwhile: nothing is delivered
+        done(std::move(r));
+    });
 }
 
 void AppNet::setAllowed(const QString &app, bool on)

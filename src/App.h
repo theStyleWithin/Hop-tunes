@@ -26,6 +26,7 @@
 #include "apps/KickClient.h"
 #include "apps/DeviantArtClient.h"
 #include "apps/ArchiveClient.h"
+#include "apps/OdyseeClient.h"
 #include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
 #include "apps/StreamDock.h"
@@ -163,6 +164,7 @@ class App : public QObject {
     Q_PROPERTY(QObject *downloads READ downloadsObject CONSTANT)  // offline downloads of Kick streams and clips (null without the networked apps)
     Q_PROPERTY(QObject *offline READ offlineObject CONSTANT)    // the room set aside for offline Kick (null without the networked apps)
     Q_PROPERTY(QObject *dock READ dockObject CONSTANT)          // the live stream that keeps playing after the Kick app is left (null without the networked apps)
+    Q_PROPERTY(QObject *odysee READ odyseeObject CONSTANT)             // the Odysee app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *archive READ archiveObject CONSTANT)           // the Internet Archive app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *deviantart READ deviantartObject CONSTANT)   // the DeviantArt app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
@@ -342,6 +344,13 @@ public:
         return nullptr;
 #endif
     }
+    QObject *odyseeObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_odysee;
+#else
+        return nullptr;
+#endif
+    }
     QObject *archiveObject() {
 #ifdef HOPTUNES_NET_APPS
         return &m_archive;
@@ -368,6 +377,7 @@ public:
     KickClient *kickClient() { return &m_kick; }      // for tests
     DeviantArtClient *deviantArtClient() { return &m_da; }   // for tests
     ArchiveClient *archiveClient() { return &m_archive; }    // for tests
+    OdyseeClient *odyseeClient() { return &m_odysee; }       // for tests
     StreamDock *streamDock() { return &m_dock; }      // for tests
     AppNet *gateway() { return &m_appNet; }
 #endif
@@ -661,6 +671,7 @@ private:
     KickClient m_kick{&m_appNet};
     DeviantArtClient m_da{&m_appNet};
     ArchiveClient m_archive{&m_appNet};
+    OdyseeClient m_odysee{&m_appNet};
     StreamDock m_dock;
     OfflineStore m_offline;
     OfflineDownloads m_downloads{&m_appNet, &m_offline};

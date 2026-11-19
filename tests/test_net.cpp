@@ -4,6 +4,7 @@
 #include "apps/ArchiveClient.h"
 #include "apps/DeviantArtClient.h"
 #include "apps/KickClient.h"
+#include "apps/OdyseeClient.h"
 #include "apps/StreamDock.h"
 #include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
@@ -50,6 +51,16 @@ public:
         asked << url;
         agents << ua;
         NetReply r = handler ? handler(url) : NetReply{};
+        QTimer::singleShot(delayMs, this, [done, r] { done(r); });
+    }
+    std::function<NetReply(const QUrl &, const QByteArray &)> postHandler;
+    QList<QByteArray> bodies;
+    void post(const QUrl &url, const QByteArray &ua, const QByteArray &body, NetLimits, Done done) override
+    {
+        asked << url;
+        agents << ua;
+        bodies << body;
+        NetReply r = postHandler ? postHandler(url, body) : NetReply{};
         QTimer::singleShot(delayMs, this, [done, r] { done(r); });
     }
     void abortAll() override { ++aborted; }
@@ -154,6 +165,24 @@ QByteArray tinyEpub()
     out += central;
     put32(out, 0x06054b50); put16(out, 0); put16(out, 0); put16(out, quint16(es.size())); put16(out, quint16(es.size())); put32(out, quint32(central.size())); put32(out, cd); put16(out, 0);
     return out;
+}
+
+// An Odysee search answer like the real one (made-up claims)
+QByteArray odyseeClaims(const QList<QPair<QString, QString>> &nameChannel, bool mature = false, const QString &maturePick = {}, int first = 0)
+{
+    QJsonArray items;
+    int n = first;
+    for (const auto &p : nameChannel) {
+        const QString id = QString::number(++n).rightJustified(40, '0').replace('0', 'a');
+        const QString cid = QString("c%1").arg(n).rightJustified(40, 'b').replace(QRegularExpression("[^0-9a-f]"), "b");
+        QJsonArray tags; if (mature && p.first == maturePick) tags.append("mature");
+        items.append(QJsonObject{{"claim_id", id}, {"name", p.first}, {"value_type", "stream"}, {"canonical_url", "lbry://" + p.second + "#3/" + p.first + "#" + id.left(2)},
+            {"signing_channel", QJsonObject{{"claim_id", cid}, {"name", p.second}}},
+            {"value", QJsonObject{{"title", "Title of " + p.first}, {"stream_type", "video"}, {"tags", tags}, {"release_time", "1795000000"},
+                                  {"thumbnail", QJsonObject{{"url", "https://thumbs.odycdn.com/x" + QString::number(n) + ".webp"}}}, {"video", QJsonObject{{"duration", 125}}},
+                                  {"source", QJsonObject{{"sd_hash", "5de581aabbcc"}, {"media_type", "video/mp4"}}}}}});
+    }
+    return QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"result", QJsonObject{{"items", items}}}}).toJson();
 }
 
 } // namespace
@@ -1796,6 +1825,171 @@ private slots:
         QVERIFY(!AppNet::streamUrlAllowed("archive", QUrl("https://evil.example/a.mp3")));
         QVERIFY(!AppNet::streamUrlAllowed("archive", QUrl("http://archive.org/a.mp3")));
         QVERIFY(!AppNet::streamUrlAllowed("archive", QUrl("https://notarchive.org/a.mp3")));
+    }
+
+    // ---- the Odysee app: one narrow POST, read-only search, local lists ----
+    void odyseeSearchIsTheOnePostTheGatewayAllows()
+    {
+        const QUrl ep = AppNet::postEndpointFor("odysee");
+        QCOMPARE(ep, QUrl("https://api.na-backend.odysee.com/api/v1/proxy?m=claim_search"));
+        QVERIFY(AppNet::postEndpointFor("kick").isEmpty() && AppNet::postEndpointFor("archive").isEmpty() && AppNet::postEndpointFor("deviantart").isEmpty());
+        const QByteArray good = OdyseeClient::request("blue moon", "", {}, 1, false);
+        QString why;
+        QVERIFY2(AppNet::postAllowed("odysee", ep, good, &why), qPrintable(why));
+        QVERIFY(!AppNet::postAllowed("kick", ep, good));                                                    // other apps cannot post, even to that address
+        QVERIFY(!AppNet::postAllowed("odysee", QUrl("https://api.na-backend.odysee.com/api/v1/proxy?m=resolve"), good));
+        QVERIFY(!AppNet::postAllowed("odysee", QUrl("https://api.na-backend.odysee.com/api/v1/proxy?m=claim_search#x"), good));
+        QVERIFY(!AppNet::postAllowed("odysee", QUrl("http://api.na-backend.odysee.com/api/v1/proxy?m=claim_search"), good));
+        QVERIFY(!AppNet::postAllowed("odysee", QUrl("https://evil.example/api/v1/proxy?m=claim_search"), good));
+        QVERIFY(!AppNet::postAllowed("odysee", QUrl("https://user@api.na-backend.odysee.com/api/v1/proxy?m=claim_search"), good));
+        QVERIFY(!AppNet::postAllowed("odysee", ep, "{\"method\":\"wallet_send\"}"));                       // only the one read-only method
+        QVERIFY(!AppNet::postAllowed("odysee", ep, "not json"));
+        QVERIFY(!AppNet::postAllowed("odysee", ep, QByteArray("{\"method\":\"claim_search\",\"x\":\"") + QByteArray(5000, 'a') + "\"}"));
+        // the gateway: the permission and "open" apply, nothing else goes out, and a GET to the post address is still just a GET
+        fresh();
+        ft->postHandler = [](const QUrl &, const QByteArray &) { return ok("{\"result\":{\"items\":[]}}"); };
+        NetReply got; bool done = false;
+        net.postJson("odysee", ep, good, [&](NetReply r) { got = r; done = true; });
+        QVERIFY(done && !got.error.isEmpty() && ft->bodies.isEmpty());                                      // not allowed yet, not open
+        net.setAllowed("odysee", true);
+        done = false;
+        net.postJson("odysee", ep, good, [&](NetReply r) { got = r; done = true; });
+        QVERIFY(done && got.error.contains("not open") && ft->bodies.isEmpty());
+        net.open("odysee");
+        done = false;
+        net.postJson("odysee", ep, good, [&](NetReply r) { got = r; done = true; });
+        QTRY_VERIFY(done);
+        QVERIFY(got.error.isEmpty() && ft->bodies.size() == 1 && ft->agents.last() == AppNet::userAgent());
+        done = false;
+        net.postJson("odysee", QUrl("https://api.na-backend.odysee.com/other"), good, [&](NetReply r) { got = r; done = true; });
+        QVERIFY(done && !got.error.isEmpty() && ft->bodies.size() == 1);
+        // closing drops an answer still on its way
+        ft->delayMs = 80;
+        bool late = false;
+        net.postJson("odysee", ep, good, [&](NetReply) { late = true; });
+        net.close("odysee");
+        QTest::qWait(250);
+        QVERIFY(!late);
+    }
+
+    void odysseyRequestsAreBuiltFromFixedFieldsOnly()
+    {
+        auto params = [](const QByteArray &b) { return QJsonDocument::fromJson(b).object().value("params").toObject(); };
+        QCOMPARE(QJsonDocument::fromJson(OdyseeClient::request("x", "", {}, 1, false)).object().value("method").toString(), QString("claim_search"));
+        QJsonObject p = params(OdyseeClient::request("  blue   \"moon\"  ", "", {}, 2, false));
+        QCOMPARE(p.value("text").toString(), QString("blue \"moon\""));                                       // (JSON-escaped: nothing typed can add a field)
+        QCOMPARE(p.value("page").toInt(), 2);
+        QVERIFY(p.value("not_tags").toArray().contains("mature"));                                          // 18+ is left out unless switched on
+        QCOMPARE(p.keys().size(), 8 + 0);
+        QVERIFY(!params(OdyseeClient::request("x", "", {}, 1, true)).contains("not_tags"));
+        QCOMPARE(params(OdyseeClient::request("", "", {}, 1, false)).value("order_by").toArray().first().toString(), QString("trending_group"));
+        QCOMPARE(params(OdyseeClient::request("x", "", {}, 1, false)).value("order_by").toArray().first().toString(), QString("release_time"));
+        QCOMPARE(params(OdyseeClient::request("", "@good_channel", {}, 1, false)).value("channel").toString(), QString("@good_channel"));
+        QVERIFY(!params(OdyseeClient::request("", "@bad channel/x", {}, 1, false)).contains("channel"));
+        QVERIFY(!OdyseeClient::validChannel("@a#3") && !OdyseeClient::validChannel("a") && !OdyseeClient::validChannel("@") && OdyseeClient::validChannel("@Ünï-cöde"));
+        const QString id(40, 'a');
+        const QJsonArray ids = params(OdyseeClient::request("", "", {id, "../x", "zz"}, 1, false)).value("channel_ids").toArray();
+        QCOMPARE(ids.size(), 1);
+        QCOMPARE(OdyseeClient::request("x", "", {}, 999, false).contains("\"page\":50"), true);            // (the page number is bounded)
+        QCOMPARE(OdyseeClient::pageUrl("lbry://@a#3/b-c#d4"), QString("https://odysee.com/@a:3/b-c:d4"));
+        QVERIFY(OdyseeClient::pageUrl("https://evil.example/x").isEmpty());
+        QCOMPARE(OdyseeClient::playUrl("My Video", QString(40, 'a'), "5de581aabbcc", "video/mp4"), QString("https://player.odycdn.com/api/v3/streams/free/My%20Video/" + QString(40, 'a') + "/5de581.mp4"));
+        QVERIFY(OdyseeClient::playUrl("v", "short", "5de581", "video/mp4").isEmpty() && OdyseeClient::playUrl("v", QString(40, 'a'), "5de581", "application/pdf").isEmpty());
+        QVERIFY(AppNet::streamUrlAllowed("odysee", QUrl(OdyseeClient::playUrl("v", QString(40, 'a'), "5de581", "video/mp4"))));
+        QVERIFY(!AppNet::streamUrlAllowed("odysee", QUrl("https://evilodycdn.com/x.mp4")) && !AppNet::streamUrlAllowed("odysee", QUrl("http://player.odycdn.com/x.mp4")));
+    }
+
+    void odyseeBrowsesFiltersAndLoadsMore()
+    {
+        fresh();
+        net.setAllowed("odysee", true);
+        ft->postHandler = [](const QUrl &, const QByteArray &body) {
+            const QJsonObject p = QJsonDocument::fromJson(body).object().value("params").toObject();
+            if (p.value("page").toInt() == 2) return ok(odyseeClaims({{"more-1", "@chan_a"}}, false, {}, 100));
+            if (p.value("text").toString() == "more") { QList<QPair<QString, QString>> l; for (int i = 0; i < 30; ++i) l.append({QString("v%1").arg(i), "@chan_a"}); return ok(odyseeClaims(l)); }
+            if (p.value("text").toString() == "boom") { NetReply r; r.error = "the site answered 503"; return r; }
+            return ok(odyseeClaims({{"alpha", "@chan_a"}, {"adult", "@chan_b"}, {"gamma", "@chan_c"}, {"alpha", "@chan_a"}}, true, "adult"));
+        };
+        OdyseeClient o(&net);
+        o.open();
+        QTRY_COMPARE(o.videos().size(), 3);                                       // four claims, the 18+ one is hidden
+        QCOMPARE(o.videos().first().toMap().value("title").toString(), QString("Title of alpha"));
+        QVERIFY(o.videos().first().toMap().value("url").toString().startsWith("https://player.odycdn.com/"));
+        QVERIFY(o.videos().first().toMap().value("thumb").toString().startsWith("https://thumbs.odycdn.com/"));
+        QCOMPARE(o.hiddenCount(), 1);
+        o.setShowMature(true);
+        QTRY_COMPARE(o.videos().size(), 4);                                       // (asks again, without leaving 18+ out: all four)
+        o.setShowMature(false);
+        o.blockChannel("@chan_c");
+        QTRY_COMPARE(o.videos().size(), 2);
+        QVERIFY(o.isBlockedChannel("@chan_c"));
+        QVERIFY(o.blockWord("alpha"));
+        QTRY_COMPARE(o.videos().size(), 0);
+        o.unblockWord("alpha"); o.unblockChannel("@chan_c");
+        QTRY_COMPARE(o.videos().size(), 3);
+        for (const QByteArray &b : ft->bodies) QVERIFY(AppNet::postAllowed("odysee", AppNet::postEndpointFor("odysee"), b));
+        // a blocked word is not searched; a blocked channel's page says so; a failure says so plainly
+        o.blockWord("spam");
+        const int before = ft->bodies.size();
+        o.search("spam music");
+        QVERIFY(o.message().contains("blocked word") && ft->bodies.size() == before);
+        o.search("@chan_x"); QTRY_VERIFY(ft->bodies.size() > before);
+        o.search("boom");
+        QTRY_VERIFY(o.message().startsWith("could not load"));
+        o.search("more");
+        QTRY_VERIFY(o.canLoadMore());
+        const int n = o.videos().size();
+        o.loadMore();
+        QTRY_VERIFY(o.videos().size() > n);
+        o.close();
+        QVERIFY(!o.isOpen() && o.videos().isEmpty());
+    }
+
+    void odyseeFollowsFavouritesAndPlaylistsStayInTheProfile()
+    {
+        fresh();
+        net.setAllowed("odysee", true);
+        ft->postHandler = [](const QUrl &, const QByteArray &) { return ok(odyseeClaims({{"alpha", "@chan_a"}, {"bravo", "@chan_b"}})); };
+        OdyseeClient o(&net);
+        QSignalSpy edits(&o, &OdyseeClient::listsEdited);
+        o.open();
+        QTRY_COMPARE(o.videos().size(), 2);
+        const QVariantMap v0 = o.videos().at(0).toMap(), v1 = o.videos().at(1).toMap();
+        o.toggleFollow("@chan_a", v0.value("channelId").toString());
+        o.toggleFollow("bad name", v0.value("channelId").toString());
+        o.toggleFollow("@chan_z", "not-an-id");
+        QCOMPARE(o.follows().size(), 1);
+        QVERIFY(o.isFollowing("@chan_a"));
+        o.toggleFavourite(v0);
+        o.toggleFavourite({{"id", QString(40, 'c')}, {"page", "https://evil.example/x"}});                  // not an Odysee page: not kept
+        QCOMPARE(o.favourites().size(), 1);
+        QVERIFY(o.createPlaylist("Mix") && !o.createPlaylist("mix") && !o.createPlaylist(""));
+        o.togglePlaylistVideo("Mix", v0); o.togglePlaylistVideo("Mix", v1); o.togglePlaylistVideo("Nope", v1);
+        QVERIFY(o.inPlaylist("Mix", v1.value("id").toString()));
+        o.togglePlaylistVideo("Mix", v1);
+        QVERIFY(!o.inPlaylist("Mix", v1.value("id").toString()));
+        QVERIFY(edits.count() >= 5);
+        // following view asks for exactly the followed channel ids
+        o.showFollowing();
+        QTRY_VERIFY(QJsonDocument::fromJson(ft->bodies.last()).object().value("params").toObject().value("channel_ids").toArray().size() == 1);
+        // saved and read back, a guest keeps none, and a tampered file keeps only what is valid
+        OdyseeClient again(&net);
+        again.setListsJson(o.listsJson());
+        QCOMPARE(again.follows().size(), 1);
+        QCOMPARE(again.favourites().size(), 1);
+        QCOMPARE(again.playlists().size(), 1);
+        QCOMPARE(again.playlists().first().toMap().value("videos").toList().size(), 1);
+        OdyseeClient guest(&net);
+        guest.setListsJson(QJsonObject{});
+        QVERIFY(guest.follows().isEmpty() && guest.favourites().isEmpty() && guest.playlists().isEmpty());
+        QJsonObject bad = o.listsJson();
+        QJsonArray fav = bad.value("favourites").toArray();
+        QJsonObject f0 = fav.at(0).toObject();
+        f0["url"] = "https://evil.example/x.mp4"; f0["thumb"] = "http://thumbs.odycdn.com/x.webp";
+        bad["favourites"] = QJsonArray{f0, 5, "s"};
+        guest.setListsJson(bad);
+        QCOMPARE(guest.favourites().size(), 1);
+        QVERIFY(guest.favourites().first().toMap().value("url").toString().isEmpty() && guest.favourites().first().toMap().value("thumb").toString().isEmpty());
     }
 
     void thereIsNoSignInAndTheGatewayOnlyEverGets()
