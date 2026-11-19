@@ -27,9 +27,19 @@ FocusScope {
     Connections {
         target: hop
         function onInPictureInPictureChanged() {
-            if (hop.inPictureInPicture) return
+            // Android can report the app as hidden a moment BEFORE it says the small window is up, and the stream was let go in between: the
+            // small window then stayed black. Being popped out means "in use": get the stream back.
+            if (hop.inPictureInPicture) { root.setBackground(false); return }
             const s = Qt.application.state                                        // the small window was closed or expanded
             root.setBackground(Qt.platform.os === "android" && (s === Qt.ApplicationSuspended || s === Qt.ApplicationHidden))
+        }
+    }
+    Connections {
+        target: hop
+        function onPictureInPictureClosed() {       // the small window's X closes the stream and only the stream: the app goes back to its lists
+            root.videoFullscreen = false
+            if (root.page === "watch") root.page = "browse"
+            else if (root.page === "play") root.page = "downloads"
         }
     }
     Connections {

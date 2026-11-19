@@ -48,6 +48,13 @@ public class HopActivity extends QtActivity {
     private static volatile boolean sPipAllowed = false;
     private static int sPipW = 16, sPipH = 9;
     private static native void nativePip(boolean inPip);                       // App::setInPictureInPicture
+    private static native void nativePipClosed();                              // the small window was closed with its X (App::pipClosed)
+    private static native void nativeLife(String what);                        // a line for the diagnostics log (settings > diagnostics)
+
+    // what the activity is going through, written to the diagnostics log: after a crash "copy last run" then shows what happened right before it
+    private static void life(String what) {
+        try { nativeLife(what); } catch (Throwable ignored) { }
+    }
 
     // called from C++: a stream is (or is no longer) playing and may pop out; w:h is the picture's shape
     public static void setPip(boolean allowed, int w, int h) {
@@ -93,8 +100,28 @@ public class HopActivity extends QtActivity {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        life("android: picture in picture " + (isInPictureInPictureMode ? "on" : "off"));
         try { nativePip(isInPictureInPictureMode); } catch (Throwable ignored) { }
     }
+
+    @Override
+    protected void onStart() { life("android: onStart"); super.onStart(); }
+
+    // Closing the small window with its X stops the activity while it is still "in picture in picture": the stream is told to let go
+    // (App::pipClosed) before the window's surface goes, instead of the video being torn down under the stopping window.
+    @Override
+    protected void onStop() {
+        final boolean closedSmallWindow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode();
+        life("android: onStop" + (closedSmallWindow ? " (the small window was closed)" : ""));
+        if (closedSmallWindow) { try { nativePipClosed(); } catch (Throwable ignored) { } }
+        super.onStop();
+    }
+
+    @Override
+    public void onTrimMemory(int level) { life("android: onTrimMemory " + level); super.onTrimMemory(level); }
+
+    @Override
+    public void onLowMemory() { life("android: onLowMemory"); super.onLowMemory(); }
 
     private static native void nativeAction(String action, boolean down);   // Gamepad::fromJava
     private static native void nativeRaw(String text);                      // for the diagnostics page
@@ -148,6 +175,14 @@ public class HopActivity extends QtActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         sInstance = this;
+        life("android: onCreate");
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {   // a Java crash leaves its reason in the log
+            @Override public void uncaughtException(Thread t, Throwable e) {
+                life("android: crash in thread " + t.getName() + ": " + e);
+                if (previous != null) previous.uncaughtException(t, e);
+            }
+        });
         mInputManager = (InputManager) getSystemService(INPUT_SERVICE);
         if (mInputManager != null) {
             mListener = new InputManager.InputDeviceListener() {
@@ -162,6 +197,7 @@ public class HopActivity extends QtActivity {
 
     @Override
     public void onDestroy() {
+        life("android: onDestroy");
         if (mInputManager != null && mListener != null) mInputManager.unregisterInputDeviceListener(mListener);
         if (sInstance == this) sInstance = null;
         super.onDestroy();
@@ -176,6 +212,7 @@ public class HopActivity extends QtActivity {
 
     @Override
     protected void onResume() {
+        life("android: onResume");
         super.onResume();
         mResumed = true;
         report();
@@ -185,6 +222,7 @@ public class HopActivity extends QtActivity {
 
     @Override
     protected void onPause() {
+        life("android: onPause");
         mResumed = false;
         mHandler.removeCallbacks(mPoll);
         super.onPause();

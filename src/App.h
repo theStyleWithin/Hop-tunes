@@ -214,6 +214,7 @@ public:
     Q_INVOKABLE bool enterPictureInPicture();                                      // pop it out now
     Q_INVOKABLE void setImmersive(bool on);                                        // hide the phone's status and navigation bars (a full-screen picture)
     void setInPictureInPicture(bool on);
+    void pipClosed();                                  // Android: the small window was closed with its X (the stream is let go, the app stays)
     void registerPictureInPicture();                                               // Android: connects the activity's "popped out" report to this object
     Gamepad *gamepad() { return &m_gamepad; }
     QVariantMap gameSettings() const;
@@ -599,6 +600,7 @@ signals:
     void appHintsChanged();
     void appsBackgroundChanged();
     void inPictureInPictureChanged();
+    void pictureInPictureClosed();                 // the small window was closed with its X
     void appNetChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
