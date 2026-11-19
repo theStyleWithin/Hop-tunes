@@ -25,6 +25,7 @@
 #ifdef HOPTUNES_NET_APPS
 #include "apps/KickClient.h"
 #include "apps/DeviantArtClient.h"
+#include "apps/ArchiveClient.h"
 #include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
 #include "apps/StreamDock.h"
@@ -162,6 +163,7 @@ class App : public QObject {
     Q_PROPERTY(QObject *downloads READ downloadsObject CONSTANT)  // offline downloads of Kick streams and clips (null without the networked apps)
     Q_PROPERTY(QObject *offline READ offlineObject CONSTANT)    // the room set aside for offline Kick (null without the networked apps)
     Q_PROPERTY(QObject *dock READ dockObject CONSTANT)          // the live stream that keeps playing after the Kick app is left (null without the networked apps)
+    Q_PROPERTY(QObject *archive READ archiveObject CONSTANT)           // the Internet Archive app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *deviantart READ deviantartObject CONSTANT)   // the DeviantArt app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
     Q_PROPERTY(bool netAppsBuilt READ netAppsBuilt CONSTANT)
@@ -340,6 +342,13 @@ public:
         return nullptr;
 #endif
     }
+    QObject *archiveObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_archive;
+#else
+        return nullptr;
+#endif
+    }
     QObject *deviantartObject() {
 #ifdef HOPTUNES_NET_APPS
         return &m_da;
@@ -358,6 +367,7 @@ public:
 #ifdef HOPTUNES_NET_APPS
     KickClient *kickClient() { return &m_kick; }      // for tests
     DeviantArtClient *deviantArtClient() { return &m_da; }   // for tests
+    ArchiveClient *archiveClient() { return &m_archive; }    // for tests
     StreamDock *streamDock() { return &m_dock; }      // for tests
     AppNet *gateway() { return &m_appNet; }
 #endif
@@ -372,6 +382,7 @@ public:
     // QML's pictures of the Kick app come through the gateway: called once for each engine, before the QML is loaded
     void installImageProviders(QQmlEngine *engine);
     Q_INVOKABLE bool appNetAllowed(const QString &app) const { return m_netAllowed.contains(app); }
+    Q_INVOKABLE bool streamAllowed(const QString &app, const QString &url) const;   // may this app's video engine be given this address?
     Q_INVOKABLE void setAppNetAllowed(const QString &app, bool on);
     bool appsEnabled() const { return m_appsEnabled; }
     QString appsBackground() const { return m_appsBg; }
@@ -649,6 +660,7 @@ private:
     AppNet m_appNet;
     KickClient m_kick{&m_appNet};
     DeviantArtClient m_da{&m_appNet};
+    ArchiveClient m_archive{&m_appNet};
     StreamDock m_dock;
     OfflineStore m_offline;
     OfflineDownloads m_downloads{&m_appNet, &m_offline};
