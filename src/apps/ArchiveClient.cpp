@@ -169,7 +169,7 @@ void ArchiveClient::setKind(const QString &k)
     if (v == m_kind) return;
     m_kind = v;
     emit changed();
-    if (m_open) search(m_query);
+    if (m_open) { if (m_curatorView) showCurator(); else search(m_query); }
 }
 
 void ArchiveClient::open()
@@ -186,6 +186,7 @@ void ArchiveClient::close()
 {
     if (!m_open) return;
     m_open = false;
+    m_curatorView = false;
     ++m_gen; ++m_detailGen; ++m_bookGen;
     m_net->close(kApp);
     m_loading = false; m_detailLoading = false; m_pending = 0;
@@ -195,9 +196,21 @@ void ArchiveClient::close()
     emit openChanged(); emit changed(); emit itemsChanged(); emit detailChanged();
 }
 
+void ArchiveClient::showCurator()
+{
+    if (!m_open) return;
+    m_curatorView = true;
+    m_query.clear();
+    m_page = 1; m_total = 0; m_loaded = 0; m_featured = 0;
+    m_items.clear(); m_curatorBatch.clear(); m_generalBatch.clear();
+    emit itemsChanged();
+    runSearch(false);
+}
+
 void ArchiveClient::search(const QString &text)
 {
     if (!m_open) return;
+    m_curatorView = false;
     m_query = clean(text, 100);
     m_page = 1; m_total = 0; m_loaded = 0; m_featured = 0;
     m_items.clear(); m_curatorBatch.clear(); m_generalBatch.clear();
@@ -216,12 +229,21 @@ void ArchiveClient::runSearch(bool append)
 {
     const quint64 gen = ++m_gen;
     m_loading = true;
-    m_pending = append ? 1 : 2;      // the curator's matches and the rest: both answers are needed before the list is shown
+    m_pending = (append || m_curatorView) ? 1 : 2;      // the curator's matches and the rest: both answers are needed before the list is shown
     setMessage(QString());
     emit changed();
     QPointer<ArchiveClient> self(this);
     NetLimits lim;
     lim.maxBody = 3 * 1024 * 1024;
+    if (m_curatorView) {                // his page: only his picks, as many pages as there are
+        m_net->get(kApp, QUrl(searchUrl(QString(), m_kind, m_page, true)), [self, gen](NetReply r) {
+            if (!self || self->m_gen != gen || !self->m_open) return;
+            if (!r.error.isEmpty()) { self->m_curatorBatch = QVariantList(); self->setMessage(QStringLiteral("could not load: ") + r.error); }
+            else { int total = 0; self->m_curatorBatch = parseSearch(r.body, &total); self->m_total = total; }
+            self->finishSearch();
+        }, lim);
+        return;
+    }
     auto general = [self, gen, append](NetReply r) {
         if (!self || self->m_gen != gen || !self->m_open) return;
         if (!r.error.isEmpty()) { self->m_generalBatch = QVariantList(); self->setMessage(QStringLiteral("could not load: ") + r.error); }
@@ -246,6 +268,26 @@ void ArchiveClient::runSearch(bool append)
 void ArchiveClient::finishSearch()
 {
     m_loading = false;
+    if (m_curatorView) {                // his page: his picks only, all of them marked as his
+        QSet<QString> seen;
+        for (const QVariant &v : std::as_const(m_items)) seen.insert(v.toMap().value(QStringLiteral("id")).toString());
+        QVariantList added;
+        for (const QVariant &v : std::as_const(m_curatorBatch)) {
+            QVariantMap m = v.toMap();
+            if (seen.contains(m.value(QStringLiteral("id")).toString())) continue;
+            seen.insert(m.value(QStringLiteral("id")).toString());
+            m[QStringLiteral("featured")] = true;
+            added.append(m);
+        }
+        if (m_page == 1) m_items = added; else m_items += added;
+        m_featured = m_items.size();
+        m_loaded = m_page * kCuratorRows;
+        m_curatorBatch.clear();
+        if (m_items.isEmpty() && m_message.isEmpty()) setMessage(QStringLiteral("nothing here"));
+        emit changed();
+        emit itemsChanged();
+        return;
+    }
     QSet<QString> have;
     for (const QVariant &v : std::as_const(m_items)) have.insert(v.toMap().value(QStringLiteral("id")).toString());
     QVariantList added;
