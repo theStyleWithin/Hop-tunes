@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Fixed
+- **The pretend chat could stay empty and invisible beside a video on a slow machine.** Its place in the layout is now always there instead of appearing and disappearing with the chat setting, so the layout can no longer miss it.
+
 ## [1.12.0] - 2026-11-13: neko cafe
 
 ### Added
