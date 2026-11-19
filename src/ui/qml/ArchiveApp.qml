@@ -155,7 +155,7 @@ FocusScope {
             Rectangle {
                 objectName: "iaCurator"
                 visible: !!root.ia && root.ia.featuredCount > 0
-                Layout.fillWidth: true; implicitHeight: curRow.implicitHeight + 20; radius: 8
+                Layout.fillWidth: true; implicitHeight: curRow.implicitHeight + 16; radius: 8
                 color: Theme.panel; border { width: 1; color: Theme.accent }
                 RowLayout {
                     id: curRow
@@ -165,8 +165,6 @@ FocusScope {
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 0
                         Label { Layout.fillWidth: true; elide: Text.ElideRight; text: root.ia ? root.ia.curatorName + " · " + root.ia.curatorTagline : ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(17) } }
-                        Label { Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
-                                text: "his picks come first (from his public favourites on archive.org), then everyone else's" }
                     }
                     PlainButton { objectName: "iaCuratorOpen"; visible: !root.phone; text: "his page"; implicitHeight: 32; onClicked: Qt.openUrlExternally(root.ia.curatorUrl) }
                 }
