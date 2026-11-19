@@ -93,6 +93,7 @@ struct _GstElement : Obj {
     int tapRate = 0;
     bool inFinish = false;
     bool uriChanged = false;
+    bool tapDetached = false;                 // the tap is off only for the change of song
     _GstElement() : Obj{KElement} {}
 };
 
@@ -112,6 +113,8 @@ QUrl toQUrl(const QString &s) { return s.contains(QStringLiteral("://")) ? QUrl(
 void setSourceOnAudioThread(_GstElement *e, const QString &uri)
 {
     e->loaded = false;
+    // the sound tap (visualizer, games) is taken off for the change of song and put back once the next song has loaded
+    if (e->tap && e->player->audioBufferOutput() == e->tap) { e->tapDetached = true; e->player->setAudioBufferOutput(nullptr); }
     e->pos = 0;
     e->dur = 0;
     if (e->inFinish) e->uriChanged = true;
@@ -195,11 +198,14 @@ GstElement *gst_element_factory_make(const char *name, const char *)
         e->player->setAudioOutput(e->out);
         QObject::connect(e->player, &QMediaPlayer::mediaStatusChanged, e->player, [e](QMediaPlayer::MediaStatus st) {
             if (st == QMediaPlayer::LoadedMedia) {
+                if (e->tapDetached) { e->tapDetached = false; if (e->analysis.load() && e->tap && !e->tapBroken.load()) e->player->setAudioBufferOutput(e->tap); }
                 e->loaded = true;
                 e->bus->push(makeMsg(GST_MESSAGE_STREAM_START, e));
                 e->bus->push(makeMsg(GST_MESSAGE_ASYNC_DONE, e));
             } else if (st == QMediaPlayer::EndOfMedia) {
-                handleEnd(e);
+                // Not inside the engine's own status callback: the next song is loaded (setSource) and started from a fresh turn of the audio
+                // thread's event loop. Changing the source from within the callback that announces the end re-enters the media engine.
+                QMetaObject::invokeMethod(e->player, [e] { if (e->player && !e->detached.load()) handleEnd(e); }, Qt::QueuedConnection);
             }
         });
         QObject::connect(e->player, &QMediaPlayer::errorOccurred, e->player, [e](QMediaPlayer::Error, const QString &text) {
