@@ -2622,6 +2622,17 @@ private slots:
         QVERIFY(item("iaCurator")->findChild<QQuickItem *>() != nullptr);
         QTRY_VERIFY(item("iaThumb_0") && item("iaThumb_0")->property("status").toInt() == 1);
         shot("archive-browse");
+        // the banner is a button: his own page lists only his picks (all tagged), the back button or Esc returns to everything
+        QVERIFY(click("iaCurator"));
+        QTRY_VERIFY(ia->curatorView());
+        QTRY_COMPARE(ia->items().size(), 3);
+        for (const QVariant &v : ia->items()) QVERIFY(v.toMap().value("featured").toBool());
+        QTRY_VERIFY(item("iaCuratorOpen") && item("iaCuratorOpen")->isVisible());
+        shot("archive-curator-page");
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!ia->curatorView());
+        QTRY_COMPARE(ia->items().size(), 5);
+        QTRY_VERIFY(item("iaCard_0") && item("iaCard_0")->isVisible());
         // an album: its tracks in order; playing one makes the library's own music step aside
         QVERIFY(click("iaCard_0"));
         QTRY_VERIFY(item("iaItem")->isVisible());

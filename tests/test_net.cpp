@@ -1725,6 +1725,42 @@ private slots:
         ft->delayMs = 0;
     }
 
+    void archiveCuratorPageListsOnlyHisPicksAndPages()
+    {
+        fresh();
+        net.setAllowed("archive", true);
+        QStringList pages;
+        ft->handler = [&pages](const QUrl &u) {
+            const QString s = u.toString();
+            if (!s.contains("collection%3Afav-normand64")) return ok(iaSearch({{"popular-1", "audio"}}));          // the rest of the archive must not appear on his page
+            pages << (s.contains("page=2") ? "2" : "1");
+            if (s.contains("page=2")) return ok(iaSearch({{"pick-3", "texts"}}, 61));
+            QList<QPair<QString, QString>> l; for (int i = 0; i < 60; ++i) l.append({QString("pick-%1").arg(100 + i), "audio"});
+            return ok(iaSearch(l, 61));
+        };
+        ArchiveClient ia(&net);
+        ia.open();
+        QTRY_VERIFY(ia.items().size() > 0);
+        QVERIFY(!ia.curatorView());
+        ia.showCurator();
+        QTRY_COMPARE(ia.items().size(), 60);
+        QVERIFY(ia.curatorView());
+        QCOMPARE(ia.featuredCount(), 60);
+        for (const QVariant &v : ia.items()) QVERIFY(v.toMap().value("featured").toBool() && v.toMap().value("id").toString() != "popular-1");
+        QVERIFY(ia.canLoadMore());
+        ia.loadMore();
+        QTRY_COMPARE(ia.items().size(), 61);
+        QVERIFY(!ia.canLoadMore());
+        QCOMPARE(pages, QStringList({"1", "1", "2"}));                                  // (the first is the home list's curator row)
+        ia.setKind("texts");                                                              // a kind filter keeps him on his page
+        QTRY_VERIFY(ft->asked.last().toString().contains("mediatype%3Atexts"));
+        QVERIFY(ia.curatorView());
+        ia.search("");                                                                    // a search, or back, leaves his page
+        QVERIFY(!ia.curatorView());
+        ia.close();
+        QVERIFY(!ia.curatorView());
+    }
+
     void archiveOpensAnItemAndReadsABookFromAnEpubOrPlainText()
     {
         fresh();

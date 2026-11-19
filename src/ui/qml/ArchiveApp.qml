@@ -44,6 +44,7 @@ FocusScope {
     // one step back inside the app (the host asks first); false = nothing to step back from, leave the app
     function goBack() {
         if (player.fullscreen) { player.fullscreen = false; return true }
+        if (page === "browse" && ia.curatorView) { ia.search(""); return true }
         if (page === "read") { ia.closeBook(); page = "item"; return true }
         if (page === "item") { stopPlaying(); ia.closeItem(); page = "browse"; return true }
         if (page === "favourites") { page = "browse"; return true }
@@ -151,24 +152,25 @@ FocusScope {
                     }
                 }
             }
-            // the curator first: his public favourites are listed before everyone else's results
-            Rectangle {
+            // the curator first: his public favourites are listed before everyone else's. The banner is a button: it opens his own page, with all of his picks
+            AbstractButton {
+                id: curatorBanner
                 objectName: "iaCurator"
-                visible: !!root.ia && root.ia.featuredCount > 0
-                Layout.fillWidth: true; implicitHeight: curRow.implicitHeight + 16; radius: 8
-                color: Theme.panel; border { width: 1; color: Theme.accent }
-                RowLayout {
+                visible: !!root.ia && (root.ia.featuredCount > 0 || root.ia.curatorView)
+                Layout.fillWidth: true; implicitHeight: curRow.implicitHeight + 20; padding: 10
+                hoverEnabled: true; focusPolicy: Qt.NoFocus
+                onClicked: { if (root.ia.curatorView) root.ia.search(""); else root.ia.showCurator() }
+                Accessible.name: root.ia ? root.ia.curatorName + ", " + root.ia.curatorTagline + ": " + (root.ia.curatorView ? "back to everything" : "open his page") : ""
+                background: Rectangle { radius: 8; color: curatorBanner.hovered ? Theme.hover : Theme.panel; border { width: 1; color: Theme.accent } }
+                contentItem: RowLayout {
                     id: curRow
-                    anchors { fill: parent; margins: 10 }
                     spacing: 12
-                    Label { text: "★"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(26) } }
-                    ColumnLayout {
-                        Layout.fillWidth: true; spacing: 0
-                        Label { Layout.fillWidth: true; elide: Text.ElideRight; text: root.ia ? root.ia.curatorName + " · " + root.ia.curatorTagline : ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(17) } }
-                    }
-                    PlainButton { objectName: "iaCuratorOpen"; visible: !root.phone; text: "his page"; implicitHeight: 32; onClicked: Qt.openUrlExternally(root.ia.curatorUrl) }
+                    Label { text: root.ia && root.ia.curatorView ? "‹" : "★"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(26) } }
+                    Label { Layout.fillWidth: true; elide: Text.ElideRight; text: root.ia ? root.ia.curatorName + " · " + root.ia.curatorTagline : ""; color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(17) } }
+                    Label { text: root.ia && root.ia.curatorView ? "back" : "see all his picks ›"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(14) } }
                 }
             }
+            PlainButton { objectName: "iaCuratorOpen"; visible: !!root.ia && root.ia.curatorView; text: "his page on archive.org"; implicitHeight: 32; onClicked: Qt.openUrlExternally(root.ia.curatorUrl) }
             Label {
                 objectName: "iaMessage"
                 visible: !!root.ia && (root.ia.message !== "" || root.ia.loading)

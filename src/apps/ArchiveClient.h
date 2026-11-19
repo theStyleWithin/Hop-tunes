@@ -29,6 +29,7 @@ class ArchiveClient : public QObject {
     Q_PROPERTY(QString query READ query NOTIFY changed)
     Q_PROPERTY(QString kind READ kind WRITE setKind NOTIFY changed)               // "all" | "audio" | "movies" | "texts"
     Q_PROPERTY(QVariantList items READ items NOTIFY itemsChanged)                 // the curator's matches first (featured: true), then the rest
+    Q_PROPERTY(bool curatorView READ curatorView NOTIFY changed)                  // the curator's own page: only his picks, all of them
     Q_PROPERTY(int featuredCount READ featuredCount NOTIFY itemsChanged)
     Q_PROPERTY(bool canLoadMore READ canLoadMore NOTIFY itemsChanged)
     Q_PROPERTY(QVariantMap detail READ detail NOTIFY detailChanged)               // the opened item: {} when none
@@ -64,6 +65,7 @@ public:
     void setKind(const QString &k);
     QVariantList items() const { return m_items; }
     int featuredCount() const { return m_featured; }
+    bool curatorView() const { return m_curatorView; }
     bool canLoadMore() const { return m_open && !m_loading && m_loaded < m_total; }
     QVariantMap detail() const { return m_detail; }
     bool detailLoading() const { return m_detailLoading; }
@@ -79,6 +81,7 @@ public:
 
     Q_INVOKABLE void open();                          // connects (the permission was given) and shows what is popular, the curator first
     Q_INVOKABLE void close();
+    Q_INVOKABLE void showCurator();                   // his page: every pick of his (his public favourites on archive.org), page after page
     Q_INVOKABLE void search(const QString &text);     // "" = popular
     Q_INVOKABLE void loadMore();
     Q_INVOKABLE void openItem(const QString &id);
@@ -117,6 +120,7 @@ private:
     QString m_message, m_query, m_kind = QStringLiteral("all");
     QVariantList m_items, m_favs;
     QVariantList m_curatorBatch, m_generalBatch;
+    bool m_curatorView = false;
     int m_pending = 0, m_featured = 0, m_page = 1, m_total = 0, m_loaded = 0;
     QVariantMap m_detail;
     // the book being read
