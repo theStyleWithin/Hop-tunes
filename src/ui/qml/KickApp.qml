@@ -800,11 +800,16 @@ FocusScope {
                 }
                 Label { visible: kick.chatMode === "off"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
                         text: "no live chat. choose pretend for a made-up one (nobody in it is real)." }
-                LiveChat {
+                Item {   // (the chat's place is always there: see the downloaded video's chat)
+                  id: kickChatSlot
+                  objectName: "kickChatSlot"
+                  Layout.fillWidth: true; Layout.fillHeight: true
+                  Layout.minimumWidth: 120; Layout.minimumHeight: 120
+                  LiveChat {
                     id: kickChat
                     objectName: "kickPretendChat"
+                    anchors.fill: parent
                     visible: kick.chatMode === "pretend"
-                    Layout.fillWidth: true; Layout.fillHeight: true
                     look: hop.videoChatLook
                     seed: "kick|" + (kick.channel.slug || "")
                     info: ({ meta: { title: kick.channel.title || "", year: "", album: kick.channel.category || "" },
@@ -813,9 +818,9 @@ FocusScope {
                     position: clock
                     duration: 0
                     Timer { interval: 250; repeat: true; running: kickChat.visible; onTriggered: kickChat.clock += 250 }
+                  }
                 }
                 Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
-                Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
             }
         }
         }
@@ -1198,12 +1203,16 @@ FocusScope {
                     }
                     Label { visible: kick.chatMode === "off"; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
                             text: "no chat. choose pretend for a made-up one that follows the video as you move around in it (nobody in it is real)." }
-                    LiveChat {
+                    Item {   // the chat's place is always there, so the layout never has to react to the chat appearing (Qt 6.4's layout can miss that on a busy machine and leave it 0x0)
+                      id: localChatSlot
+                      objectName: "kickLocalChatSlot"
+                      Layout.fillWidth: true; Layout.fillHeight: true
+                      Layout.minimumWidth: 120; Layout.minimumHeight: 120
+                      LiveChat {
                         id: localChat
                         objectName: "kickLocalPretendChat"
+                        anchors.fill: parent
                         visible: kick.chatMode === "pretend"
-                        Layout.fillWidth: true; Layout.fillHeight: true
-                        Layout.minimumWidth: visible ? 120 : 0; Layout.minimumHeight: visible ? 120 : 0   // (a size that changes with it, so the column always lays it out when "pretend" is chosen)
                         look: hop.videoChatLook
                         readonly property var dl: root.dlById[root.playId]
                         seed: "kick|download|" + root.playId
@@ -1211,9 +1220,9 @@ FocusScope {
                                  cast: dl && dl.channel ? [{ name: dl.channel, role: "streamer" }] : [] })
                         position: localPlayer.surface ? localPlayer.surface.position : 0            // seeking in the video recalculates the chat
                         duration: localPlayer.surface ? localPlayer.surface.duration : 0
+                      }
                     }
                     Label { visible: kick.chatMode === "pretend"; text: "pretend chat: nobody here is real"; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(12) } }
-                    Item { visible: kick.chatMode === "off"; Layout.fillHeight: true }
                 }
             }
         }
