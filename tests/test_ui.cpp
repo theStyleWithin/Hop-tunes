@@ -7,6 +7,7 @@
 #ifdef HOPTUNES_NET_APPS
 #include "apps/ArchiveClient.h"
 #include "apps/DeviantArtClient.h"
+#include "apps/OdyseeClient.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
 #include "net/AppNet.h"
@@ -177,6 +178,43 @@ public:
             r.body = t.toUtf8();
         } else if (url.path().startsWith("/services/img/")) r.body = FakeKick::pngBytes();
         else { r.status = 404; r.error = "not found"; }
+        QTimer::singleShot(0, [done, r] { done(r); });
+    }
+    void abortAll() override {}
+};
+
+// Odysee like the real one, with made-up videos: a search answers to the one POST, pictures answer to GETs
+class FakeOdysee : public NetTransport {
+public:
+    QList<QUrl> asked;
+    QList<QByteArray> bodies;
+    static QByteArray claims()
+    {
+        struct V { const char *name, *channel; bool mature; };
+        const V vs[] = {{"first-video", "@alice", false}, {"adult-video", "@bob", true}, {"spider-study", "@carol", false}, {"quiet-harbour", "@alice", false}};
+        QJsonArray items;
+        int n = 0;
+        for (const V &v : vs) {
+            const QString id = QString(40, QChar('a' + n)), cid = QString(40, QChar('1' + n));
+            ++n;
+            items.append(QJsonObject{{"claim_id", id}, {"name", QString::fromLatin1(v.name)}, {"value_type", "stream"}, {"canonical_url", "lbry://" + QString::fromLatin1(v.channel) + "#3/" + QString::fromLatin1(v.name) + "#" + id.left(2)},
+                {"signing_channel", QJsonObject{{"claim_id", cid}, {"name", QString::fromLatin1(v.channel)}}},
+                {"value", QJsonObject{{"title", QString::fromLatin1(v.name).replace('-', ' ')}, {"stream_type", "video"}, {"tags", v.mature ? QJsonArray{"mature"} : QJsonArray{}}, {"release_time", "1795000000"},
+                    {"thumbnail", QJsonObject{{"url", "https://thumbs.odycdn.com/" + QString::fromLatin1(v.name) + ".webp"}}}, {"video", QJsonObject{{"duration", 3725}}},
+                    {"source", QJsonObject{{"sd_hash", "5de581aabbcc"}, {"media_type", "video/mp4"}}}}}});
+        }
+        return QJsonDocument(QJsonObject{{"jsonrpc", "2.0"}, {"result", QJsonObject{{"items", items}}}}).toJson();
+    }
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, NetLimits, Done done) override
+    {
+        asked << url;
+        NetReply r; r.status = 200; r.body = FakeKick::pngBytes();
+        QTimer::singleShot(0, [done, r] { done(r); });
+    }
+    void post(const QUrl &url, const QByteArray &, const QByteArray &body, NetLimits, Done done) override
+    {
+        asked << url; bodies << body;
+        NetReply r; r.status = 200; r.body = claims();
         QTimer::singleShot(0, [done, r] { done(r); });
     }
     void abortAll() override {}
@@ -2674,6 +2712,79 @@ private slots:
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
         QVERIFY(!ia->isOpen());
+    }
+
+    // Odysee: asks first, shows videos, the 18+ switch, a video page, follow/favourite/playlist/blocks stay local, Esc.
+    void odyseeAsksThenBrowsesAndKeepsYourListsLocally()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeOdysee>();
+        FakeOdysee *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        OdyseeClient *od = m_app->odyseeClient();
+        struct Restore { App *app; OdyseeClient *c; ~Restore() { c->setListsJson(QJsonObject{}); app->setAppNetAllowed("odysee", false); app->setAppsEnabled(false); } } restore{m_app.get(), od};
+        od->setListsJson(QJsonObject{});
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        QVERIFY(!m_app->appNetAllowed(QStringLiteral("odysee")));
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appTile_odysee") && item("appTile_odysee")->isVisible());
+        QVERIFY(click("appTile_odysee"));
+        QTRY_VERIFY(item("odyseeApp") && item("odyseeApp")->isVisible());
+        QTRY_VERIFY(item("odPermission")->isVisible());
+        QVERIFY(ft->asked.isEmpty());
+        shot("odysee-permission");
+        QVERIFY(click("odAllow"));
+        QTRY_VERIFY(item("odCard_0") && item("odCard_0")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("odysee", u), qPrintable(u.toString()));
+        for (const QByteArray &b : ft->bodies) QVERIFY(AppNet::postAllowed("odysee", AppNet::postEndpointFor("odysee"), b));
+        QCOMPARE(od->videos().size(), 3);                                            // the 18+ one is hidden at the start
+        QVERIFY(item("odHidden")->isVisible());
+        QTRY_VERIFY(item("odThumb_0") && item("odThumb_0")->property("status").toInt() == 1);
+        QTRY_VERIFY(item("odThumb_2") && item("odThumb_2")->property("status").toInt() == 1);
+        QTest::qWait(400);
+        shot("odysee-browse");
+        // the 18+ switch asks again and shows it
+        QVERIFY(click("odMature"));
+        QTRY_COMPARE(od->videos().size(), 4);
+        QVERIFY(click("odMature"));
+        QTRY_COMPARE(od->videos().size(), 3);
+        // a video page: follow, favourite, a playlist
+        QVERIFY(od->createPlaylist(QStringLiteral("Mix")));
+        QVERIFY(click("odCard_0"));
+        QTRY_VERIFY(item("odVideo")->isVisible());
+        QCOMPARE(item("odVideoTitle")->property("text").toString(), QStringLiteral("first video"));
+        QCOMPARE(item("odVideoChannel")->property("text").toString(), QStringLiteral("@alice"));
+        QCOMPARE(item("odyseeApp")->property("playUrl").toString(), QString("https://player.odycdn.com/api/v3/streams/free/first-video/" + QString(40, 'a') + "/5de581.mp4"));
+        shot("odysee-video");
+        QVERIFY(click("odFollow"));
+        QVERIFY(click("odFavourite"));
+        QVERIFY(click("odPlaylistToggle_Mix"));
+        QVERIFY(od->isFollowing(QStringLiteral("@alice")) && od->isFavourite(QString(40, 'a')) && od->inPlaylist(QStringLiteral("Mix"), QString(40, 'a')));
+        // block this channel: back to the list, and alice's videos are gone
+        QVERIFY(click("odBlockChannel"));
+        QTRY_VERIFY(item("odBrowse")->isVisible());
+        QCOMPARE(od->videos().size(), 1);
+        QVERIFY(item("odyseeApp")->property("playUrl").toString().isEmpty());
+        // my lists: block a word, then take both back
+        QVERIFY(click("odListsButton"));
+        QTRY_VERIFY(item("odLists")->isVisible());
+        item("odBlockWordField")->setProperty("text", QStringLiteral("spider"));
+        QVERIFY(click("odBlockWordAdd"));
+        QTRY_COMPARE(od->videos().size(), 0);
+        QTRY_VERIFY(item("odBlockedWord_spider") != nullptr);
+        QTRY_VERIFY(item("odBlockedChannel_@alice") != nullptr);
+        shot("odysee-lists");
+        QVERIFY(click("odBlockedWord_spider"));
+        QVERIFY(click("odBlockedChannel_@alice"));
+        QTRY_COMPARE(od->videos().size(), 3);
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("odysee").toObject().value("favourites").toArray().size() == 1);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("odBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(!od->isOpen());
     }
 
     // Kick: asks before it connects, browses without playing anything, follow and block stay local, and everything it reaches goes

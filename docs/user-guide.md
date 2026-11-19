@@ -182,6 +182,17 @@ Hop-tunes is not made or endorsed by DeviantArt, the art belongs to its artists,
 - **my lists**: **blocked words** (a work is hidden when one is in its title or description, and searching one is refused; the feed has no tag list, so this is a word filter, not a perfect tag filter), **blocked artists**, **favourite artists** and **favourite works** (only a title and a link are kept, never the picture). They stay in your Hop-tunes profile on this computer, and a guest keeps none.
 - For now it is view-only: nothing is saved for offline.
 
+### Odysee
+
+Browse, search and watch videos from odysee.com, with no Odysee account and nothing to register. Like the other apps it is off until you switch apps on, it **asks before it uses the internet** (the card lists Odysee's public search, its picture host and its video servers), it connects only while it is open, and no video is ever saved. Hop-tunes is not made or endorsed by Odysee, the videos belong to their creators, and Odysee's public search is unofficial and can change or stop at any time.
+
+- **trending** shows what is popular; **search** takes a word, or `@channel` for one channel's videos; **more** loads the next page; **following** shows the newest videos of the channels you follow.
+- A video opens on its own page with a seek bar, full screen and the small window. If Odysee does not give the file to Hop-tunes (some videos only play on its own site), the page says so and **open on odysee.com** opens it in your browser.
+- On a video's page you can **follow the channel**, mark a **favourite**, add it to one of your **playlists**, or **block the channel**.
+- **18+** is off at the start: videos tagged mature are left out, and switching it on asks Odysee again.
+- **my lists**: follows, playlists (create and delete them), favourites, **blocked words** (a video whose title has one is hidden, and searching one is refused) and **blocked channels**. They stay in your profile on this computer and a guest keeps none.
+- For now it is view-only: no offline downloads.
+
 ### Internet Archive
 
 Find music, films and books on archive.org, with no archive.org account and nothing to register. Like the other apps it is off until you switch apps on, it **asks before it uses the internet** (the card lists archive.org and its file servers), it connects only while it is open, and nothing is saved: music and films are streamed and books are read from memory. Hop-tunes is not made or endorsed by the Internet Archive; what is there belongs to the people who made it, and each item shows its licence.

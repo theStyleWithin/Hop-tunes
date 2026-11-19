@@ -605,6 +605,24 @@ Item {
             text: "the internet archive app contacts archive.org and its file servers (like ia800000.us.archive.org), only while it is open. music and films are streamed and books are read from memory: nothing is saved. your favourites stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
+        SRow {
+            objectName: "odyseeNetRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            spacing: 16
+            Label { text: "odysee"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "odyseeNetChoice"
+                options: [["odNetOff", "not allowed to use the internet"], ["odNetOn", "allowed"]]
+                value: hop.netAllowedApps.indexOf("odysee") >= 0 ? "odNetOn" : "odNetOff"
+                onPicked: function (v) { hop.setAppNetAllowed("odysee", v === "odNetOn") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "odysee contacts api.na-backend.odysee.com (its public search: one small read-only request), thumbs.odycdn.com and the video servers under odycdn.com, only while the odysee app is open. your follows, favourites, playlists and blocked lists stay on this computer (in this profile) and are never sent anywhere."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         SRow {   // phones: ask before opening a stream that was tapped
             objectName: "kickAskRow"
             visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact
