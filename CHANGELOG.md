@@ -4,6 +4,10 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **A new look for the apps page.** The apps are now pages of glass tiles (five across and three down on a computer, three across on a phone) with page dots at the top: the blue one is the page you are on. Swipe, turn the mouse wheel, use the arrow keys or click a dot to change page. Free spots are drawn as faded empty glass. It follows your theme: pale in the light theme, dark glass in the dark theme.
+- **Custom themes.** The **custom themes** button at the top right of the apps page lets you put one of your own pictures behind the apps. Hop-tunes keeps a resized copy in your profile on this computer (up to 12 pictures; nothing is uploaded or shared, and a guest keeps none), you can choose or remove a picture, and a **dim** slider (0 to 60%) darkens it. The glass and the labels switch between dark and light to suit how bright the picture is.
+
 ### Fixed
 - **Closing the small stream window (or any video that is not the whole window) crashed Hop-tunes on the computer.** The window froze for a moment and then the whole program closed. The cause was in the video engine (libmpv): its picture was still alive on the screen's drawing thread when the video was taken down, and mpv aborts when that happens. The picture is now released on the drawing thread first and mpv is shut down afterwards. A new test plays a real clip and removes it again and again to make sure of it. (The phone's own pop-out window is a different mechanism and is not changed by this.)
 
