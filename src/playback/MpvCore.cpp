@@ -286,7 +286,7 @@ bool MpvCore::init()
 }
 
 bool MpvCore::open(const QString &, qint64) { return false; }
-bool MpvCore::openStream(const QString &) { return false; }
+bool MpvCore::openStream(const QString &, const QString &) { return false; }
 void MpvCore::play() {}
 void MpvCore::pause() {}
 void MpvCore::togglePause() {}
