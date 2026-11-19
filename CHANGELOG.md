@@ -10,6 +10,7 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ### Fixed
 - **Closing the small stream window (or any video that is not the whole window) crashed Hop-tunes on the computer.** The window froze for a moment and then the whole program closed. The cause was in the video engine (libmpv): its picture was still alive on the screen's drawing thread when the video was taken down, and mpv aborts when that happens. The picture is now released on the drawing thread first and mpv is shut down afterwards. A new test plays a real clip and removes it again and again to make sure of it. (The phone's own pop-out window is a different mechanism and is not changed by this.)
+- **The pretend chat could stay empty and invisible beside a video on a slow machine.** Its place in the layout is now always there instead of appearing and disappearing with the chat setting, so the layout can no longer miss it.
 
 ## [1.12.0] - 2026-11-13: neko cafe
 
