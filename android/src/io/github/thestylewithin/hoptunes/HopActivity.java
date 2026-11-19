@@ -89,14 +89,34 @@ public class HopActivity extends QtActivity {
     }
 
     // called from C++: sound is playing (music, or a stream) or has stopped: keeps the app alive in the background while it plays
+    // The service is started at once, but only stopped after the sound has been off for a while, and never within seconds of being started: Android
+    // crashes an app that stops a service right after startForegroundService() (it must reach startForeground() first), and a picture that is rebuilt
+    // (turning the phone) makes the sound flicker off and on.
+    private static boolean sServiceStarted = false;
+    private static long sServiceStartedAt = 0;
+    private final Runnable mStopService = new Runnable() {
+        @Override public void run() {
+            final long since = android.os.SystemClock.elapsedRealtime() - sServiceStartedAt;
+            if (since < 8000) { mHandler.postDelayed(this, 8000 - since); return; }
+            try { stopService(new Intent(HopActivity.this, HopPlaybackService.class)); sServiceStarted = false; life("android: playback service stopped"); }
+            catch (Throwable t) { life("android: playback service stop refused: " + t); }
+        }
+    };
     public static void setPlaybackService(final boolean on) {
         final HopActivity a = sInstance;
         if (a == null) return;
         a.runOnUiThread(new Runnable() { @Override public void run() {
             try {
-                final Intent i = new Intent(a, HopPlaybackService.class);
-                if (on) { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) a.startForegroundService(i); else a.startService(i); }
-                else a.stopService(i);
+                a.mHandler.removeCallbacks(a.mStopService);
+                if (on) {
+                    if (!sServiceStarted) {
+                        final Intent i = new Intent(a, HopPlaybackService.class);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) a.startForegroundService(i); else a.startService(i);
+                        sServiceStarted = true;
+                        sServiceStartedAt = android.os.SystemClock.elapsedRealtime();
+                        life("android: playback service started");
+                    }
+                } else if (sServiceStarted) a.mHandler.postDelayed(a.mStopService, 6000);
             } catch (Throwable t) { life("android: playback service " + (on ? "start" : "stop") + " refused: " + t); }
         } });
     }

@@ -110,7 +110,8 @@ Item {
     } }
     // what the small window's button shows, and the sound that keeps the app alive in the background
     readonly property bool playing: started && !!surface && !surface.idle && !surface.paused && error === ""
-    onPlayingChanged: { hop.setPictureInPicturePlaying(playing); hop.setStreamPlaying(playing) }
+    onPlayingChanged: { hop.setPictureInPicturePlaying(playing); reportTimer.restart() }
+    Timer { id: reportTimer; interval: 1500; onTriggered: hop.setStreamPlaying(root.playing) }
     onErrorChanged: if (error !== "" && wanted) hop.diagNote("picture: error '" + error + "'")
     Connections {
         target: hop
@@ -118,6 +119,15 @@ Item {
         function onPictureInPictureToggle() { if (root.surface) root.surface.togglePause() }
     }
     onWindowAwayChanged: { if (!windowAway && !wanted) holdTimer.restart(); if (!windowAway && started) { settleTimer.restart(); lateTimer.restart() } }   // back from away (or the small window closed): the picture is built again
+    // what the picture is doing in the small window, a moment after it was set up: if it stays black, "copy this run" (settings > diagnostics) says why
+    Timer { id: infoTimer; interval: 2500; onTriggered: {
+        const w = root.Window.window
+        hop.diagNote("picture (small window " + hop.inPictureInPicture + ", full screen " + root.fullscreen + "): wanted=" + root.wanted + " started=" + root.started + " playing=" + root.playing
+                     + " idle=" + (root.surface ? root.surface.idle : "-") + " paused=" + (root.surface ? root.surface.paused : "-") + " position=" + (root.surface ? Math.round(root.surface.position) : "-")
+                     + " error='" + root.error + "' stage=" + Math.round(content.width) + "x" + Math.round(content.height) + " window=" + (w ? Math.round(w.width) + "x" + Math.round(w.height) + " visible=" + w.visible + " active=" + w.active : "none")
+                     + " appState=" + Qt.application.state)
+    } }
+    Connections { target: hop; function onInPictureInPictureChanged() { infoTimer.restart() } }
     Component.onDestruction: { if (playing) hop.setStreamPlaying(false); if (surface) surface.stop(); if (fullscreen) { hop.setImmersive(false); hop.requestOrientation("auto") } }
 
     // the picture and its controls live in `content`, which moves to cover the whole window for full screen and for the small pop-out window
@@ -174,7 +184,17 @@ Item {
                 onClicked: root.surface.togglePause()
                 Accessible.name: "pause or play"
                 background: Rectangle { radius: 18; color: Qt.rgba(0, 0, 0, 0.55); border { width: 1; color: Qt.rgba(1, 1, 1, 0.5) } }
-                contentItem: Label { text: root.surface && root.surface.paused ? "▶" : "❚❚"; color: "white"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 13 }
+                contentItem: Item {
+                    // drawn, not typed: the phone's font has no glyph for the pause bars (they showed as empty boxes)
+                    readonly property bool isPaused: !!root.surface && root.surface.paused
+                    Rectangle { visible: !parent.isPaused; x: parent.width / 2 - 6; y: parent.height / 2 - 6; width: 4; height: 12; color: "white" }
+                    Rectangle { visible: !parent.isPaused; x: parent.width / 2 + 2; y: parent.height / 2 - 6; width: 4; height: 12; color: "white" }
+                    Canvas {
+                        visible: parent.isPaused
+                        anchors.centerIn: parent; width: 14; height: 14
+                        onPaint: { const c = getContext("2d"); c.clearRect(0, 0, width, height); c.fillStyle = "white"; c.beginPath(); c.moveTo(2, 0); c.lineTo(14, 7); c.lineTo(2, 14); c.closePath(); c.fill() }
+                    }
+                }
             }
             Label {
                 objectName: "kickLiveTag"
