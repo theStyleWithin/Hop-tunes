@@ -45,8 +45,11 @@ private:
     {
         if (m_cancelled) { m_error = QStringLiteral("cancelled"); }
         else {
-            if (!img.isNull() && m_size.isValid() && (img.width() > m_size.width() || img.height() > m_size.height()))
-                img = img.scaled(m_size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            // a size with only a width (or only a height) asked for has a 0 for the other: that side is not limited (it used to shrink the picture to nothing)
+            if (!img.isNull() && m_size.width() >= 0 && m_size.height() >= 0 && (m_size.width() > 0 || m_size.height() > 0)) {
+                const QSize box(m_size.width() > 0 ? m_size.width() : img.width(), m_size.height() > 0 ? m_size.height() : img.height());
+                if (img.width() > box.width() || img.height() > box.height()) img = img.scaled(box, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+            }
             m_image = img;
             m_error = error;
         }

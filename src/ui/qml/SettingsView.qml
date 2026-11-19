@@ -569,6 +569,24 @@ Item {
             text: "kick contacts kick.com, web.kick.com, images.kick.com, stream.kick.com, files.kick.com, clips.kick.com and live-video.net, only while the kick app is open. your follow and block lists stay on this computer (in this profile) and are never sent anywhere."
             color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
         }
+        SRow {   // apps that use the internet: each one asks, and can be switched off here
+            objectName: "deviantArtNetRow"
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            spacing: 16
+            Label { text: "deviantart"; color: Theme.text; font { family: Theme.font; pixelSize: Theme.compact ? 20 : 17 } Layout.preferredWidth: Theme.compact ? -1 : 140 }
+            Choice {
+                objectName: "deviantArtNetChoice"
+                options: [["daNetOff", "not allowed to use the internet"], ["daNetOn", "allowed"]]
+                value: hop.netAllowedApps.indexOf("deviantart") >= 0 ? "daNetOn" : "daNetOff"
+                onPicked: function (v) { hop.setAppNetAllowed("deviantart", v === "daNetOn") }
+            }
+        }
+        Label {
+            visible: hop.netAppsBuilt && hop.appsEnabled
+            wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.maximumWidth: 640
+            text: "deviantart contacts backend.deviantart.com and the artwork picture host (wixmp.com), only while the deviantart app is open. your blocked artists and words and favourites stay on this computer (in this profile) and are never sent anywhere."
+            color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(13) }
+        }
         SRow {   // phones: ask before opening a stream that was tapped
             objectName: "kickAskRow"
             visible: hop.netAppsBuilt && hop.appsEnabled && hop.kick && Theme.compact

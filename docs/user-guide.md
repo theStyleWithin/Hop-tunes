@@ -170,6 +170,18 @@ Keys: arrows or **wasd** walk; **space**, **enter** or **z** is A; **esc** pause
 phone there is a touch pad under the picture. neko cafe works offline, sends nothing anywhere and has no music or sound of its own: your music keeps
 playing (space is the game's A button while it is open, not play/pause), and so does a stream in its small window.
 
+### DeviantArt
+
+Browse artwork from DeviantArt's public feeds, with no DeviantArt account and nothing to register. Like Kick it is off until you switch apps on, it **asks before it uses the
+internet** (the card lists the two sites it contacts: backend.deviantart.com for the feeds and wixmp.com for the pictures), it connects only while it is open, and no picture is ever saved.
+Hop-tunes is not made or endorsed by DeviantArt, the art belongs to its artists, and the feeds can change or stop at any time.
+
+- **Search** a word, or `@name` for one artist's gallery; **popular** shows what is popular. **more** loads the next page when the feed has one.
+- A work opens **full size**: arrow keys (or the buttons) go to the next and previous work, space starts a slideshow, and its copyright and licence are shown. **open on deviantart.com** opens it in your browser.
+- **18+** is off at the start. When it is off, works the feed rates as adult are hidden (the page says how many your filters hid). DeviantArt itself decides what its public feed carries to someone who is not signed in.
+- **my lists**: **blocked words** (a work is hidden when one is in its title or description, and searching one is refused; the feed has no tag list, so this is a word filter, not a perfect tag filter), **blocked artists**, **favourite artists** and **favourite works** (only a title and a link are kept, never the picture). They stay in your Hop-tunes profile on this computer, and a guest keeps none.
+- For now it is view-only: nothing is saved for offline.
+
 ### Kick
 
 Kick is the first app. It browses the live streams on kick.com in a wide menu and plays the one you pick, inside Hop-tunes. Nothing plays
