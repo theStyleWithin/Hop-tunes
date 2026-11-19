@@ -214,6 +214,8 @@ public:
     Q_INVOKABLE bool enterPictureInPicture();                                      // pop it out now
     Q_INVOKABLE void setImmersive(bool on);                                        // hide the phone's status and navigation bars (a full-screen picture)
     void setInPictureInPicture(bool on);
+    void pipToggle();                                  // the small window's play/pause button was pressed
+    void pipClosed();                                  // Android: the small window was closed with its X (only the picture goes)
     void registerPictureInPicture();                                               // Android: connects the activity's "popped out" report to this object
     Gamepad *gamepad() { return &m_gamepad; }
     QVariantMap gameSettings() const;
@@ -404,6 +406,9 @@ public:
     Q_INVOKABLE bool pickAndroidFolder(const QString &token);
     Q_INVOKABLE QString offlineMoveTo(const QUrl &folder);   // settings > apps: keep offline kick on this drive or folder ("" = fine, else why not)
     // The diagnostic log (phones: settings > diagnostics), and copying text to the clipboard.
+    Q_INVOKABLE void diagNote(const QString &text) const;           // a line for the diagnostics log (what the screens are doing)
+    Q_INVOKABLE void setPictureInPicturePlaying(bool playing);      // the stream's picture plays / is paused: the small window's button follows
+    Q_INVOKABLE void setStreamPlaying(bool playing);                // a stream makes sound: with a song, keeps the app alive in the background (Android)
     Q_INVOKABLE QString diagLog() const;
     Q_INVOKABLE QString diagPreviousLog() const;
     Q_INVOKABLE void copyText(const QString &text);   // Android: turns the screen; elsewhere nothing
@@ -599,6 +604,8 @@ signals:
     void appHintsChanged();
     void appsBackgroundChanged();
     void inPictureInPictureChanged();
+    void pictureInPictureToggle();                 // the small window's play/pause button
+    void pictureInPictureClosed();                 // the small window was closed with its X
     void appNetChanged();
     void videoChatChanged();
     void androidFolderPicked(const QString &token, const QUrl &folder);
@@ -662,6 +669,9 @@ private:
     DeviantArtClient m_da{&m_appNet};
     ArchiveClient m_archive{&m_appNet};
     StreamDock m_dock;
+    bool m_streamPlaying = false;
+    bool m_serviceOn = false;
+    void updatePlaybackService();
     OfflineStore m_offline;
     OfflineDownloads m_downloads{&m_appNet, &m_offline};
 #endif

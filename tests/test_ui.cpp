@@ -2687,6 +2687,44 @@ private slots:
         QVERIFY(!ia->isOpen());
     }
 
+    // Android's small pop-out window: being popped out means the stream is wanted (an "app hidden" that arrived just before must not leave it
+    // dropped and black), closing the window with its X closes only the picture, and its play/pause button reaches the app.
+    void popOutWindowKeepsTheStreamAndItsXLeavesOnlyTheStream()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeKick>();
+        m_app->gateway()->setTransport(std::move(fake));
+        struct Restore { App *app; ~Restore() { app->setInPictureInPicture(false); app->setAppNetAllowed("kick", false); app->setAppsEnabled(false); } } restore{m_app.get()};
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QVERIFY(click("appTile_kick"));
+        QTRY_VERIFY(item("kickPermission") && item("kickPermission")->isVisible());
+        QVERIFY(click("kickAllow"));
+        QTRY_VERIFY(item("kickCard_alpha") && item("kickCard_alpha")->isVisible());
+        QVERIFY(QMetaObject::invokeMethod(item("kickApp"), "openChannel", Q_ARG(QVariant, QStringLiteral("alpha"))));
+        QTRY_COMPARE(item("kickApp")->property("page").toString(), QStringLiteral("watch"));
+        // the app was reported hidden just before the window came up: the stream was let go...
+        QVERIFY(QMetaObject::invokeMethod(item("kickApp"), "setBackground", Q_ARG(QVariant, true)));
+        QVERIFY(item("kickApp")->property("inBackground").toBool());
+        // ...and popping out gets it back
+        m_app->setInPictureInPicture(true);
+        QVERIFY(!item("kickApp")->property("inBackground").toBool());
+        // the X closes only the picture: the app stays where it was (the sound goes on in the background)
+        QSignalSpy closed(m_app.get(), &App::pictureInPictureClosed);
+        m_app->pipClosed();
+        QVERIFY(!m_app->inPictureInPicture());
+        QCOMPARE(closed.count(), 1);
+        QCOMPARE(item("kickApp")->property("page").toString(), QStringLiteral("watch"));
+        QSignalSpy toggled(m_app.get(), &App::pictureInPictureToggle);       // and the small window's play/pause button reaches the app
+        m_app->pipToggle();
+        QCOMPARE(toggled.count(), 1);
+        QVERIFY(QMetaObject::invokeMethod(item("kickApp"), "goBack"));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+    }
+
     // Kick: asks before it connects, browses without playing anything, follow and block stay local, and everything it reaches goes
     // through the gateway (answered here from fixtures).
     void kickAppAsksThenBrowsesFollowsAndBlocksLocally()

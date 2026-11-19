@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
         const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION", "SDK_INT");
         const QStringList perms = sdk >= 33
             ? QStringList{QStringLiteral("android.permission.READ_MEDIA_AUDIO"), QStringLiteral("android.permission.READ_MEDIA_VIDEO"),
-                          QStringLiteral("android.permission.READ_MEDIA_IMAGES")}
+                          QStringLiteral("android.permission.READ_MEDIA_IMAGES"), QStringLiteral("android.permission.POST_NOTIFICATIONS")}
             : QStringList{QStringLiteral("android.permission.READ_EXTERNAL_STORAGE")};
         QJniEnvironment env;
         jobjectArray arr = env->NewObjectArray(perms.size(), env->FindClass("java/lang/String"), nullptr);

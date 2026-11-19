@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package io.github.thestylewithin.hoptunes;
 
+import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
+import android.app.RemoteAction;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.graphics.drawable.Icon;
+import java.util.ArrayList;
+import java.util.List;
 import android.content.res.Configuration;
 import android.hardware.input.InputManager;
 import android.os.Build;
@@ -48,6 +57,14 @@ public class HopActivity extends QtActivity {
     private static volatile boolean sPipAllowed = false;
     private static int sPipW = 16, sPipH = 9;
     private static native void nativePip(boolean inPip);                       // App::setInPictureInPicture
+    private static native void nativePipToggle();                              // the small window's play/pause button (App::pipToggle)
+    private static native void nativePipClosed();                              // the small window was closed with its X (App::pipClosed)
+    private static native void nativeLife(String what);                        // a line for the diagnostics log (settings > diagnostics)
+
+    // what the activity is going through, written to the diagnostics log: after a crash "copy last run" then shows what happened right before it
+    private static void life(String what) {
+        try { nativeLife(what); } catch (Throwable ignored) { }
+    }
 
     // called from C++: a stream is (or is no longer) playing and may pop out; w:h is the picture's shape
     public static void setPip(boolean allowed, int w, int h) {
@@ -56,6 +73,52 @@ public class HopActivity extends QtActivity {
         final HopActivity a = sInstance;
         if (a == null) return;
         a.runOnUiThread(new Runnable() { @Override public void run() { a.applyPipParams(); } });
+    }
+
+    // the small window's own play/pause button: Android shows it on the window, a tap comes back here as a broadcast
+    private static final String PIP_TOGGLE = "io.github.thestylewithin.hoptunes.PIP_TOGGLE";
+    private static volatile boolean sPipPlaying = true;
+    private BroadcastReceiver mPipReceiver;
+
+    // called from C++: the stream's picture is playing / paused (the button shows pause / play)
+    public static void setPipPlaying(boolean playing) {
+        sPipPlaying = playing;
+        final HopActivity a = sInstance;
+        if (a == null) return;
+        a.runOnUiThread(new Runnable() { @Override public void run() { a.applyPipParams(); } });
+    }
+
+    // called from C++: sound is playing (music, or a stream) or has stopped: keeps the app alive in the background while it plays
+    // The service is started at once, but only stopped after the sound has been off for a while, and never within seconds of being started: Android
+    // crashes an app that stops a service right after startForegroundService() (it must reach startForeground() first), and a picture that is rebuilt
+    // (turning the phone) makes the sound flicker off and on.
+    private static boolean sServiceStarted = false;
+    private static long sServiceStartedAt = 0;
+    private final Runnable mStopService = new Runnable() {
+        @Override public void run() {
+            final long since = android.os.SystemClock.elapsedRealtime() - sServiceStartedAt;
+            if (since < 8000) { mHandler.postDelayed(this, 8000 - since); return; }
+            try { stopService(new Intent(HopActivity.this, HopPlaybackService.class)); sServiceStarted = false; life("android: playback service stopped"); }
+            catch (Throwable t) { life("android: playback service stop refused: " + t); }
+        }
+    };
+    public static void setPlaybackService(final boolean on) {
+        final HopActivity a = sInstance;
+        if (a == null) return;
+        a.runOnUiThread(new Runnable() { @Override public void run() {
+            try {
+                a.mHandler.removeCallbacks(a.mStopService);
+                if (on) {
+                    if (!sServiceStarted) {
+                        final Intent i = new Intent(a, HopPlaybackService.class);
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) a.startForegroundService(i); else a.startService(i);
+                        sServiceStarted = true;
+                        sServiceStartedAt = android.os.SystemClock.elapsedRealtime();
+                        life("android: playback service started");
+                    }
+                } else if (sServiceStarted) a.mHandler.postDelayed(a.mStopService, 6000);
+            } catch (Throwable t) { life("android: playback service " + (on ? "start" : "stop") + " refused: " + t); }
+        } });
     }
 
     // called from C++: pop out now (the "pop out" button); false when this Android cannot
@@ -71,6 +134,16 @@ public class HopActivity extends QtActivity {
     private PictureInPictureParams pipParams() {
         PictureInPictureParams.Builder b = new PictureInPictureParams.Builder().setAspectRatio(new Rational(sPipW, sPipH));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) b.setAutoEnterEnabled(sPipAllowed);   // Android 12+: the home gesture pops it out smoothly
+        try {
+            final int icon = getResources().getIdentifier(sPipPlaying ? "ic_pip_pause" : "ic_pip_play", "drawable", getPackageName());
+            if (icon != 0) {
+                final PendingIntent tap = PendingIntent.getBroadcast(this, 0, new Intent(PIP_TOGGLE).setPackage(getPackageName()), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                final String label = sPipPlaying ? "pause" : "play";
+                final List<RemoteAction> actions = new ArrayList<RemoteAction>();
+                actions.add(new RemoteAction(Icon.createWithResource(this, icon), label, label, tap));
+                b.setActions(actions);
+            }
+        } catch (Throwable ignored) { }
         return b.build();
     }
 
@@ -93,8 +166,28 @@ public class HopActivity extends QtActivity {
     @Override
     public void onPictureInPictureModeChanged(boolean isInPictureInPictureMode, Configuration newConfig) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig);
+        life("android: picture in picture " + (isInPictureInPictureMode ? "on" : "off"));
         try { nativePip(isInPictureInPictureMode); } catch (Throwable ignored) { }
     }
+
+    @Override
+    protected void onStart() { life("android: onStart"); super.onStart(); }
+
+    // Closing the small window with its X stops the activity while it is still "in picture in picture": the stream is told to let go
+    // (App::pipClosed) before the window's surface goes, instead of the video being torn down under the stopping window.
+    @Override
+    protected void onStop() {
+        final boolean closedSmallWindow = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && isInPictureInPictureMode();
+        life("android: onStop" + (closedSmallWindow ? " (the small window was closed)" : ""));
+        if (closedSmallWindow) { try { nativePipClosed(); } catch (Throwable ignored) { } }
+        super.onStop();
+    }
+
+    @Override
+    public void onTrimMemory(int level) { life("android: onTrimMemory " + level); super.onTrimMemory(level); }
+
+    @Override
+    public void onLowMemory() { life("android: onLowMemory"); super.onLowMemory(); }
 
     private static native void nativeAction(String action, boolean down);   // Gamepad::fromJava
     private static native void nativeRaw(String text);                      // for the diagnostics page
@@ -148,6 +241,20 @@ public class HopActivity extends QtActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         sInstance = this;
+        life("android: onCreate");
+        mPipReceiver = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent i) { try { nativePipToggle(); } catch (Throwable ignored) { } }
+        };
+        final IntentFilter pipFilter = new IntentFilter(PIP_TOGGLE);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(mPipReceiver, pipFilter, 4 /* RECEIVER_NOT_EXPORTED */);
+        else registerReceiver(mPipReceiver, pipFilter);
+        final Thread.UncaughtExceptionHandler previous = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {   // a Java crash leaves its reason in the log
+            @Override public void uncaughtException(Thread t, Throwable e) {
+                life("android: crash in thread " + t.getName() + ": " + e);
+                if (previous != null) previous.uncaughtException(t, e);
+            }
+        });
         mInputManager = (InputManager) getSystemService(INPUT_SERVICE);
         if (mInputManager != null) {
             mListener = new InputManager.InputDeviceListener() {
@@ -162,6 +269,8 @@ public class HopActivity extends QtActivity {
 
     @Override
     public void onDestroy() {
+        life("android: onDestroy");
+        if (mPipReceiver != null) { try { unregisterReceiver(mPipReceiver); } catch (Throwable ignored) { } mPipReceiver = null; }
         if (mInputManager != null && mListener != null) mInputManager.unregisterInputDeviceListener(mListener);
         if (sInstance == this) sInstance = null;
         super.onDestroy();
@@ -176,6 +285,7 @@ public class HopActivity extends QtActivity {
 
     @Override
     protected void onResume() {
+        life("android: onResume");
         super.onResume();
         mResumed = true;
         report();
@@ -185,6 +295,7 @@ public class HopActivity extends QtActivity {
 
     @Override
     protected void onPause() {
+        life("android: onPause");
         mResumed = false;
         mHandler.removeCallbacks(mPoll);
         super.onPause();
