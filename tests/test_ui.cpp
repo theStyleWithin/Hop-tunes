@@ -5,6 +5,7 @@
 #include "core/Paths.h"
 #include "ui/MpvVideoItem.h"
 #ifdef HOPTUNES_NET_APPS
+#include "apps/ArchiveClient.h"
 #include "apps/DeviantArtClient.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
@@ -140,6 +141,45 @@ public:
         QTimer::singleShot(0, this, [done, r] { done(r); });
     }
     void abortAll() override { ++aborted; }
+};
+
+// The Internet Archive like the real one, with made-up items: the curator's picks, everyone's popular items, an album, a film and a book
+class FakeArchive : public NetTransport {
+public:
+    QList<QUrl> asked;
+    static QByteArray docs(const QList<QPair<QString, QString>> &items)
+    {
+        QJsonArray a;
+        for (const auto &p : items) a.append(QJsonObject{{"identifier", p.first}, {"title", "Title of " + p.first}, {"creator", "Someone"}, {"mediatype", p.second}, {"year", "1975"}});
+        return QJsonDocument(QJsonObject{{"response", QJsonObject{{"numFound", items.size()}, {"start", 0}, {"docs", a}}}}).toJson();
+    }
+    static QByteArray meta(const QString &kind, const QJsonArray &files)
+    {
+        return QJsonDocument(QJsonObject{{"metadata", QJsonObject{{"identifier", "x"}, {"title", "Item Title"}, {"creator", "Some Author"}, {"mediatype", kind}, {"description", "<p>About it</p>"}, {"year", "1975"},
+                                                                  {"licenseurl", "https://creativecommons.org/licenses/by/4.0/"}}}, {"files", files}}).toJson();
+    }
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, NetLimits, Done done) override
+    {
+        asked << url;
+        NetReply r; r.status = 200;
+        const QString s = url.toString();
+        if (s.contains("advancedsearch.php")) {
+            if (s.contains("collection%3Afav-normand64")) r.body = docs({{"curator-album", "audio"}, {"curator-film", "movies"}, {"shared-book", "texts"}});
+            else r.body = docs({{"popular-song", "audio"}, {"shared-book", "texts"}, {"popular-film", "movies"}});
+        } else if (s.contains("/metadata/curator-album")) {
+            r.body = meta("audio", QJsonArray{QJsonObject{{"name", "02 b.mp3"}, {"format", "VBR MP3"}, {"title", "Second"}, {"track", "2"}}, QJsonObject{{"name", "01 a.mp3"}, {"format", "VBR MP3"}, {"title", "First"}, {"track", "1"}, {"length", "3:20"}}});
+        } else if (s.contains("/metadata/curator-film")) {
+            r.body = meta("movies", QJsonArray{QJsonObject{{"name", "film.mp4"}, {"format", "h.264"}}});
+        } else if (s.contains("/metadata/shared-book")) {
+            r.body = meta("texts", QJsonArray{QJsonObject{{"name", "book_djvu.txt"}, {"format", "DjVuTXT"}}});
+        } else if (s.contains("book_djvu.txt")) {
+            QString t; for (int i = 0; i < 40; ++i) t += QString("Sentence %1 of the story of the lamp and the lake. ").arg(i).repeated(12) + "\n\n";
+            r.body = t.toUtf8();
+        } else if (url.path().startsWith("/services/img/")) r.body = FakeKick::pngBytes();
+        else { r.status = 404; r.error = "not found"; }
+        QTimer::singleShot(0, [done, r] { done(r); });
+    }
+    void abortAll() override {}
 };
 
 // A DeviantArt feed like the real one, with made-up artists and works, and a small picture for every picture address
@@ -2546,6 +2586,94 @@ private slots:
         QTest::keyClick(w, Qt::Key_Escape);
         QTRY_VERIFY(!item("appHost")->property("active").toBool());
         QVERIFY(!da->isOpen());
+    }
+
+    // Internet Archive: asks first, the curator's picks come first with his tag, music/films/books open on their own pages, a book is read, and
+    // everything it reaches goes through the gateway.
+    void internetArchiveAsksThenShowsTheCuratorFirstAndReadsABook()
+    {
+        auto *w = window();
+        auto fake = std::make_unique<FakeArchive>();
+        FakeArchive *ft = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        ArchiveClient *ia = m_app->archiveClient();
+        struct Restore { App *app; ArchiveClient *c; ~Restore() { c->setListsJson(QJsonObject{}); app->setAppNetAllowed("archive", false); app->setAppsEnabled(false); } } restore{m_app.get(), ia};
+        ia->setListsJson(QJsonObject{});
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        QVERIFY(!m_app->appNetAllowed(QStringLiteral("archive")));
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appTile_archive") && item("appTile_archive")->isVisible());
+        QVERIFY(click("appTile_archive"));
+        QTRY_VERIFY(item("archiveApp") && item("archiveApp")->isVisible());
+        QTRY_VERIFY(item("iaPermission")->isVisible());
+        QVERIFY(ft->asked.isEmpty());
+        shot("archive-permission");
+        QVERIFY(click("iaAllow"));
+        QTRY_VERIFY(item("iaCard_0") && item("iaCard_0")->isVisible());
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("archive", u), qPrintable(u.toString()));
+        // the curator's three first (his tag on them), then the others, the shared book once
+        QTRY_COMPARE(ia->items().size(), 5);
+        QCOMPARE(ia->featuredCount(), 3);
+        QVERIFY(item("iaCurator")->isVisible());
+        QVERIFY(item("iaFeatured_0") && item("iaFeatured_0")->isVisible());
+        QVERIFY(item("iaFeatured_3") == nullptr || !item("iaFeatured_3")->isVisible());
+        QVERIFY(item("iaCurator")->findChild<QQuickItem *>() != nullptr);
+        QTRY_VERIFY(item("iaThumb_0") && item("iaThumb_0")->property("status").toInt() == 1);
+        shot("archive-browse");
+        // an album: its tracks in order; playing one makes the library's own music step aside
+        QVERIFY(click("iaCard_0"));
+        QTRY_VERIFY(item("iaItem")->isVisible());
+        QTRY_VERIFY(item("iaTrack_1") != nullptr);
+        QCOMPARE(item("iaItemTitle")->property("text").toString(), QStringLiteral("Item Title"));
+        QVERIFY(item("iaItemInfo")->property("text").toString().contains("CC BY"));
+        QVERIFY(click("iaFavourite"));
+        QVERIFY(ia->isFavourite(QStringLiteral("curator-album")));
+        shot("archive-album");
+        QVERIFY(click("iaTrack_0"));
+        QTRY_VERIFY(item("iaNowPlaying")->isVisible());
+        QVERIFY(item("iaNowPlaying")->property("text").toString().contains("First"));
+        QCOMPARE(item("archiveApp")->property("playUrl").toString(), QStringLiteral("https://archive.org/download/curator-album/01%20a.mp3"));
+        QVERIFY(click("iaStop"));
+        QTRY_VERIFY(!item("iaNowPlaying")->isVisible());
+        // Esc: back to the list; a film has a video to pick
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("iaBrowse")->isVisible());
+        QVERIFY(click("iaCard_1"));
+        QTRY_VERIFY(item("iaVideo_0") != nullptr);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("iaBrowse")->isVisible());
+        // a book: read here, page by page, and the text size changes
+        QVERIFY(click("iaCard_2"));
+        QTRY_VERIFY(item("iaRead") && item("iaRead")->isVisible());
+        QVERIFY(click("iaRead"));
+        QTRY_VERIFY(item("iaPageText") && item("iaPageText")->isVisible() && item("iaPageText")->property("text").toString().contains("lamp and the lake"));
+        QCOMPARE(item("iaPageNumber")->property("text").toString().left(6), QStringLiteral("page 1"));
+        shot("archive-reader");
+        const double size0 = item("iaPageText")->property("font").value<QFont>().pixelSize();
+        QVERIFY(click("iaBigger"));
+        QVERIFY(item("iaPageText")->property("font").value<QFont>().pixelSize() > size0);
+        QVERIFY(click("iaNextPage"));
+        QTRY_COMPARE(item("iaPageNumber")->property("text").toString().left(6), QStringLiteral("page 2"));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("iaItem")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("iaBrowse")->isVisible());
+        // a kind filter asks again; favourites are listed; the profile keeps them (just the title and the address)
+        QVERIFY(click("iaKind_texts"));
+        QTRY_VERIFY(ia->kind() == QLatin1String("texts"));
+        QVERIFY(click("iaFavouritesButton"));
+        QTRY_VERIFY(item("iaFavourites")->isVisible());
+        QTRY_VERIFY(item("iaFavOpen_curator-album") != nullptr);
+        shot("archive-favourites");
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("archive").toObject().value("favourites").toArray().size() == 1);
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("archive", u), qPrintable(u.toString()));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(item("iaBrowse")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!item("appHost")->property("active").toBool());
+        QVERIFY(!ia->isOpen());
     }
 
     // Kick: asks before it connects, browses without playing anything, follow and block stay local, and everything it reaches goes

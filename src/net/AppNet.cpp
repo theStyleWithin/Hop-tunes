@@ -81,6 +81,8 @@ QStringList AppNet::hostsFor(const QString &app)
 {
     if (app == QLatin1String("kick"))
         return {QStringLiteral("kick.com"), QStringLiteral("web.kick.com"), QStringLiteral("images.kick.com"), QStringLiteral("stream.kick.com"), QStringLiteral("files.kick.com"), QStringLiteral("clips.kick.com")};
+    if (app == QLatin1String("archive"))      // the Internet Archive: search, details, covers, and the files themselves (they come from servers under archive.org: see below)
+        return {QStringLiteral("archive.org")};
     if (app == QLatin1String("deviantart"))   // the public RSS feeds (the pictures come from the media host below)
         return {QStringLiteral("backend.deviantart.com")};
     return {};
@@ -88,6 +90,7 @@ QStringList AppNet::hostsFor(const QString &app)
 
 QStringList AppNet::streamSuffixesFor(const QString &app)
 {
+    if (app == QLatin1String("archive")) return {QStringLiteral("archive.org")};            // the file servers (ia800000.us.archive.org and the like): the domain and its subdomains
     if (app == QLatin1String("deviantart")) return {QStringLiteral("wixmp.com")};   // the artwork pictures (not video: the name is older than this app)
     return app == QLatin1String("kick") ? QStringList{QStringLiteral("live-video.net")} : QStringList{};
 }

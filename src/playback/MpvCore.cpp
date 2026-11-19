@@ -103,12 +103,12 @@ bool MpvCore::init()
     return true;
 }
 
-bool MpvCore::openStream(const QString &url)
+bool MpvCore::openStream(const QString &url, const QString &app)
 {
     if (!m_mpv) return false;
 #ifdef HOPTUNES_NET_APPS
     QString why;
-    if (!AppNet::streamUrlAllowed(QStringLiteral("kick"), QUrl(url), &why)) { setError(why); return false; }
+    if (!AppNet::streamUrlAllowed(app, QUrl(url), &why)) { setError(why); return false; }
     // the engine itself fetches the stream: generic user agent, no referrer, no cookies, secure transports only
     mpv_set_property_string(m_mpv, "user-agent", AppNet::userAgent().constData());
     mpv_set_property_string(m_mpv, "referrer", "");
@@ -125,7 +125,7 @@ bool MpvCore::openStream(const QString &url)
     m_pendingSeekMs = 0;
     return true;
 #else
-    Q_UNUSED(url)
+    Q_UNUSED(url) Q_UNUSED(app)
     setError(QStringLiteral("this build has no apps that use the internet"));
     return false;
 #endif
@@ -286,7 +286,7 @@ bool MpvCore::init()
 }
 
 bool MpvCore::open(const QString &, qint64) { return false; }
-bool MpvCore::openStream(const QString &) { return false; }
+bool MpvCore::openStream(const QString &, const QString &) { return false; }
 void MpvCore::play() {}
 void MpvCore::pause() {}
 void MpvCore::togglePause() {}

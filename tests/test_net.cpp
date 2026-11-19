@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
 #include "apps/Hls.h"
+#include "apps/ArchiveClient.h"
 #include "apps/DeviantArtClient.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
@@ -104,6 +105,55 @@ QByteArray daRss(const QList<DaItem> &items, const QString &next = {})
              "<media:thumbnail url=\"https://images-wixmp-abc123.wixmp.com/f/1/" + slug + "-828.jpg\" width=\"828\" height=\"552\"/></item>\n";
     }
     return (x + "</channel></rss>").toUtf8();
+}
+
+// Internet Archive answers like the real ones (made-up items)
+QByteArray iaSearch(const QList<QPair<QString, QString>> &idKind, int total = -1)
+{
+    QJsonArray docs;
+    for (const auto &p : idKind)
+        docs.append(QJsonObject{{"identifier", p.first}, {"title", "Title of " + p.first}, {"creator", "Someone"}, {"mediatype", p.second}, {"year", "1975"}, {"downloads", 42}});
+    return QJsonDocument(QJsonObject{{"response", QJsonObject{{"numFound", total < 0 ? int(idKind.size()) : total}, {"start", 0}, {"docs", docs}}}}).toJson();
+}
+QJsonObject iaFile(const QString &name, const QString &format, const QString &title = {}, const QString &track = {}, const QString &length = {})
+{
+    QJsonObject o{{"name", name}, {"format", format}};
+    if (!title.isEmpty()) o["title"] = title;
+    if (!track.isEmpty()) o["track"] = track;
+    if (!length.isEmpty()) o["length"] = length;
+    return o;
+}
+QByteArray iaMeta(const QString &kind, const QJsonArray &files, const QJsonObject &extra = {})
+{
+    QJsonObject m{{"identifier", "x"}, {"title", "A Title"}, {"creator", "An Author"}, {"mediatype", kind}, {"description", "<p>About &amp; more</p><br/>second line"}, {"year", "1975"}};
+    for (auto it = extra.begin(); it != extra.end(); ++it) m[it.key()] = it.value();
+    return QJsonDocument(QJsonObject{{"metadata", m}, {"files", files}}).toJson();
+}
+// a tiny stored-only zip with an EPUB inside (one chapter)
+QByteArray tinyEpub()
+{
+    auto put16 = [](QByteArray &b, quint16 v) { b.append(char(v & 0xff)); b.append(char(v >> 8)); };
+    auto put32 = [&](QByteArray &b, quint32 v) { put16(b, quint16(v & 0xffff)); put16(b, quint16(v >> 16)); };
+    struct E { QString n; QByteArray d; };
+    const QList<E> es = {{"mimetype", "application/epub+zip"},
+        {"META-INF/container.xml", "<?xml version=\"1.0\"?><container version=\"1.0\" xmlns=\"urn:oasis:names:tc:opendocument:xmlns:container\"><rootfiles><rootfile full-path=\"OEBPS/content.opf\" media-type=\"application/oebps-package+xml\"/></rootfiles></container>"},
+        {"OEBPS/content.opf", "<?xml version=\"1.0\"?><package xmlns=\"http://www.idpf.org/2007/opf\" version=\"2.0\"><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>Tiny Book</dc:title><dc:creator>Ann Author</dc:creator></metadata><manifest><item id=\"c1\" href=\"c1.xhtml\" media-type=\"application/xhtml+xml\"/></manifest><spine><itemref idref=\"c1\"/></spine></package>"},
+        {"OEBPS/c1.xhtml", "<html xmlns=\"http://www.w3.org/1999/xhtml\"><body><h1>Chapter One</h1><p>It was a bright cold day.</p></body></html>"}};
+    QByteArray out, central;
+    for (const E &e : es) {
+        const QByteArray name = e.n.toUtf8();
+        const quint32 crc = quint32(qChecksum(QByteArrayView(e.d), Qt::ChecksumIso3309));   // (not verified by the reader)
+        const quint32 off = quint32(out.size());
+        put32(out, 0x04034b50); put16(out, 20); put16(out, 0); put16(out, 0); put16(out, 0); put16(out, 0); put32(out, crc);
+        put32(out, quint32(e.d.size())); put32(out, quint32(e.d.size())); put16(out, quint16(name.size())); put16(out, 0); out += name; out += e.d;
+        put32(central, 0x02014b50); put16(central, 20); put16(central, 20); put16(central, 0); put16(central, 0); put16(central, 0); put16(central, 0); put32(central, crc);
+        put32(central, quint32(e.d.size())); put32(central, quint32(e.d.size())); put16(central, quint16(name.size())); put16(central, 0); put16(central, 0); put16(central, 0); put16(central, 0); put32(central, 0); put32(central, off);
+        central += name;
+    }
+    const quint32 cd = quint32(out.size());
+    out += central;
+    put32(out, 0x06054b50); put16(out, 0); put16(out, 0); put16(out, quint16(es.size())); put16(out, quint16(es.size())); put32(out, quint32(central.size())); put32(out, cd); put16(out, 0);
+    return out;
 }
 
 } // namespace
@@ -1578,6 +1628,174 @@ private slots:
         QVERIFY(!guest.showMature() && guest.blockedArtists().isEmpty() && guest.favouriteWorks().isEmpty());
         guest.setListsJson(QJsonObject{{"blockedArtists", 5}, {"favouriteWorks", QJsonArray{QJsonObject{{"id", "q"}, {"page", "javascript:alert(1)"}}, 7, "x"}}, {"showMature", "yes"}});
         QVERIFY(!guest.showMature() && guest.blockedArtists().isEmpty() && guest.favouriteWorks().isEmpty());
+    }
+
+    // ---- the Internet Archive app: music, videos and books; the curator first ----
+    void archiveSearchAnswersKeepOnlyMusicVideosAndBooks()
+    {
+        const auto items = ArchiveClient::parseSearch(iaSearch({{"good-song", "audio"}, {"a-film", "movies"}, {"a-book", "texts"}, {"game-dump", "software"}, {"bad id!", "audio"}, {"good-song", "audio"}, {"pic", "image"}}, 99));
+        QStringList ids; for (const QVariant &v : items) ids << v.toMap().value("id").toString();
+        QCOMPARE(ids, QStringList({"good-song", "a-film", "a-book"}));                  // never software, pictures or odd ids, and no doubles
+        QCOMPARE(items.first().toMap().value("thumb").toString(), QString("https://archive.org/services/img/good-song"));
+        int total = 0;
+        ArchiveClient::parseSearch(iaSearch({{"x", "audio"}}, 99), &total);
+        QCOMPARE(total, 99);
+        QVERIFY(ArchiveClient::parseSearch("not json").isEmpty());
+        const QString url = ArchiveClient::searchUrl("blue \"moon\" \\ 1959", "audio", 2, false);
+        QVERIFY(url.startsWith("https://archive.org/advancedsearch.php?q="));
+        QVERIFY(url.contains("page=2") && url.contains("rows=40") && url.contains("output=json"));
+        QVERIFY(!url.contains("%22") && !url.contains("%5C"));                           // quotes and backslashes are taken out of what is typed
+        QVERIFY(url.contains("mediatype%3Aaudio"));
+        const QString cur = ArchiveClient::searchUrl("", "all", 1, true);
+        QVERIFY(cur.contains("collection%3Afav-normand64") && cur.contains("rows=60"));
+        QVERIFY(AppNet::urlAllowed("archive", QUrl(url)));
+    }
+
+    void archiveItemDetailsPickTracksVideosAndBooks()
+    {
+        // music: the MP3s in track order, not the other formats; the licence and the plain description
+        QJsonArray af{iaFile("02 b.mp3", "VBR MP3", "Second", "2", "180.5"), iaFile("01 a.mp3", "VBR MP3", "First", "1/9", "3:20"), iaFile("01 a.ogg", "Ogg Vorbis"), iaFile("cover.jpg", "JPEG"), iaFile("../evil.mp3", "VBR MP3")};
+        const QVariantMap a = ArchiveClient::parseDetail(iaMeta("audio", af, {{"licenseurl", "https://creativecommons.org/licenses/by-sa/4.0/"}}), "album-1");
+        QCOMPARE(a.value("kind").toString(), QString("audio"));
+        const QVariantList tr = a.value("tracks").toList();
+        QCOMPARE(tr.size(), 2);
+        QCOMPARE(tr[0].toMap().value("title").toString(), QString("First"));
+        QCOMPARE(tr[1].toMap().value("url").toString(), QString("https://archive.org/download/album-1/02%20b.mp3"));
+        QCOMPARE(a.value("license").toString(), QString("CC BY-SA"));
+        QVERIFY(a.value("description").toString().startsWith("About & more"));
+        QVERIFY(AppNet::streamUrlAllowed("archive", QUrl(tr[0].toMap().value("url").toString())));
+        // only Ogg when there is no MP3
+        const QVariantMap og = ArchiveClient::parseDetail(iaMeta("audio", QJsonArray{iaFile("a.ogg", "Ogg Vorbis")}), "o");
+        QCOMPARE(og.value("tracks").toList().size(), 1);
+        // video: h.264 first
+        const QVariantMap v = ArchiveClient::parseDetail(iaMeta("movies", QJsonArray{iaFile("f.ogv", "Ogg Video"), iaFile("f.mp4", "h.264"), iaFile("f.gif", "Animated GIF")}), "film");
+        QCOMPARE(v.value("videos").toList().size(), 1);
+        QCOMPARE(v.value("videos").toList().first().toMap().value("name").toString(), QString("f.mp4"));
+        // book: the EPUB, else the plain text, and a PDF is only noted
+        const QVariantMap b = ArchiveClient::parseDetail(iaMeta("texts", QJsonArray{iaFile("b.pdf", "Text PDF"), iaFile("b_djvu.txt", "DjVuTXT"), iaFile("b.epub", "EPUB")}), "book");
+        QVERIFY(b.value("epubUrl").toString().endsWith("/book/b.epub") && b.value("textUrl").toString().endsWith("b_djvu.txt") && !b.value("pdfUrl").toString().isEmpty());
+        // not music, a video or a book (software), or not an item: nothing
+        QVERIFY(ArchiveClient::parseDetail(iaMeta("software", QJsonArray{}), "sw").isEmpty());
+        QVERIFY(ArchiveClient::parseDetail("{}", "x").isEmpty());
+        QVERIFY(ArchiveClient::parseDetail(iaMeta("audio", af), "bad id").isEmpty());
+    }
+
+    void archiveShowsTheCuratorFirstWithoutDoublesAndLoadsMore()
+    {
+        fresh();
+        net.setAllowed("archive", true);
+        ft->handler = [](const QUrl &u) {
+            const QString s = u.toString();
+            if (s.contains("collection%3Afav-normand64")) return ok(iaSearch({{"pick-1", "audio"}, {"shared", "movies"}, {"pick-2", "texts"}}));
+            if (s.contains("page=2")) return ok(iaSearch({{"more-1", "audio"}}, 41));
+            return ok(iaSearch({{"popular-1", "audio"}, {"shared", "movies"}, {"popular-2", "texts"}}, 41));
+        };
+        ArchiveClient ia(&net);
+        ia.open();
+        QTRY_VERIFY(ia.items().size() > 0);
+        QStringList ids; for (const QVariant &v : ia.items()) ids << v.toMap().value("id").toString();
+        QCOMPARE(ids, QStringList({"pick-1", "shared", "pick-2", "popular-1", "popular-2"}));     // the curator's first, "shared" once
+        QCOMPARE(ia.featuredCount(), 3);
+        QVERIFY(ia.items().at(0).toMap().value("featured").toBool() && !ia.items().at(3).toMap().value("featured").toBool());
+        QVERIFY(ia.canLoadMore());
+        ia.loadMore();
+        QTRY_COMPARE(ia.items().size(), 6);
+        QCOMPARE(ia.items().last().toMap().value("id").toString(), QString("more-1"));
+        for (const QUrl &u : ft->asked) QVERIFY2(AppNet::urlAllowed("archive", u), qPrintable(u.toString()));
+        // a kind filter asks again; the curator failing alone leaves the rest
+        ft->handler = [](const QUrl &u) {
+            if (u.toString().contains("collection%3Afav-normand64")) { NetReply r; r.error = "kick did not answer in time"; return r; }
+            return ok(iaSearch({{"only-1", "texts"}}));
+        };
+        ia.setKind("texts");
+        QTRY_COMPARE(ia.items().size(), 1);
+        QCOMPARE(ia.featuredCount(), 0);
+        QVERIFY(ft->asked.last().toString().contains("mediatype%3Atexts") || ft->asked.at(ft->asked.size() - 2).toString().contains("mediatype%3Atexts"));
+        // the main list failing says so plainly; closing delivers nothing late
+        ft->handler = [](const QUrl &) { NetReply r; r.error = "the site answered 503"; return r; };
+        ia.search("anything");
+        QTRY_VERIFY(ia.message().startsWith("could not load"));
+        ft->delayMs = 100;
+        ft->handler = [](const QUrl &) { return ok(iaSearch({{"late-1", "audio"}})); };
+        ia.search("late");
+        ia.close();
+        QTest::qWait(300);
+        QCOMPARE(ia.items().size(), 0);
+        QVERIFY(!ia.isOpen());
+        ft->delayMs = 0;
+    }
+
+    void archiveOpensAnItemAndReadsABookFromAnEpubOrPlainText()
+    {
+        fresh();
+        net.setAllowed("archive", true);
+        const QByteArray epub = tinyEpub();
+        const QString longText = []{ QString t; for (int i = 0; i < 60; ++i) t += QString("Paragraph %1 of the plain text book. ").arg(i).repeated(20) + "\n\n"; return t; }();
+        ft->handler = [&](const QUrl &u) {
+            const QString s = u.toString();
+            if (s.contains("/metadata/epubbook")) return ok(iaMeta("texts", QJsonArray{iaFile("t.epub", "EPUB")}));
+            if (s.contains("/metadata/textbook")) return ok(iaMeta("texts", QJsonArray{iaFile("t_djvu.txt", "DjVuTXT")}));
+            if (s.contains("/metadata/nobook")) return ok(iaMeta("texts", QJsonArray{iaFile("t.pdf", "Text PDF")}));
+            if (s.contains("t.epub")) return ok(epub);
+            if (s.contains("t_djvu.txt")) return ok(longText.toUtf8());
+            if (s.contains("collection%3Afav")) return ok(iaSearch({}));
+            return ok(iaSearch({{"epubbook", "texts"}}));
+        };
+        ArchiveClient ia(&net);
+        ia.open();
+        QTRY_VERIFY(!ia.loading());
+        ia.openItem("epubbook");
+        QTRY_VERIFY(!ia.detail().isEmpty());
+        QCOMPARE(ia.detail().value("title").toString(), QString("A Title"));
+        ia.openBook();
+        QTRY_VERIFY(ia.bookReady());
+        QCOMPARE(ia.bookTitle(), QString("Tiny Book"));
+        QCOMPARE(ia.bookChapters(), 1);
+        QVERIFY(ia.chapterHtml(0).contains("bright cold day"));
+        ia.closeBook();
+        QVERIFY(!ia.bookReady() && ia.bookChapters() == 0);
+        // plain text: split into pages, escaped
+        ia.openItem("textbook");
+        QTRY_VERIFY(ia.detail().value("textUrl").toString().endsWith("t_djvu.txt"));
+        ia.openBook();
+        QTRY_VERIFY(ia.bookReady());
+        QVERIFY(ia.bookChapters() > 3);
+        QCOMPARE(ia.chapterTitle(1), QString("page 2"));
+        QVERIFY(ia.chapterHtml(0).startsWith("<p>Paragraph 0"));
+        // a book with neither: said plainly
+        ia.openItem("nobook");
+        QTRY_VERIFY(ia.detail().value("pdfUrl").toString().endsWith("t.pdf"));
+        ia.openBook();
+        QVERIFY(ia.bookError().contains("archive.org"));
+        QVERIFY(!ia.bookReady());
+        ia.close();
+    }
+
+    void archiveFavouritesStayInTheProfileAndOnlyForWhatIsSafe()
+    {
+        fresh();
+        ArchiveClient ia(&net);
+        QSignalSpy edits(&ia, &ArchiveClient::listsEdited);
+        ia.toggleFavourite({{"id", "song-1"}, {"title", "A Song"}, {"creator", "Someone"}, {"kind", "audio"}});
+        ia.toggleFavourite({{"id", "game"}, {"title", "A Game"}, {"kind", "software"}});            // not music, a video or a book
+        ia.toggleFavourite({{"id", "bad id"}, {"title", "x"}, {"kind", "audio"}});
+        QCOMPARE(ia.favourites().size(), 1);
+        QVERIFY(ia.isFavourite("song-1") && !ia.isFavourite("game"));
+        QCOMPARE(edits.count(), 1);
+        ArchiveClient again(&net);
+        again.setListsJson(ia.listsJson());
+        QVERIFY(again.isFavourite("song-1"));
+        ia.toggleFavourite({{"id", "song-1"}, {"kind", "audio"}});
+        QVERIFY(!ia.isFavourite("song-1"));
+        ArchiveClient guest(&net);
+        guest.setListsJson(QJsonObject{});
+        QVERIFY(guest.favourites().isEmpty());
+        guest.setListsJson(QJsonObject{{"favourites", QJsonArray{QJsonObject{{"id", "../x"}, {"kind", "audio"}}, 5, "s"}}});
+        QVERIFY(guest.favourites().isEmpty());
+        QVERIFY(AppNet::streamUrlAllowed("archive", QUrl("https://ia800000.us.archive.org/1/items/x/a.mp3")));
+        QVERIFY(!AppNet::streamUrlAllowed("archive", QUrl("https://evil.example/a.mp3")));
+        QVERIFY(!AppNet::streamUrlAllowed("archive", QUrl("http://archive.org/a.mp3")));
+        QVERIFY(!AppNet::streamUrlAllowed("archive", QUrl("https://notarchive.org/a.mp3")));
     }
 
     void thereIsNoSignInAndTheGatewayOnlyEverGets()

@@ -12,9 +12,11 @@ Item {
     property string url: ""                      // the live stream's address ("" = nothing playing, no engine started)
     property string file: ""                     // a downloaded video on this device (plays from disk, nothing is fetched)
     property bool showControls: true             // the small dock window hides the control row and has its own buttons
+    property string appId: "kick"               // whose gateway checks the address (the Internet Archive app plays its music and videos here too)
+    property bool vod: false                     // a recording from the internet (music, a film): it has a length, so it gets the seek meter, no "live" tag
     readonly property bool local: file !== ""
-    readonly property bool showSeekMeter: local && !hop.inPictureInPicture && error === ""   // offline videos only, never a live stream
-    readonly property bool showLiveTag: !local
+    readonly property bool showSeekMeter: (local || vod) && !hop.inPictureInPicture && error === ""   // recordings only, never a live stream
+    readonly property bool showLiveTag: !local && !vod
     readonly property var surface: mpvLoader.item ? mpvLoader.item : (gstLoader.item ? gstLoader.item : qtLoader.item)
     readonly property string error: blocked ? "that stream address is not one this app may open" : (surface ? String(surface.error) : "")
     readonly property bool started: surface !== null && (url !== "" || file !== "")
@@ -26,7 +28,7 @@ Item {
     // surface underneath the video; on some phones the picture then stays black until it is rebuilt (like after switching apps).
     function refreshPicture() {
         if (!started) return
-        resumeAt = local && surface ? surface.position : 0
+        resumeAt = (local || vod) && surface ? surface.position : 0
         loadedUrl = ""
         recreating = true
         recreateTimer.restart()
@@ -54,10 +56,10 @@ Item {
         if (resumeAt > 0 && typeof surface.setResumePosition === "function") { surface.setResumePosition(resumeAt); resumeAt = 0 }
         if (local) { surface.source = file; surface.play(); return }
         if (hop.videoEngine === "qt") {          // Android: Qt Multimedia plays the address itself, so it is checked here first
-            if (!hop.kick.streamAllowed(url)) { blocked = true; return }
+            if (!(appId === "kick" ? hop.kick.streamAllowed(url) : hop.streamAllowed(appId, url))) { blocked = true; return }
             blocked = false
             surface.source = url
-        } else surface.openStream(url)
+        } else surface.openStream(url, appId)
         surface.play()
     }
     onUrlChanged: {
@@ -94,7 +96,7 @@ Item {
         PlainButton {
             objectName: "kickPlayerRetry"
             anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter; verticalCenterOffset: 56 }
-            visible: !root.local && root.url !== "" && root.error !== ""
+            visible: !root.local && root.url !== "" && root.error !== "" && !root.vod
             text: "try again"; implicitHeight: 38
             onClicked: root.retryRequested()
         }

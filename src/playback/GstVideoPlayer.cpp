@@ -19,7 +19,7 @@ GstVideoPlayer::~GstVideoPlayer() = default;
 bool GstVideoPlayer::available() { return false; }
 void GstVideoPlayer::attachSurface(QQuickItem *) {}
 bool GstVideoPlayer::openSource(const QString &, qint64) { return false; }
-bool GstVideoPlayer::openStream(const QString &) { return false; }
+bool GstVideoPlayer::openStream(const QString &, const QString &) { return false; }
 void GstVideoPlayer::play() {}
 void GstVideoPlayer::pause() {}
 void GstVideoPlayer::togglePause() {}
@@ -177,12 +177,12 @@ static void streamElementAdded(GstBin *, GstBin *, GstElement *element, gpointer
 }
 #endif
 
-bool GstVideoPlayer::openStream(const QString &url)
+bool GstVideoPlayer::openStream(const QString &url, const QString &app)
 {
     if (!m_pipeline) return false;
 #ifdef HOPTUNES_NET_APPS
     QString why;
-    if (!hop::AppNet::streamUrlAllowed(QStringLiteral("kick"), QUrl(url), &why)) { setError(why); return false; }
+    if (!hop::AppNet::streamUrlAllowed(app, QUrl(url), &why)) { setError(why); return false; }
     if (!m_streamUa) { g_signal_connect(m_pipeline, "deep-element-added", G_CALLBACK(streamElementAdded), nullptr); m_streamUa = true; }
     gst_element_set_state(m_pipeline, GST_STATE_NULL);
     g_object_set(m_pipeline, "uri", url.toUtf8().constData(), "suburi", nullptr, nullptr);
@@ -195,7 +195,7 @@ bool GstVideoPlayer::openStream(const QString &url)
     m_posTimer.start();
     return true;
 #else
-    Q_UNUSED(url)
+    Q_UNUSED(url) Q_UNUSED(app)
     setError(QStringLiteral("this build has no apps that use the internet"));
     return false;
 #endif
