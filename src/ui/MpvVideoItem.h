@@ -4,6 +4,7 @@
 #include "playback/MpvCore.h"
 
 #include <QQuickFramebufferObject>
+#include <memory>
 #include <QVariantList>
 
 struct mpv_render_context;
@@ -36,6 +37,8 @@ class MpvVideoItem : public QQuickFramebufferObject {
     Q_PROPERTY(QVariantList subtitleTracks READ subtitleTracks NOTIFY subtitleTracksChanged)
 
 public:
+    struct RenderState;                             // shared with the renderer: see the note in MpvVideoItem.cpp
+
     explicit MpvVideoItem(QQuickItem *parent = nullptr);
     ~MpvVideoItem() override;
 
@@ -43,15 +46,15 @@ public:
 
     QString source() const { return m_source; }
     void setSource(const QString &path);   // local file path; "" stops and unloads
-    bool paused() const { return m_core.paused(); }
-    bool idle() const { return m_core.idle(); }
-    qint64 position() const { return m_core.position(); }
-    qint64 duration() const { return m_core.duration(); }
-    int volume() const { return m_core.volume(); }
-    QString hwdecActive() const { return m_core.hwdecActive(); }
-    QString error() const { return m_core.error(); }
-    QVariantList subtitleTracks() const { return m_core.subtitleTracks(); }
-    void setVolume(int percent) { m_core.setVolume(percent); emit volumeChanged(); }
+    bool paused() const { return m_core->paused(); }
+    bool idle() const { return m_core->idle(); }
+    qint64 position() const { return m_core->position(); }
+    qint64 duration() const { return m_core->duration(); }
+    int volume() const { return m_core->volume(); }
+    QString hwdecActive() const { return m_core->hwdecActive(); }
+    QString error() const { return m_core->error(); }
+    QVariantList subtitleTracks() const { return m_core->subtitleTracks(); }
+    void setVolume(int percent) { m_core->setVolume(percent); emit volumeChanged(); }
 
     // Resumes from this position (spec §5b "Resume") the next time setSource() loads a file.
     // Must be Q_INVOKABLE: VideoPlayerView.qml calls this on the surface from QML, and a
@@ -62,17 +65,17 @@ public:
     // not something routed through surface.error.
     Q_INVOKABLE void setResumePosition(qint64 ms) { m_pendingResumeMs = ms; }
 
-    Q_INVOKABLE bool openStream(const QString &url, const QString &app = QStringLiteral("kick")) { m_source = url; emit sourceChanged(); return m_core.openStream(url, app); }   // a live stream (Kick app)
-    Q_INVOKABLE void play() { m_core.play(); }
-    Q_INVOKABLE void pause() { m_core.pause(); }
-    Q_INVOKABLE void togglePause() { m_core.togglePause(); }
-    Q_INVOKABLE void seek(qint64 ms) { m_core.seek(ms); }
-    Q_INVOKABLE void stop() { m_core.stop(); }
-    Q_INVOKABLE void addSubtitleFile(const QString &path) { m_core.addSubtitleFile(path); }
-    Q_INVOKABLE void setSubtitleTrack(int id) { m_core.setSubtitleTrack(id); }
+    Q_INVOKABLE bool openStream(const QString &url, const QString &app = QStringLiteral("kick")) { m_source = url; emit sourceChanged(); return m_core->openStream(url, app); }   // a live stream (Kick app)
+    Q_INVOKABLE void play() { m_core->play(); }
+    Q_INVOKABLE void pause() { m_core->pause(); }
+    Q_INVOKABLE void togglePause() { m_core->togglePause(); }
+    Q_INVOKABLE void seek(qint64 ms) { m_core->seek(ms); }
+    Q_INVOKABLE void stop() { m_core->stop(); }
+    Q_INVOKABLE void addSubtitleFile(const QString &path) { m_core->addSubtitleFile(path); }
+    Q_INVOKABLE void setSubtitleTrack(int id) { m_core->setSubtitleTrack(id); }
 
     // Used only by the Renderer (render thread) to reach the mpv handle.
-    MpvCore *core() { return &m_core; }
+    MpvCore *core() { return m_core.get(); }
 
 signals:
     void sourceChanged();
@@ -88,7 +91,8 @@ signals:
 private:
     class FboRenderer;
 
-    MpvCore m_core;
+    std::unique_ptr<MpvCore> m_core;                // (a pointer: a dying item with a live render context hands it over, see ~MpvVideoItem)
+    std::shared_ptr<RenderState> m_state;
     QString m_source;
     qint64 m_pendingResumeMs = 0;
 };
