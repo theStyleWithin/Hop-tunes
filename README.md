@@ -2,6 +2,8 @@
 
 *Missed the Zune software? This is for you.*
 
+[![Your app | AlternativeTo](https://alternativeto.net/static/badges/badge-compact-dark.svg)](https://alternativeto.net/software/your-app/about/?utm_source=badge&utm_medium=referral)
+
 **Hop-tunes** · Linux · GPL-3.0 · no accounts, no tracking
 
 <p align="right"><img src="design/app/notesy-mascot.png" alt="Notesy, the Hop-tunes mascot, winking" width="220"></p>
