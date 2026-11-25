@@ -11,9 +11,14 @@ Rectangle {
     objectName: "profileGate"
     color: Theme.bg
 
-    property string mode: hop.profiles.length === 0 ? "create" : "pick"
+    property string mode: hop.profileCount === 0 ? "create" : "pick"
     property var pinProfile: ({})
     property string error: ""
+    property var ejectTarget: ({})    // the profile being ejected from the picker
+    property string ejectStep: "pin"  // pin (secured profiles only) | save | confirm
+    property var ejectResult: null    // exportProfileById() result of the saved file
+    property bool ejectHaveFile: false
+    property string ejectPinText: ""
     property var importInfo: null     // inspectProfileFile() result of the chosen file
     property url importFile
 
@@ -22,9 +27,33 @@ Rectangle {
         if (p.hasPin) { pinProfile = p; pinEntry.text = ""; show("pin"); pinEntry.forceActiveFocus() }
         else error = hop.openProfile(p.id, "")
     }
+    function startEject(p) {
+        ejectTarget = p; ejectResult = null; ejectHaveFile = false; ejectPinText = ""; error = ""
+        ejectStep = p.hasPin ? "pin" : "save"
+        show("eject")
+        if (p.hasPin) ejectPinEntry.text = ""
+    }
+    function ejectFileName() {
+        return "hop-tunes-" + String(ejectTarget.name || "profile").replace(/[^A-Za-z0-9._-]+/g, "-") + "-" + Qt.formatDate(new Date(), "yyyy-MM-dd") + ".hoptunes.json"
+    }
     Connections {
         target: hop
-        function onProfileChanged() { if (!hop.profileReady) gate.show(hop.profiles.length === 0 ? "create" : "pick") }
+        function onProfileChanged() { if (!hop.profileReady) gate.show(hop.profileCount === 0 ? "create" : "pick") }
+    }
+
+    FileDialog {
+        id: ejectDialog
+        title: "save the profile before it goes"
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "json"
+        currentFile: "file://" + gate.ejectFileName()
+        nameFilters: ["hop-tunes profile (*.json)"]
+        onAccepted: {
+            gate.ejectHaveFile = false
+            gate.ejectResult = hop.exportProfileById(gate.ejectTarget.id, gate.ejectPinText, selectedFile)
+            if (gate.ejectResult.ok) { gate.error = ""; gate.ejectStep = "confirm" }
+            else { gate.error = gate.ejectResult.error; if (gate.ejectTarget.hasPin) gate.ejectStep = "pin" }
+        }
     }
 
     FileDialog {
@@ -76,6 +105,35 @@ Rectangle {
                         }
                     }
                     background: Item { }
+                    // a right click (or a long press on a touch screen) opens the menu; a left click still just opens the profile
+                    MouseArea { anchors.fill: parent; acceptedButtons: Qt.RightButton; onClicked: function (m) { tileMenu.popup(m.x, m.y) } }
+                    TapHandler { acceptedDevices: PointerDevice.TouchScreen; onLongPressed: tileMenu.popup(tile.width / 2, tile.height / 2) }
+                    Menu {
+                        id: tileMenu
+                        background: Rectangle { implicitWidth: 260; color: Theme.panel; border { width: 1; color: Theme.line } }
+                        MenuItem {
+                            objectName: "tileOpen_" + tile.modelData.name
+                            text: "open"
+                            onTriggered: gate.choose(tile.modelData)
+                            contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
+                            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+                        }
+                        MenuItem {
+                            objectName: "tileHide_" + tile.modelData.name
+                            enabled: !tile.modelData.hasPin
+                            text: tile.modelData.hasPin ? "hide (not for profiles with a PIN)" : "hide"
+                            onTriggered: gate.error = hop.hideProfile(tile.modelData.id)
+                            contentItem: Label { text: parent.text; color: parent.enabled ? Theme.text : Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
+                            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+                        }
+                        MenuItem {
+                            objectName: "tileEject_" + tile.modelData.name
+                            text: "eject"
+                            onTriggered: gate.startEject(tile.modelData)
+                            contentItem: Label { text: parent.text; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) } leftPadding: 6 }
+                            background: Rectangle { implicitHeight: 36; color: parent.highlighted ? Theme.hover : "transparent" }
+                        }
+                    }
                 }
             }
             AbstractButton {
@@ -97,6 +155,13 @@ Rectangle {
                 background: Item { }
             }
         }
+        Label {
+            objectName: "hiddenHint"
+            visible: hop.hiddenProfiles.length > 0
+            text: hop.hiddenProfiles.length + (hop.hiddenProfiles.length === 1 ? " profile is hidden" : " profiles are hidden") + ": open a profile or listen as guest, then settings > hidden profiles shows them again."
+            color: Theme.dim; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.topMargin: 6
+            font { family: Theme.font; pixelSize: Theme.fs(14) }
+        }
         Item { Layout.fillHeight: true }
         Flow {
             spacing: 16
@@ -106,6 +171,79 @@ Rectangle {
             Label { text: "guest mode keeps no history and saves nothing."; color: Theme.dim; font { family: Theme.font; pixelSize: Theme.fs(14) } }
         }
         Label { visible: gate.error !== ""; text: gate.error; color: Theme.danger; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+    }
+
+    // ---- eject from the picker: save the profile to a file, check it, then remove it from this computer ------------------
+    ColumnLayout {
+        objectName: "ejectFlow"
+        visible: gate.mode === "eject"
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 40, 560)
+        spacing: 16
+        ProfileAvatar { profile: gate.ejectTarget; size: 120; Layout.alignment: Qt.AlignHCenter }
+        Label { text: "eject \u201c" + (gate.ejectTarget.name || "") + "\u201d"; color: Theme.strong; Layout.alignment: Qt.AlignHCenter
+                font { family: Theme.font; pixelSize: Theme.fs(30); weight: Font.Light } }
+        Label {
+            text: "ejecting saves this profile to a file, checks the file, and only then removes the profile from this computer: its settings, playlists and history. your music files are not touched. import the file on any device to get it back."
+            color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+            font { family: Theme.font; pixelSize: Theme.fs(15) }
+        }
+        PinField {
+            id: ejectPinEntry
+            objectName: "ejectPin"
+            visible: gate.ejectStep === "pin"
+            hint: "enter this profile's PIN"
+            Layout.alignment: Qt.AlignHCenter
+            onAccepted: ejectPinNext.clicked()
+        }
+        Label { objectName: "ejectError"; text: gate.error; visible: text !== "" && gate.mode === "eject"; color: Theme.danger; wrapMode: Text.WordWrap; Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter; font { family: Theme.font; pixelSize: Theme.fs(15) } }
+        Label {
+            objectName: "ejectSaved"
+            visible: gate.ejectStep === "confirm" && !!gate.ejectResult && gate.ejectResult.ok
+            text: gate.ejectResult && gate.ejectResult.ok ? "saved and checked: " + gate.ejectResult.where + " (" + Math.max(1, Math.round(gate.ejectResult.bytes / 1024)) + " KB). keep it somewhere safe." : ""
+            color: Theme.text; wrapMode: Text.WordWrap; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter
+            font { family: Theme.font; pixelSize: Theme.fs(15) }
+        }
+        PlainButton {
+            objectName: "ejectHaveFile"
+            visible: gate.ejectStep === "confirm"
+            Layout.alignment: Qt.AlignHCenter
+            text: (gate.ejectHaveFile ? "\u2611 " : "\u2610 ") + "I have the file and it is safe"
+            onClicked: gate.ejectHaveFile = !gate.ejectHaveFile
+        }
+        RowLayout {
+            Layout.alignment: Qt.AlignHCenter
+            spacing: 12
+            PlainButton { objectName: "ejectCancel"; text: "cancel, keep the profile"; onClicked: { gate.ejectResult = null; gate.show("pick") } }
+            PlainButton {
+                id: ejectPinNext
+                objectName: "ejectPinNext"
+                visible: gate.ejectStep === "pin"
+                text: "next"; primary: true
+                enabled: ejectPinEntry.text.length >= 4
+                onClicked: { gate.ejectPinText = ejectPinEntry.text; ejectPinEntry.text = ""; gate.error = ""; gate.ejectStep = "save" }
+            }
+            PlainButton {
+                objectName: "ejectChooseFile"
+                visible: gate.ejectStep === "save"
+                text: "choose where to save the file…"; primary: true
+                onClicked: ejectDialog.open()
+            }
+            PlainButton {
+                objectName: "ejectConfirm"
+                visible: gate.ejectStep === "confirm"
+                enabled: gate.ejectHaveFile
+                text: "eject"; danger: true
+                onClicked: {
+                    const m = hop.ejectProfileById(gate.ejectTarget.id, gate.ejectPinText, gate.ejectHaveFile)
+                    gate.ejectPinText = ""; gate.ejectResult = null; gate.ejectHaveFile = false
+                    gate.error = m
+                    if (m === "") gate.show(hop.profileCount === 0 ? "create" : "pick")
+                    else if (gate.ejectTarget.hasPin) gate.ejectStep = "pin"
+                }
+            }
+        }
     }
 
     // ---- PIN curtain -----------------------------------------------------------------
@@ -152,7 +290,7 @@ Rectangle {
         property url folder: hop.suggestedFolderUrl
 
         Label {
-            text: hop.profiles.length === 0 ? "welcome to hop-tunes" : "add a profile"
+            text: hop.profileCount === 0 ? "welcome to hop-tunes" : "add a profile"
             color: Theme.strong; font { family: Theme.font; pixelSize: Theme.fs(52); weight: Font.Light }
             wrapMode: Text.WordWrap; Layout.fillWidth: true
         }
@@ -264,7 +402,7 @@ Rectangle {
         Flow {
             spacing: 12
             Layout.fillWidth: true
-            PlainButton { visible: hop.profiles.length > 0; text: "cancel"; onClicked: gate.show("pick") }
+            PlainButton { visible: hop.profileCount > 0; text: "cancel"; onClicked: gate.show("pick") }
             PlainButton {
                 objectName: "createButton"
                 text: "create profile"; primary: true
@@ -276,8 +414,8 @@ Rectangle {
                     if (gate.error === "") { pin1.text = ""; pin2.text = ""; usePin.checked = false }
                 }
             }
-            PlainButton { visible: hop.profiles.length === 0; text: "just listen as guest"; onClicked: hop.openGuest() }
-            PlainButton { objectName: "importProfileFirst"; visible: hop.profiles.length === 0; text: "import a profile…"; onClicked: importDialog.open() }
+            PlainButton { visible: hop.profileCount === 0; text: "just listen as guest"; onClicked: hop.openGuest() }
+            PlainButton { objectName: "importProfileFirst"; visible: hop.profileCount === 0; text: "import a profile…"; onClicked: importDialog.open() }
         }
     }
 
@@ -320,7 +458,7 @@ Rectangle {
         Item { Layout.fillHeight: true }
         Flow {
             spacing: 12; Layout.fillWidth: true
-            PlainButton { text: "cancel"; onClicked: gate.show(hop.profiles.length === 0 ? "create" : "pick") }
+            PlainButton { text: "cancel"; onClicked: gate.show(hop.profileCount === 0 ? "create" : "pick") }
             PlainButton {
                 objectName: "importButton"
                 text: "import"; primary: true

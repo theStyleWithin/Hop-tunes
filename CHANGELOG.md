@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **Profile picker: a right-click menu with open, hide and eject.** Right-click a profile on the picker (or long-press it on a touch screen) to get three choices; a left click still just opens it. **open** is the same as a left click. **hide** takes the profile off the picker and adds a **hidden profiles** list to settings (it only appears once something is hidden, and a guest sees it too) where each one can be opened or shown on the picker again; a profile with a PIN cannot be hidden (hiding only tidies the picker, a PIN is the curtain). **eject** saves the profile to a file, checks the file and only then removes the profile from this computer (your music is never touched), right from the picker: a profile with a PIN asks for it first, and nothing is removed until you confirm that you have the file.
+
 ## [1.13.0] - 2026-11-20: DeviantArt and the Internet Archive
 
 ### Added

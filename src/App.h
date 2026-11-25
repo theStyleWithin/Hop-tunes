@@ -51,6 +51,8 @@ class QQmlEngine;
 
 namespace hop {
 
+struct ProfileArchive;
+
 // The object QML talks to: profiles, library, scanning, playback. Nothing loads until a
 // profile (or guest mode) is open; each profile has its own watched folders and settings
 // over the one shared track index (spec §3).
@@ -124,7 +126,9 @@ class App : public QObject {
     Q_PROPERTY(bool profileReady READ profileReady NOTIFY profileChanged)
     Q_PROPERTY(bool guest READ guest NOTIFY profileChanged)
     Q_PROPERTY(QVariantMap profile READ profile NOTIFY profileChanged)
-    Q_PROPERTY(QVariantList profiles READ profiles NOTIFY profilesChanged)
+    Q_PROPERTY(QVariantList profiles READ profiles NOTIFY profilesChanged)               // the ones the picker shows (not the hidden ones)
+    Q_PROPERTY(QVariantList hiddenProfiles READ hiddenProfiles NOTIFY profilesChanged)   // hidden from the picker, listed in settings
+    Q_PROPERTY(int profileCount READ profileCount NOTIFY profilesChanged)                // all of them, hidden or not
     Q_PROPERTY(QString accent READ accent NOTIFY profileChanged)
     Q_PROPERTY(QStringList accents READ accents CONSTANT)
     Q_PROPERTY(QString suggestedFolder READ suggestedFolder CONSTANT)
@@ -273,6 +277,8 @@ public:
     bool guest() const { return m_guest; }
     QVariantMap profile() const;
     QVariantList profiles() const;
+    QVariantList hiddenProfiles() const;
+    int profileCount() const { return m_store.count(); }
     QString accent() const;
     QStringList accents() const;
     QString suggestedFolder() const;
@@ -506,6 +512,11 @@ public:
     // checks it; only after that does ejectProfile(true) remove the profile from this device.
     Q_INVOKABLE QVariantMap exportProfileTo(const QUrl &file);        // ok, error, name, bytes, where
     Q_INVOKABLE QString ejectProfile(bool haveTheFile);               // "" on success
+    // From the picker (nothing is open): the same save-then-remove, for any profile. A secured profile needs its PIN (with the same lock-out as opening it).
+    Q_INVOKABLE QVariantMap exportProfileById(const QString &id, const QString &pin, const QUrl &file);   // ok, error, name, bytes, where
+    Q_INVOKABLE QString ejectProfileById(const QString &id, const QString &pin, bool haveTheFile);        // "" on success
+    Q_INVOKABLE QString hideProfile(const QString &id);               // "" or a plain sentence (a profile with a PIN cannot be hidden)
+    Q_INVOKABLE QString unhideProfile(const QString &id);
     Q_INVOKABLE QVariantMap inspectProfileFile(const QUrl &file);     // ok, error, name, accent, counts, folders, missing
     Q_INVOKABLE QString importProfile(const QUrl &file, const QString &name, const QString &pin);   // never overwrites
     Q_INVOKABLE QString suggestedExportName() const;                  // "hop-tunes-<name>-<date>.hoptunes.json"
@@ -702,6 +713,8 @@ private:
     quint32 m_djRound = 0;
     struct Listen { QString path; qint64 maxPos = 0; qint64 duration = 0; bool counted = false; } m_listen;
     QString m_profileId;          // empty when no profile is open
+    QString checkPinLocked(const QString &id, const QString &pin);   // "" when the PIN is right (or none is set); else a plain sentence, with the 5-tries lock-out
+    QVariantMap saveArchiveVerified(const ProfileArchive &a, const QUrl &file, const QString &profileId);
     QString m_exportVerifiedFor;  // profile id whose export was saved and read back; unlocks ejectProfile()
     bool m_guest = false;
     QStringList m_legacyFolders;  // pre-profile (M1/M2) setting, adopted by the first profile

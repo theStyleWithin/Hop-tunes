@@ -18,6 +18,7 @@ struct Profile {
     QString accent;      // "#rrggbb"
     bool hasAvatar = false;
     bool hasPin = false;
+    bool hidden = false;   // not shown on the picker (listed in settings instead); a profile with a PIN is never hidden
     QDateTime created;
 };
 
@@ -40,6 +41,8 @@ public:
     bool setAccent(const QString &id, const QString &accent);
     bool setPin(const QString &id, const QString &pin);   // empty pin removes it
     bool setHasAvatar(const QString &id, bool has);
+    // Hiding only tidies the picker: false (and nothing changes) for a profile that has a PIN, or that does not exist. Showing again always works.
+    bool setHidden(const QString &id, bool hidden);
     // Deletes only the profile's own folder (playlists, stats, settings). Never music.
     bool remove(const QString &id);
 

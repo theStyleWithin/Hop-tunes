@@ -383,6 +383,14 @@ In *settings → profile* you can rename the profile, change its colour or pictu
 change or remove the PIN, or **remove the profile**. Removing a profile deletes only its
 Hop-tunes data (playlists, history, settings); it never touches music files.
 
+### The picker's right-click menu
+
+On the "who's listening?" page, **right-click** a profile (or **long-press** it on a touch screen) for three choices. A left click still just opens it.
+
+- **open**: the same as a left click (a profile with a PIN asks for it first).
+- **hide**: takes the profile off the picker. A **hidden profiles** list then appears in *settings* (a guest sees it too) where each hidden profile can be **opened** or **shown on the picker** again. A profile with a PIN cannot be hidden. Hiding only tidies the picker: it is not a lock, a PIN is.
+- **eject**: saves the profile to a file, checks the file, and only then removes the profile from this computer (its settings, playlists and history; never your music). A profile with a PIN asks for it first, and nothing is removed until you confirm that you have the file. Import the file on any device to get the profile back.
+
 ## Settings
 
 - **playback → crossfade**: 0 (off, gapless) to 12 seconds. Songs from the same album
