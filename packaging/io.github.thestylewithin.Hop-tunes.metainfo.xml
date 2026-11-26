@@ -88,6 +88,7 @@
         <ul>
           <li>Apps: drag tiles anywhere on the grid (the placement is remembered), and keep them in glassy folders you can rename, colour or give a picture from your photos.</li>
           <li>Profile picker: right-click a profile to open it, hide it (hidden profiles are listed in settings) or eject it to a file. Profiles with a PIN cannot be hidden.</li>
+          <li>Android: the app is now signed with a new key, so uninstall the previous Hop-tunes before installing this one (Android will not update over it). Eject any profile you want to keep first.</li>
           <li>A drive pulled out while Hop-tunes was scanning no longer makes it forget your songs until the next rescan.</li>
         </ul>
       </description>
