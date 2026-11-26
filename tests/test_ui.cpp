@@ -2050,16 +2050,19 @@ private slots:
         QVERIFY(!item("gamesShelf")->isVisible());
         QCOMPARE(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("gamesShelfMode").toString(), QStringLiteral("bookshelf"));
         QVERIFY(item("gameShelfRow_1") != nullptr);                                           // a bookcase has more shelves than games to fill them
-        QVERIFY(item("gameShelfRow_2") != nullptr);
+        QVERIFY(item("gamesBookshelf")->property("count").toInt() >= 3);                      // (the rows below the fold are built when scrolled to)
         shot("games-bookshelf");
         // lots of games: more shelves than fit, and the shelves scroll up and down to reach them all
         for (int i = 0; i < 90; ++i) QVERIFY(m_app->addManualGame(QStringLiteral("Filler %1").arg(i, 2, 10, QLatin1Char('0')), QString()).isEmpty());
         QTRY_COMPARE(m_app->games()->total(), 97);
         QQuickItem *books = item("gamesBookshelf");
         QVERIFY(books);
+        QTRY_VERIFY(books->property("count").toInt() >= 5);                                   // 97 games need several full shelves, then the empty one
         QTRY_VERIFY(books->property("contentHeight").toDouble() > books->height() * 1.5);
         QVERIFY(!item("gameSpine_96"));                                                       // the last one is below the fold: not built yet
         QVERIFY(QMetaObject::invokeMethod(books, "positionViewAtEnd"));
+        QTest::qWait(200);                                                                    // (a rebuild must not throw the view back to the top)
+        QVERIFY(books->property("contentY").toDouble() > 0);
         QTRY_VERIFY_WITH_TIMEOUT(item("gameSpine_96") != nullptr, 8000);                      // scrolled down to it
         QVERIFY(QMetaObject::invokeMethod(books, "positionViewAtBeginning"));
         QTRY_VERIFY(item("gameSpine_0") != nullptr);

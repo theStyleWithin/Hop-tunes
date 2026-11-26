@@ -60,7 +60,9 @@ Item {
         const minRows = Math.max(3, Math.ceil(books.height / shelfH) + 1)
         if (out.length > 0) out.push({ items: [] })
         while (out.length < minRows) out.push({ items: [] })
+        const keepY = books.contentY               // a rebuild (a scan finishing, a game added) must not throw the reader back to the top shelf
         shelves = out
+        if (keepY > 0) Qt.callLater(function () { books.contentY = Math.max(0, Math.min(keepY, books.contentHeight - books.height)) })
     }
     readonly property real railW: 9
     readonly property real shelfH: spineTall + 3 * (Theme.compact ? 6 : 8) + 16 + 12 + 14    // the tallest spine, headroom, the plank, the shadow
@@ -425,10 +427,13 @@ Item {
                                 id: stand
                                 x: 0
                                 width: book.modelData.w; height: book.modelData.h
-                                y: book.baseY - book.modelData.h - (book.hot ? 8 : 0)
+                                y: book.baseY - book.modelData.h - (book.hot ? 8 : 0) + (book.modelData.lean ? 9 : 0)      // (the turned cover looks shorter from the front: settle the leaning ones onto the plank)
                                 Behavior on y { NumberAnimation { duration: 110 } }
-                                transformOrigin: Item.BottomLeft
-                                rotation: book.modelData.lean ? root.leanAngle : 0
+                                // a leaning game rests on the bottom-right corner you can see (the far edge of its turned cover); its left side lifts off the plank
+                                transform: Rotation {
+                                    origin { x: book.modelData.sw + book.modelData.coverW * Math.cos(root.coverTurn * Math.PI / 180); y: book.modelData.h }
+                                    angle: book.modelData.lean ? root.leanAngle : 0
+                                }
 
                                 // the front cover of a leaning game: turned away, so only part of it shows
                                 Item {
