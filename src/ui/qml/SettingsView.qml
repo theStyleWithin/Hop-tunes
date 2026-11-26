@@ -267,6 +267,33 @@ Item {
         }
         Label { visible: root.profileMsg !== ""; text: root.profileMsg; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
+        // ---- hidden profiles: hidden from the picker with its right-click menu; shown here, only when there are some ----
+        ColumnLayout {
+            objectName: "hiddenProfilesSection"
+            visible: hop.hiddenProfiles.length > 0
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            Layout.topMargin: 24
+            spacing: 10
+            Label { text: "hidden profiles"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+            Label {
+                text: "these profiles are not shown on the picker. hiding only tidies it: it is not a lock (a PIN is). open one from here, or show it on the picker again."
+                color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: Theme.fs(14) }
+            }
+            Repeater {
+                model: hop.hiddenProfiles
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 12
+                    ProfileAvatar { profile: modelData; size: 40 }
+                    Label { text: modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0
+                            font { family: Theme.font; pixelSize: Theme.fs(17) } }
+                    PlainButton { objectName: "hiddenOpen_" + modelData.name; text: "open"; implicitHeight: 34; onClicked: root.profileMsg = hop.openProfile(modelData.id, "") }
+                    PlainButton { objectName: "hiddenShow_" + modelData.name; text: "show on the picker"; implicitHeight: 34; onClicked: root.profileMsg = hop.unhideProfile(modelData.id) }
+                }
+            }
+        }
+
         // ---- keep your profile: export a copy, or eject it from this device -------------
         ColumnLayout {
             visible: !hop.guest

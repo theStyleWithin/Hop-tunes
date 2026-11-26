@@ -116,6 +116,7 @@ bool ProfileStore::load()
         const QString pin = o.value(QStringLiteral("pin")).toString();
         p.hasPin = !pin.isEmpty();
         if (p.hasPin) m_pinHashes.insert(p.id, pin);
+        p.hidden = o.value(QStringLiteral("hidden")).toBool(false) && !p.hasPin;   // (a secured profile is never hidden, whatever the file says)
         m_profiles.append(p);
     }
     return true;
@@ -133,6 +134,7 @@ bool ProfileStore::save()
                       {QStringLiteral("avatar"), p.hasAvatar},
                       {QStringLiteral("created"), p.created.toString(Qt::ISODate)}};
         if (p.hasPin) o.insert(QStringLiteral("pin"), m_pinHashes.value(p.id));
+        if (p.hidden) o.insert(QStringLiteral("hidden"), true);
         arr.append(o);
     }
     const QJsonObject root{{QStringLiteral("version"), 1}, {QStringLiteral("profiles"), arr}};
@@ -201,7 +203,18 @@ bool ProfileStore::setPin(const QString &id, const QString &pin)
     Profile *p = findMutable(id);
     if (!p || (!pin.isEmpty() && !isValidPin(pin))) return false;
     p->hasPin = !pin.isEmpty();
-    if (p->hasPin) m_pinHashes.insert(id, hashPin(pin)); else m_pinHashes.remove(id);
+    if (p->hasPin) { m_pinHashes.insert(id, hashPin(pin)); p->hidden = false; }   // a secured profile shows on the picker
+    else m_pinHashes.remove(id);
+    return save();
+}
+
+bool ProfileStore::setHidden(const QString &id, bool hidden)
+{
+    Profile *p = findMutable(id);
+    if (!p) return false;
+    if (hidden && p->hasPin) { m_error = QStringLiteral("a profile with a PIN cannot be hidden"); return false; }
+    if (p->hidden == hidden) return true;
+    p->hidden = hidden;
     return save();
 }
 

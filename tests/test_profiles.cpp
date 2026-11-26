@@ -8,6 +8,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QTemporaryDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QtTest>
 
 using namespace hop;
@@ -116,6 +118,62 @@ private slots:
         QVERIFY(QFile::exists(keep));
         QCOMPARE(s.count(), 0);
         QVERIFY(!s.remove(id));
+    }
+
+    // Hiding only tidies the picker: never for a profile with a PIN, kept in the file, undone by showing again
+    void hidingNeverTouchesASecuredProfileAndIsRemembered()
+    {
+        QTemporaryDir tmp;
+        const QString root = tmp.filePath(QStringLiteral("p"));
+        QString plain, secured;
+        {
+            ProfileStore s(root);
+            QVERIFY(s.load());
+            plain = s.create(QStringLiteral("Plain"), QStringLiteral("#7cc4ff"));
+            secured = s.create(QStringLiteral("Secret"), QStringLiteral("#ff6b9a"), QStringLiteral("4321"));
+            QVERIFY(!s.find(plain)->hidden);
+            QVERIFY(!s.setHidden(secured, true));                         // a profile with a PIN cannot be hidden
+            QVERIFY(!s.lastError().isEmpty() && !s.find(secured)->hidden);
+            QVERIFY(!s.setHidden(QStringLiteral("no-such-profile"), true));
+            QVERIFY(s.setHidden(plain, true));
+            QVERIFY(s.find(plain)->hidden);
+            QVERIFY(s.setHidden(plain, true));                            // (again: nothing changes, still fine)
+        }
+        {   // remembered across a restart; the other profile is untouched
+            ProfileStore s(root);
+            QVERIFY(s.load());
+            QVERIFY(s.find(plain)->hidden && !s.find(secured)->hidden);
+            QVERIFY(s.checkPin(secured, QStringLiteral("4321")));
+            // a PIN on a hidden profile brings it back to the picker
+            QVERIFY(s.setPin(plain, QStringLiteral("2468")));
+            QVERIFY(!s.find(plain)->hidden && s.find(plain)->hasPin);
+            QVERIFY(!s.setHidden(plain, true));
+            QVERIFY(s.setPin(plain, {}));
+            QVERIFY(s.setHidden(plain, true));
+            QVERIFY(s.setHidden(plain, false));                           // showing again always works
+            QVERIFY(!s.find(plain)->hidden);
+            QVERIFY(s.setHidden(plain, true));
+            QVERIFY(s.remove(plain));                                     // a hidden profile can be removed
+            QCOMPARE(s.count(), 1);
+        }
+        {   // a file from an older version has no "hidden" field; a file that says hidden for a secured profile is not believed
+            QFile f(root + QStringLiteral("/profiles.json"));
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            QJsonObject o = QJsonDocument::fromJson(f.readAll()).object();
+            f.close();
+            QJsonArray arr = o.value("profiles").toArray();
+            QJsonObject p0 = arr.at(0).toObject();
+            QVERIFY(!p0.contains("hidden"));
+            p0["hidden"] = true;
+            arr.replace(0, p0);
+            o["profiles"] = arr;
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+            f.write(QJsonDocument(o).toJson());
+            f.close();
+            ProfileStore s(root);
+            QVERIFY(s.load());
+            QVERIFY(s.find(secured)->hasPin && !s.find(secured)->hidden);
+        }
     }
 
     void rejectsHostileIds()
