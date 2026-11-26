@@ -4,7 +4,13 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Fixed
+- **The Android app builds without the networked apps again.** The background-playback code was only declared in builds that include the networked apps, so a build without them did not compile.
+
 ## [1.14.0] - 2026-11-26: Folders and a profile menu
+
+### Android: uninstall the old version first
+- **The Android app is now signed with a new key, so please uninstall the previous Hop-tunes before installing this one.** The old signing key was lost, so Android will not install this version over an earlier one ("app not installed"). Uninstalling removes the app's own data, including your profiles: if you want to keep one, **eject** it to a file first (profile picker › right-click › eject); your music files are never touched. Future updates will install over this one as usual, as long as the key is kept.
 
 ### Added
 - **Apps page: drag apps anywhere, and app folders.** Tiles can now be dragged to any free spot on the grid (even another page, by dropping on a page dot or holding at the edge), swap places when dropped on each other, and the layout is remembered in your profile (separately for the wide and the phone layouts). On a touch screen a long press (or the new *arrange* button) starts arranging; then a drag moves a tile. New **folders**: a clear, glassy tile that apps are dragged into (or filed with *move to a folder…* in an app's right-click menu); clicking a folder opens it inside the grid, with *‹ all apps* to go back. A folder can be **renamed**, given a **colour** or **a picture from your photos** (a small rounded square copy is kept in your profile, never the photo) from its editor, and deleting a folder only removes the folder: its apps return to the grid.

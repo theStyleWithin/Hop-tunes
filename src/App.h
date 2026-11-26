@@ -683,6 +683,9 @@ private:
     QVector<AppsBg> m_appsBgs;
     QString appsBgDir() const;
     bool m_inPip = false;
+    bool m_streamPlaying = false;                       // a stream makes sound (Android keeps the app alive in the background)
+    bool m_serviceOn = false;
+    void updatePlaybackService();
     QSet<QString> m_netAllowed;
 #ifdef HOPTUNES_NET_APPS
     AppNet m_appNet;
@@ -690,9 +693,6 @@ private:
     DeviantArtClient m_da{&m_appNet};
     ArchiveClient m_archive{&m_appNet};
     StreamDock m_dock;
-    bool m_streamPlaying = false;
-    bool m_serviceOn = false;
-    void updatePlaybackService();
     OfflineStore m_offline;
     OfflineDownloads m_downloads{&m_appNet, &m_offline};
 #endif
