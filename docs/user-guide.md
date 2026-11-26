@@ -158,6 +158,15 @@ Everything here is private to the profile and works offline. Hop-tunes only read
 Apps are small programs that are part of Hop-tunes and open inside its window. They are **off** until you turn them on: go to
 **settings → apps settings** and choose **show the apps tab**. A fresh Hop-tunes shows every other tab and stays exactly as quiet as before.
 
+### Arranging the apps, and folders
+
+The apps tab is a grid of glass tiles. You can put them where you like, and Hop-tunes remembers it in your profile (a guest gets the default page and keeps nothing).
+
+- **Move a tile**: drag it with the mouse to any free spot, even on another page (drop it on a page dot, or hold it at the left or right edge to turn the page). Dropped on another tile, the two swap places. On a touch screen, **long-press** a tile (or tap **arrange**) and then drag; tap **done** when you are finished. A plain click or tap still opens the app.
+- **Folders**: **new folder** (or right-click a free spot, then *new folder here*) makes a clear, glassy folder tile. Drag an app onto it to file it, or right-click an app and choose **move to a folder…** (the way to do it without dragging). Click a folder to open it inside the grid: its apps are shown there, the button at the top left (**‹ all apps**) goes back, and dropping an app on that button (or *take out of this folder* in its right-click menu) puts it back on the main grid.
+- **Make a folder yours**: right-click it (or open it and press **edit folder**) to **rename** it, give it a **colour**, or choose **a picture from your photos**. Hop-tunes keeps a small square copy of the picture in your profile on this computer; the photo itself is not kept and nothing is uploaded. **delete folder** only removes the folder: its apps go back on the grid.
+- The wide layout (a computer) and the phone layout are remembered separately.
+
 ### neko cafe
 
 A small game: you are a neko maid running a cafe. A customer walks in, sits and orders; walk up and press **A** to take the order, press **A** at the counter to

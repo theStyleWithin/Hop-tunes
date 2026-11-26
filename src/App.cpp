@@ -33,6 +33,8 @@
 #include <QFile>
 #include <QImage>
 #include <QImageReader>
+#include <QPainterPath>
+#include <QPainter>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFileInfo>
@@ -69,6 +71,8 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
     m_driveTimer.start();
     connect(&m_player, &Player::spectrum, &m_audio, &AudioAnalyzer::onSpectrum);
     connect(&m_player, &Player::playingChanged, this, [this] { updatePlaybackService(); });
+    connect(&m_appsLayout, &AppsLayout::edited, this, [this] { if (!m_loadingSettings) saveProfileSettings(); });
+    connect(&m_appsLayout, &AppsLayout::pictureDropped, this, [this](const QString &file) { if (!m_profileId.isEmpty()) QFile::remove(appsFolderDir() + QLatin1Char('/') + file); });
 #ifdef Q_OS_ANDROID
     // a breadcrumb for every song that starts, with how much memory the app holds: after a crash "copy last run" shows how many songs it had
     // played and whether memory had been growing from song to song
@@ -532,6 +536,7 @@ void App::activate(const QString &id, bool guest)
         m_appsDim = qBound(0, s.value(QStringLiteral("appsDim")).toInt(25), 60);
     }
     emit appsBackgroundChanged();
+    m_appsLayout.fromJson(guest ? QJsonObject{} : s.value(QStringLiteral("appsLayout")).toObject());   // where the apps and folders are (a guest keeps the default)
     m_netAllowed.clear();
     if (!guest) {
         const QJsonObject net = s.value(QStringLiteral("appsNet")).toObject();
@@ -724,6 +729,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("appHints"), m_appHints);
     s.insert(QStringLiteral("appsBackground"), m_appsBg);
     s.insert(QStringLiteral("appsDim"), m_appsDim);
+    s.insert(QStringLiteral("appsLayout"), m_appsLayout.toJson());
     {
         QJsonArray bgs;
         for (const AppsBg &b : std::as_const(m_appsBgs)) bgs.append(QJsonObject{{QStringLiteral("id"), b.id}, {QStringLiteral("luma"), b.luma}});
@@ -2178,6 +2184,53 @@ void App::setAppHints(bool on)
     saveProfileSettings();
     emit appHintsChanged();
 }
+
+QString App::appsFolderDir() const { return m_store.dirFor(m_profileId) + QStringLiteral("/apps-folders"); }
+
+QString App::appsFolderPictureUrl(const QString &file) const
+{
+    static const QRegularExpression ok(QStringLiteral("^[a-z0-9._-]{1,80}$"));
+    if (file.isEmpty() || m_guest || m_profileId.isEmpty() || !ok.match(file).hasMatch()) return {};
+    const QString path = appsFolderDir() + QLatin1Char('/') + file;
+    return QFile::exists(path) ? QUrl::fromLocalFile(path).toString() : QString();
+}
+
+QString App::setAppsFolderPicture(const QString &folderId, const QUrl &image)
+{
+    if (m_guest || m_profileId.isEmpty()) return QStringLiteral("a guest keeps nothing: open your profile to give a folder a picture");
+    if (m_appsLayout.folder(folderId).isEmpty()) return QStringLiteral("that folder no longer exists");
+    const QString path = image.isLocalFile() ? image.toLocalFile() : image.toString();
+    const QFileInfo fi(path);
+    if (!fi.isFile()) return QStringLiteral("that file could not be found");
+    if (fi.size() > 40LL * 1024 * 1024) return QStringLiteral("that picture is too big (over 40 MB)");
+    QImageReader reader(path);
+    reader.setAutoTransform(true);
+    const QSize sz = reader.size();
+    if (sz.isValid() && qint64(sz.width()) * sz.height() > 120LL * 1000 * 1000) return QStringLiteral("that picture is too big (over 120 megapixels)");
+    QImage img = reader.read();
+    if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    const int side = qMin(img.width(), img.height());                  // the middle square, small: it is only ever drawn as a tile
+    img = img.copy((img.width() - side) / 2, (img.height() - side) / 2, side, side).scaled(320, 320, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    QImage rounded(320, 320, QImage::Format_ARGB32_Premultiplied);       // rounded corners are part of the copy, so the tile can show it as it is
+    rounded.fill(Qt::transparent);
+    {
+        QPainter pt(&rounded);
+        pt.setRenderHint(QPainter::Antialiasing);
+        QPainterPath clip;
+        clip.addRoundedRect(QRectF(0, 0, 320, 320), 58, 58);
+        pt.setClipPath(clip);
+        pt.drawImage(0, 0, img);
+    }
+    QDir().mkpath(appsFolderDir());
+    const QString name = QStringLiteral("fp") + QString::number(QDateTime::currentMSecsSinceEpoch()) + QStringLiteral(".png");
+    const QString file = appsFolderDir() + QLatin1Char('/') + name;
+    if (!rounded.save(file, "PNG")) return QStringLiteral("could not save the picture");
+    QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!m_appsLayout.setFolderPictureFile(folderId, name)) { QFile::remove(file); return QStringLiteral("could not use that picture"); }
+    return {};
+}
+
+void App::removeAppsFolderPicture(const QString &folderId) { m_appsLayout.setFolderPictureFile(folderId, QString()); }
 
 QString App::appsBgDir() const { return m_store.dirFor(m_profileId) + QStringLiteral("/apps-backgrounds"); }
 
