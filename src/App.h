@@ -114,6 +114,7 @@ class App : public QObject {
     Q_PROPERTY(hop::GameListModel *games READ games CONSTANT)
     Q_PROPERTY(QStringList gamesFolders READ gamesFolders NOTIFY gamesFoldersChanged)
     Q_PROPERTY(QVariantMap gamesStatus READ gamesStatus NOTIFY gamesStatusChanged)            // {scanning, done, total}
+    Q_PROPERTY(QString gamesShelfMode READ gamesShelfMode WRITE setGamesShelfMode NOTIFY gamesShelfModeChanged)   // "covers" (a wall of covers) | "bookshelf" (spines on shelves, some leaning out)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
     Q_PROPERTY(int scanTotal READ scanTotal NOTIFY scanProgressChanged)
@@ -319,6 +320,8 @@ public:
     bool videoScanning() const { return m_videoScanner.isRunning(); }
     GameListModel *games() { return &m_games; }
     QStringList gamesFolders() const { return m_gameFolders; }
+    QString gamesShelfMode() const { return m_gamesShelfMode; }
+    void setGamesShelfMode(const QString &mode);
     QVariantMap gamesStatus() const;
     Q_INVOKABLE void addGamesFolder(const QUrl &folder);
     Q_INVOKABLE void removeGamesFolder(const QString &path);
@@ -620,6 +623,7 @@ signals:
     void videoCategoryChanged();
     void sectionFoldersChanged();
     void gamesFoldersChanged();
+    void gamesShelfModeChanged();
     void gamesStatusChanged();
     void gameDetailChanged();
     void sectionStatusChanged();
@@ -822,6 +826,7 @@ private:
     GameScanner m_gameScanner{&m_gameIndex};
     GameListModel m_games;
     QStringList m_gameFolders;
+    QString m_gamesShelfMode = QStringLiteral("covers");
     QHash<QString, QJsonObject> m_gameMeta;          // this profile's own title / notes per game, by path
     QHash<QString, QString> m_gameCovers;            // this profile's picked covers, by game path
     int m_gameScanDone = 0, m_gameScanTotal = 0;

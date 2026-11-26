@@ -53,6 +53,7 @@ public:
     void clear() { setEntries({}); }
     const Entry *entryForPath(const QString &path) const;   // among all, filter or not
 
+    Q_INVOKABLE QVariantList shelfItems() const;   // the shown games as [{path, title, systemName, systemColor, cover}], for the bookshelf display
     Q_INVOKABLE QString pathAt(int row) const;
     Q_INVOKABLE QString titleAt(int row) const;
 

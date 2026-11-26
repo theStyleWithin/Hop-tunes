@@ -124,6 +124,19 @@ const GameListModel::Entry *GameListModel::entryForPath(const QString &path) con
     return nullptr;
 }
 
+QVariantList GameListModel::shelfItems() const
+{
+    QVariantList out;
+    out.reserve(m_shown.size());
+    for (const int i : m_shown) {
+        const Entry &e = m_all.at(i);
+        out.append(QVariantMap{{QStringLiteral("path"), e.game.path}, {QStringLiteral("title"), e.title},
+                               {QStringLiteral("systemName"), gameSystemName(e.game.system)}, {QStringLiteral("systemColor"), gameSystemColor(e.game.system)},
+                               {QStringLiteral("cover"), e.coverUrl}});
+    }
+    return out;
+}
+
 QString GameListModel::pathAt(int row) const { return (row >= 0 && row < m_shown.size()) ? m_all.at(m_shown.at(row)).game.path : QString(); }
 QString GameListModel::titleAt(int row) const { return (row >= 0 && row < m_shown.size()) ? m_all.at(m_shown.at(row)).title : QString(); }
 

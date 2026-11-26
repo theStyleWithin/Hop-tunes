@@ -24,6 +24,54 @@ Item {
         function onCountChanged() { if (root.openPath !== "" && !hop.gameDetail(root.openPath).path) root.openPath = "" }
     }
 
+    // ---- bookshelf mode: games stand on their spines, some lean out showing part of their front cover ----
+    readonly property bool bookshelf: hop.gamesShelfMode === "bookshelf"
+    property var shelves: []                  // [{ items: [{ idx, path, title, systemName, systemColor, cover, w, h, lean, shade }] }], packed to the shelf's width
+    property string hoverTitle: ""            // the spine under the pointer: its full title is shown above the shelves
+    readonly property real spineBase: Theme.compact ? 28 : 34
+    readonly property real spineTall: Theme.compact ? 150 : 190
+    readonly property real leanAngle: 8       // degrees the leaning ones tip over
+    readonly property real coverTurn: 58      // degrees the front cover of a leaning one is turned away from you (so only part of it shows)
+    function hashOf(s) { let h = 5381; for (let i = 0; i < s.length; ++i) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return Math.abs(h) }
+    function rebuildShelves() {
+        if (!bookshelf || books.width < 60) { shelves = []; return }
+        const items = hop.games.shelfItems()
+        const usable = books.width - 2 * railW - 12
+        // about one game in four leans out showing part of its cover (which ones is fixed by the game, so a shelf keeps its look); a small shelf always has one
+        const leans = items.map(function (it) { return (hashOf(it.path) % 4) === 1 })
+        if (items.length >= 3 && leans.indexOf(true) < 0) leans[2] = true
+        const out = []
+        let cur = { items: [] }, used = 0
+        for (let i = 0; i < items.length; ++i) {
+            const it = items[i]
+            const h = hashOf(it.path)
+            const sw = spineBase + (h % 3) * (Theme.compact ? 3 : 5)
+            const sh = spineTall + ((h >> 3) % 4) * (Theme.compact ? 6 : 8)
+            const lean = leans[i]
+            const coverFull = sh * 0.68
+            const w = lean ? sw + coverFull * Math.cos(coverTurn * Math.PI / 180) + sh * Math.sin(leanAngle * Math.PI / 180) : sw
+            if (used + w > usable && cur.items.length > 0) { out.push(cur); cur = { items: [] }; used = 0 }
+            cur.items.push({ idx: i, path: it.path, title: it.title, systemName: it.systemName, systemColor: it.systemColor, cover: it.cover,
+                             sw: sw, w: w, h: sh, lean: lean, coverW: coverFull, shade: 0.82 + ((h >> 7) % 5) * 0.06 })
+            used += w + 3
+        }
+        if (cur.items.length > 0) out.push(cur)
+        // a bookcase is never just the shelves that hold games: empty shelves fill the rest of the view and one more waits below the last full one
+        const minRows = Math.max(3, Math.ceil(books.height / shelfH) + 1)
+        if (out.length > 0) out.push({ items: [] })
+        while (out.length < minRows) out.push({ items: [] })
+        shelves = out
+    }
+    readonly property real railW: 9
+    readonly property real shelfH: spineTall + 3 * (Theme.compact ? 6 : 8) + 16 + 12 + 14    // the tallest spine, headroom, the plank, the shadow
+    Timer { id: reshelve; interval: 40; onTriggered: root.rebuildShelves() }
+    Connections {
+        target: hop.games
+        function onCountChanged() { reshelve.restart() }
+        function onModelReset() { reshelve.restart() }
+    }
+    onBookshelfChanged: reshelve.restart()
+
     // a drop-down in the app's own colours (the stock one is a bright box in the dark theme)
     component ThemedCombo: ComboBox {
         id: cb
@@ -105,6 +153,31 @@ Item {
                 Keys.onEscapePressed: { text = ""; hop.games.textFilter = "" }
                 Accessible.name: "search your games"
                 background: Rectangle { color: Theme.panel; border { width: gamesSearch.activeFocus ? 2 : 0; color: Theme.accent } }
+            }
+            Row {
+                id: modeSwitch
+                objectName: "gamesModeSwitch"
+                visible: hop.games.total > 0
+                spacing: 2
+                Repeater {
+                    model: [["covers", "covers"], ["bookshelf", "bookshelf"]]
+                    delegate: AbstractButton {
+                        id: modeBtn
+                        required property var modelData
+                        readonly property bool on: hop.gamesShelfMode === modelData[0]
+                        objectName: "gamesMode_" + modelData[0]
+                        implicitHeight: 28
+                        leftPadding: 12; rightPadding: 12
+                        hoverEnabled: true
+                        onClicked: hop.gamesShelfMode = modelData[0]
+                        Accessible.name: modelData[1] + " view"
+                        Accessible.role: Accessible.RadioButton
+                        contentItem: Label { text: modeBtn.modelData[1]; color: modeBtn.on ? Theme.ink : (modeBtn.hovered ? Theme.text : Theme.muted)
+                                             horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                             font { family: Theme.font; pixelSize: Theme.fs(13) } }
+                        background: Rectangle { color: modeBtn.on ? Theme.accent : "transparent"; border { width: modeBtn.on ? 0 : 1; color: Theme.borderSoft } }
+                    }
+                }
             }
             AbstractButton {
                 id: addByHand
@@ -273,11 +346,183 @@ Item {
             Item { Layout.fillHeight: true }
         }
 
+        // ---- the bookshelf: spines on planks ----
+        Label {
+            visible: root.bookshelf && hop.games.total > 0
+            objectName: "gamesHoverTitle"
+            Layout.fillWidth: true
+            Layout.preferredHeight: Theme.fs(20)
+            text: root.hoverTitle !== "" ? root.hoverTitle : "pick a spine to open a game"
+            color: root.hoverTitle !== "" ? Theme.text : Theme.dim
+            elide: Text.ElideRight
+            font { family: Theme.font; pixelSize: Theme.fs(15) }
+        }
+        ListView {
+            id: books
+            objectName: "gamesBookshelf"
+            visible: root.bookshelf && hop.games.total > 0
+            Layout.fillWidth: true; Layout.fillHeight: true
+            clip: true
+            model: root.shelves
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar {}
+            onWidthChanged: reshelve.restart()
+            onHeightChanged: reshelve.restart()
+            Component.onCompleted: reshelve.restart()
+            flickDeceleration: 2600
+            maximumFlickVelocity: 3200
+            delegate: Item {
+                id: shelfRow
+                required property var modelData
+                required property int index
+                width: books.width
+                height: root.shelfH
+                objectName: "gameShelfRow_" + index
+
+                Rectangle {   // the back of the case
+                    anchors { fill: parent; leftMargin: 0; rightMargin: 0 }
+                    color: "#241912"
+                }
+                Rectangle { id: railL; x: 0; width: root.railW; height: parent.height; color: root.woodMid }
+                Rectangle { id: railR; x: parent.width - root.railW; width: root.railW; height: parent.height; color: root.woodMid }
+                Rectangle {   // the plank the games stand on
+                    id: plank
+                    x: 0; width: parent.width
+                    y: parent.height - 26
+                    height: 12
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: root.woodTop }
+                        GradientStop { position: 0.35; color: root.woodMid }
+                        GradientStop { position: 1.0; color: root.woodLow }
+                    }
+                }
+                Rectangle {   // its shadow on the front of the case below
+                    x: 0; width: parent.width; y: plank.y + plank.height
+                    height: 14
+                    gradient: Gradient {
+                        GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                        GradientStop { position: 1.0; color: "transparent" }
+                    }
+                }
+
+                Row {
+                    id: spines
+                    x: root.railW + 6
+                    spacing: 3
+                    height: parent.height
+                    Repeater {
+                        model: shelfRow.modelData.items
+                        delegate: Item {
+                            id: book
+                            required property var modelData
+                            width: modelData.w
+                            height: spines.height
+                            readonly property bool hot: hit.hovered || hit.activeFocus
+                            readonly property real baseY: plank.y     // the plank's top: every game stands on it
+
+                            // the game, standing on the plank (lifted a little when the pointer is on it)
+                            Item {
+                                id: stand
+                                x: 0
+                                width: book.modelData.w; height: book.modelData.h
+                                y: book.baseY - book.modelData.h - (book.hot ? 8 : 0)
+                                Behavior on y { NumberAnimation { duration: 110 } }
+                                transformOrigin: Item.BottomLeft
+                                rotation: book.modelData.lean ? root.leanAngle : 0
+
+                                // the front cover of a leaning game: turned away, so only part of it shows
+                                Item {
+                                    visible: book.modelData.lean
+                                    x: book.modelData.sw; y: 0
+                                    width: book.modelData.coverW; height: book.modelData.h
+                                    transform: Rotation {
+                                        origin { x: 0; y: book.modelData.h / 2 }
+                                        axis { x: 0; y: 1; z: 0 }
+                                        angle: root.coverTurn
+                                    }
+                                    Rectangle { anchors.fill: parent; color: book.modelData.systemColor }
+                                    Column {
+                                        visible: book.modelData.cover === ""
+                                        anchors { fill: parent; margins: 8 }
+                                        spacing: 6
+                                        Item { width: 1; height: parent.height * 0.12 }
+                                        Label {
+                                            width: parent.width; text: book.modelData.title
+                                            color: "white"; wrapMode: Text.WordWrap; maximumLineCount: 5; elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignHCenter
+                                            font { family: Theme.font; pixelSize: 15; weight: Font.DemiBold }
+                                        }
+                                        Label {
+                                            width: parent.width; text: book.modelData.systemName
+                                            color: Qt.rgba(1, 1, 1, 0.7); elide: Text.ElideRight
+                                            horizontalAlignment: Text.AlignHCenter
+                                            font { family: Theme.font; pixelSize: 12 }
+                                        }
+                                    }
+                                    Image {
+                                        anchors.fill: parent
+                                        visible: book.modelData.cover !== ""
+                                        source: book.modelData.cover
+                                        asynchronous: true; cache: false
+                                        fillMode: Image.PreserveAspectCrop
+                                        sourceSize.width: 300
+                                    }
+                                    Rectangle {   // the turned cover is in shade
+                                        anchors.fill: parent
+                                        gradient: Gradient {
+                                            orientation: Gradient.Horizontal
+                                            GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.05) }
+                                            GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.45) }
+                                        }
+                                    }
+                                    Rectangle { anchors.fill: parent; color: "transparent"; border { width: 1; color: Qt.rgba(0, 0, 0, 0.5) } }
+                                }
+
+                                // the spine
+                                Rectangle {
+                                    id: spine
+                                    x: 0
+                                    width: book.modelData.sw; height: book.modelData.h
+                                    color: Qt.darker(book.modelData.systemColor, 1 / book.modelData.shade)
+                                    border { width: 1; color: Qt.rgba(0, 0, 0, 0.55) }
+                                    Rectangle { anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 9 } height: 2; color: Qt.rgba(1, 1, 1, 0.22) }
+                                    Rectangle { anchors { left: parent.left; right: parent.right; bottom: parent.bottom; bottomMargin: 9 } height: 2; color: Qt.rgba(1, 1, 1, 0.22) }
+                                    Rectangle { x: 2; width: 2; height: parent.height - 2; y: 1; color: Qt.rgba(1, 1, 1, 0.10) }     // the lit edge
+                                    Label {
+                                        anchors.centerIn: parent
+                                        rotation: -90
+                                        width: parent.height - 34
+                                        horizontalAlignment: Text.AlignHCenter
+                                        text: book.modelData.title
+                                        color: "white"; elide: Text.ElideRight
+                                        font { family: Theme.font; pixelSize: Math.max(11, Math.min(15, spine.width - 16)); weight: Font.DemiBold }
+                                    }
+                                }
+                            }
+
+                            AbstractButton {
+                                id: hit
+                                objectName: "gameSpine_" + book.modelData.idx
+                                x: 0; width: book.modelData.w
+                                y: stand.y; height: book.modelData.h
+                                hoverEnabled: true
+                                onHoveredChanged: root.hoverTitle = hovered ? book.modelData.title + "  ·  " + book.modelData.systemName : (root.hoverTitle.indexOf(book.modelData.title) === 0 ? "" : root.hoverTitle)
+                                onClicked: { root.openPath = book.modelData.path }
+                                Accessible.name: book.modelData.title + ", " + book.modelData.systemName
+                                Accessible.role: Accessible.Button
+                                background: Item {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ---- the shelf ----
         GridView {
             id: shelf
             objectName: "gamesShelf"
-            visible: hop.games.total > 0
+            visible: hop.games.total > 0 && !root.bookshelf
             Layout.fillWidth: true; Layout.fillHeight: true
             clip: true
             model: hop.games

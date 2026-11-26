@@ -540,6 +540,7 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_nowPlaying = guest ? QJsonObject{} : s.value(QStringLiteral("nowPlaying")).toObject();
     updateAnalysisAvailable();
+    m_gamesShelfMode = s.value(QStringLiteral("gamesShelfMode")).toString() == QLatin1String("bookshelf") ? QStringLiteral("bookshelf") : QStringLiteral("covers");
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_appsEnabled = !guest && s.value(QStringLiteral("appsEnabled")).toBool(false);
@@ -601,6 +602,7 @@ void App::activate(const QString &id, bool guest)
                             return m == QLatin1String("mine") || m == QLatin1String("populated") ? m : QStringLiteral("off"); }();
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
+    emit gamesShelfModeChanged();
     emit appearanceChanged();
     const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
     if (!m_db.open(dbPath) && !guest) {
@@ -679,6 +681,7 @@ void App::leaveProfile()
     m_pinball.setPaused(true);
     emit gameSettingsChanged();
     m_videoViewStyle = QStringLiteral("window");
+    m_gamesShelfMode = QStringLiteral("covers");
     m_appsEnabled = false;
     emit appsEnabledChanged();
     m_netAllowed.clear();
@@ -712,6 +715,7 @@ void App::leaveProfile()
     m_videoComments = QStringLiteral("off");
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
+    emit gamesShelfModeChanged();
     emit appearanceChanged();
     m_folders.clear();
     m_videoFolders.clear();
@@ -764,6 +768,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("gamesShelfMode"), m_gamesShelfMode);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
     s.insert(QStringLiteral("appHints"), m_appHints);
     s.insert(QStringLiteral("appsBackground"), m_appsBg);
@@ -2223,6 +2228,15 @@ void App::setVideoViewStyle(const QString &style)
     m_videoViewStyle = s;
     saveProfileSettings();
     emit videoViewStyleChanged();
+}
+
+void App::setGamesShelfMode(const QString &mode)
+{
+    const QString m = mode == QLatin1String("bookshelf") ? mode : QStringLiteral("covers");
+    if (m == m_gamesShelfMode) return;
+    m_gamesShelfMode = m;
+    saveProfileSettings();
+    emit gamesShelfModeChanged();
 }
 
 void App::setAppHints(bool on)

@@ -320,6 +320,13 @@ private slots:
         QCOMPARE(m.systemFilter(), QString());
         QCOMPARE(m.count(), 1);
         QCOMPARE(m.pathAt(5), QString());
+        // the bookshelf display reads the shown games in one go
+        const QVariantList shelf = m.shelfItems();
+        QCOMPARE(shelf.size(), 1);
+        QCOMPARE(shelf.first().toMap().value("path").toString(), QStringLiteral("/a"));
+        QCOMPARE(shelf.first().toMap().value("title").toString(), QStringLiteral("Portal 2"));
+        QCOMPARE(shelf.first().toMap().value("systemName").toString(), QStringLiteral("PC"));
+        QVERIFY(QColor(shelf.first().toMap().value("systemColor").toString()).isValid());
         QVERIFY(m.entryForPath(QStringLiteral("/a")));
         QVERIFY(!m.entryForPath(QStringLiteral("/zzz")));
     }

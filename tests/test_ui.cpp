@@ -1367,6 +1367,10 @@ private slots:
             QVERIFY(m_app->addManualGame(QStringLiteral("Fortnite"), QString()).isEmpty());
             QTRY_COMPARE(m_app->games()->total(), 2);
             check("games-shelf", QStringLiteral("games"));
+            QVERIFY(click("gamesMode_bookshelf"));
+            QTRY_VERIFY(item("gameSpine_1") != nullptr);
+            check("games-bookshelf", QStringLiteral("games (bookshelf)"));
+            QVERIFY(click("gamesMode_covers"));
             QVERIFY(click("gamesAddByHand"));                                   // the little form for a game added by hand fits too
             QTRY_VERIFY(item("gamesHandForm") && item("gamesHandForm")->isVisible());
             check("games-add-by-hand", QStringLiteral("games (adding one)"));
@@ -2035,6 +2039,51 @@ private slots:
         QTRY_VERIFY(item("gamesChip_pc") != nullptr);
         shot("games-shelf");
 
+        // bookshelf mode: the same games stand on their spines on shelves (some lean out); a spine opens the game; the mode is remembered
+        QCOMPARE(m_app->gamesShelfMode(), QStringLiteral("covers"));
+        QVERIFY(click("gamesMode_bookshelf"));
+        QCOMPARE(m_app->gamesShelfMode(), QStringLiteral("bookshelf"));
+        QTRY_VERIFY(item("gameSpine_6") != nullptr);                                          // all seven are on the shelves
+        QVERIFY(item("gameSpine_0") && item("gameSpine_0")->isVisible());
+        QVERIFY(!item("gameSpine_7"));
+        QVERIFY(item("gameShelfRow_0") != nullptr);
+        QVERIFY(!item("gamesShelf")->isVisible());
+        QCOMPARE(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("gamesShelfMode").toString(), QStringLiteral("bookshelf"));
+        QVERIFY(item("gameShelfRow_1") != nullptr);                                           // a bookcase has more shelves than games to fill them
+        QVERIFY(item("gameShelfRow_2") != nullptr);
+        shot("games-bookshelf");
+        // lots of games: more shelves than fit, and the shelves scroll up and down to reach them all
+        for (int i = 0; i < 90; ++i) QVERIFY(m_app->addManualGame(QStringLiteral("Filler %1").arg(i, 2, 10, QLatin1Char('0')), QString()).isEmpty());
+        QTRY_COMPARE(m_app->games()->total(), 97);
+        QQuickItem *books = item("gamesBookshelf");
+        QVERIFY(books);
+        QTRY_VERIFY(books->property("contentHeight").toDouble() > books->height() * 1.5);
+        QVERIFY(!item("gameSpine_96"));                                                       // the last one is below the fold: not built yet
+        QVERIFY(QMetaObject::invokeMethod(books, "positionViewAtEnd"));
+        QTRY_VERIFY_WITH_TIMEOUT(item("gameSpine_96") != nullptr, 8000);                      // scrolled down to it
+        QVERIFY(QMetaObject::invokeMethod(books, "positionViewAtBeginning"));
+        QTRY_VERIFY(item("gameSpine_0") != nullptr);
+        QStringList fillers;
+        for (const QVariant &v : m_app->games()->shelfItems())
+            if (v.toMap().value("title").toString().startsWith(QLatin1String("Filler"))) fillers << v.toMap().value("path").toString();
+        QCOMPARE(fillers.size(), 90);
+        for (const QString &f : fillers) m_app->removeManualGame(f);
+        QTRY_COMPARE(m_app->games()->total(), 7);
+        QTRY_VERIFY(!item("gameSpine_7"));
+        QVERIFY(click("gamesChip_pc"));                                                       // the chips narrow the bookshelf too
+        QTRY_VERIFY(!item("gameSpine_2"));
+        QVERIFY(item("gameSpine_1") != nullptr);
+        QVERIFY(click("gamesChip_all"));
+        QTRY_VERIFY(item("gameSpine_6") != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT((click("gameSpine_0"), item("gameDetail") && item("gameDetail")->isVisible()), 8000);
+        QVERIFY(click("gameBack"));
+        QTRY_VERIFY(item("gamesBookshelf") && item("gamesBookshelf")->isVisible());
+        QVERIFY(click("gamesMode_covers"));
+        QCOMPARE(m_app->gamesShelfMode(), QStringLiteral("covers"));
+        QTRY_VERIFY(item("gamesShelf") && item("gamesShelf")->isVisible());
+        m_app->setGamesShelfMode(QStringLiteral("nonsense"));                                 // anything else is the covers
+        QCOMPARE(m_app->gamesShelfMode(), QStringLiteral("covers"));
+
         // the chips narrow the shelf; search narrows it by a word
         QVERIFY(click("gamesChip_switch"));
         QTRY_COMPARE(m_app->games()->count(), 1);
@@ -2113,10 +2162,14 @@ private slots:
         QTRY_VERIFY(item("gamesChip_pcother") != nullptr);
 
         // all of it is remembered by the profile (and the folder's games come back from the index)
+        m_app->setGamesShelfMode(QStringLiteral("bookshelf"));
         m_app->leaveProfile();
+        QCOMPARE(m_app->gamesShelfMode(), QStringLiteral("covers"));
         QCOMPARE(m_app->games()->total(), 0);
         QCOMPARE(m_app->openProfile(id), QString());
         QTRY_COMPARE_WITH_TIMEOUT(m_app->games()->total(), 8, 15000);
+        QCOMPARE(m_app->gamesShelfMode(), QStringLiteral("bookshelf"));
+        m_app->setGamesShelfMode(QStringLiteral("covers"));
         d = m_app->gameDetail(zelda);
         QCOMPARE(d.value("title").toString(), QStringLiteral("The Legend of Zelda"));
         QCOMPARE(d.value("notes").toString(), QStringLiteral("beat the first dungeon"));
