@@ -51,7 +51,7 @@ Item {
             const coverFull = sh * 0.68
             const w = lean ? sw + coverFull * Math.cos(coverTurn * Math.PI / 180) + sh * Math.sin(leanAngle * Math.PI / 180) : sw
             if (used + w > usable && cur.items.length > 0) { out.push(cur); cur = { items: [] }; used = 0 }
-            cur.items.push({ idx: i, path: it.path, title: it.title, systemName: it.systemName, systemColor: it.systemColor, cover: it.cover,
+            cur.items.push({ idx: i, path: it.path, title: it.title, systemName: it.systemName, systemColor: it.systemColor, cover: it.cover, icon: it.icon,
                              sw: sw, w: w, h: sh, lean: lean, coverW: coverFull, shade: 0.82 + ((h >> 7) % 5) * 0.06 })
             used += w + 3
         }
@@ -180,6 +180,22 @@ Item {
                         background: Rectangle { color: modeBtn.on ? Theme.accent : "transparent"; border { width: modeBtn.on ? 0 : 1; color: Theme.borderSoft } }
                     }
                 }
+            }
+            AbstractButton {
+                id: phoneGames
+                objectName: "gamesPhoneSwitch"
+                visible: hop.androidGamesAvailable
+                hoverEnabled: true
+                onClicked: hop.androidGames = !hop.androidGames
+                Accessible.name: "show the games installed on this phone"
+                Accessible.role: Accessible.CheckBox
+                Accessible.checked: hop.androidGames
+                contentItem: Label {
+                    text: (hop.androidGames ? "\u2611 " : "\u2610 ") + "phone games"
+                    color: phoneGames.hovered ? Theme.accent : (hop.androidGames ? Theme.text : Theme.muted)
+                    font { family: Theme.font; pixelSize: Theme.fs(14) }
+                }
+                background: Item {}
             }
             AbstractButton {
                 id: addByHand
@@ -338,6 +354,20 @@ Item {
                 background: Rectangle { implicitHeight: 52; implicitWidth: 300; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
             }
             Button {
+                objectName: "gamesPhoneGamesEmpty"
+                visible: hop.androidGamesAvailable && !hop.androidGames
+                text: "show the games installed on this phone"
+                onClicked: hop.androidGames = true
+                contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(16); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitHeight: 48; implicitWidth: 300; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
+            }
+            Label {
+                visible: hop.androidGamesAvailable && !hop.androidGames
+                text: "this reads which games are installed on this phone (Google Play games like Wuthering Waves, and others) to put them on the shelf. nothing leaves the phone, and hop-tunes does not start them."
+                color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.maximumWidth: 700
+                font { family: Theme.font; pixelSize: Theme.fs(13) }
+            }
+            Button {
                 objectName: "gamesAddByHandEmpty"
                 visible: !hop.guest && !handForm.visible
                 text: "or add a game by hand"
@@ -451,6 +481,15 @@ Item {
                                         anchors { fill: parent; margins: 8 }
                                         spacing: 6
                                         Item { width: 1; height: parent.height * 0.12 }
+                                        Image {
+                                            visible: book.modelData.icon !== ""
+                                            source: book.modelData.icon
+                                            asynchronous: true
+                                            width: parent.width * 0.62; height: width
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            fillMode: Image.PreserveAspectFit
+                                            sourceSize.width: 128
+                                        }
                                         Label {
                                             width: parent.width; text: book.modelData.title
                                             color: "white"; wrapMode: Text.WordWrap; maximumLineCount: 5; elide: Text.ElideRight
@@ -562,6 +601,7 @@ Item {
                 required property string systemName
                 required property string systemColor
                 required property string cover
+                required property string icon
                 required property bool customCover
                 width: shelf.cellWidth; height: shelf.cellHeight
                 objectName: "gameCard_" + index
@@ -600,6 +640,15 @@ Item {
                             anchors { fill: parent; margins: 8 }
                             spacing: 6
                             Item { width: 1; height: parent.height * 0.12 }
+                            Image {   // a game installed on a phone: its own icon
+                                visible: cell.icon !== ""
+                                source: cell.icon
+                                asynchronous: true
+                                width: parent.width * 0.62; height: width
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                fillMode: Image.PreserveAspectFit
+                                sourceSize.width: 192
+                            }
                             Label {
                                 width: parent.width
                                 text: cell.title
@@ -677,9 +726,18 @@ Item {
                     width: Theme.compact ? Math.min(page.width - 2 * Theme.pad, 220) : 240
                     height: width * 1.5
                     color: root.detail.systemColor || Theme.panel
+                    Image {   // a game installed on a phone: its own icon
+                        visible: !bigImg.visible && !!root.detail.icon
+                        source: root.detail.icon || ""
+                        asynchronous: true
+                        width: parent.width * 0.55; height: width
+                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: parent.height * 0.14 }
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize.width: 256
+                    }
                     Label {
                         visible: !bigImg.visible
-                        anchors { fill: parent; margins: 14 }
+                        anchors { fill: parent; margins: 14; topMargin: root.detail.icon ? parent.height * 0.62 : 14 }
                         text: root.detail.title || ""
                         color: "white"; wrapMode: Text.WordWrap; elide: Text.ElideRight
                         horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
@@ -711,13 +769,14 @@ Item {
                         Layout.fillWidth: true
                         text: (root.detail.systemName || "") + (root.detail.source === "steam" ? " · Steam app " + root.detail.appId
                                                 : root.detail.source === "gog" ? " · GOG game " + root.detail.appId
+                                                : root.detail.source === "android" ? " · installed on this phone: " + root.detail.appId
                                                 : root.detail.manual === true ? " · added by hand" : " · rom or disc image")
                         color: Theme.muted; wrapMode: Text.WordWrap
                         font { family: Theme.font; pixelSize: Theme.fs(15) }
                     }
                     Label {
                         Layout.fillWidth: true
-                        visible: root.detail.manual !== true
+                        visible: root.detail.manual !== true && root.detail.source !== "android"
                         text: root.detail.path || ""
                         color: Theme.dim; elide: Text.ElideMiddle
                         font { family: Theme.font; pixelSize: Theme.fs(12) }

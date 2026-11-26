@@ -154,6 +154,35 @@ private slots:
         }
     }
 
+    void installedPhoneGames()
+    {
+        const QByteArray json = R"([
+            {"package":"com.kurogame.wutheringwaves.global","label":"Wuthering   Waves","installer":"com.android.vending","icon":"/data/icons/ww.png"},
+            {"package":"org.sideloaded.game","label":"","installer":"org.fdroid.fdroid","icon":"relative/not-allowed.png"},
+            {"package":"com.kurogame.wutheringwaves.global","label":"duplicate","installer":""},
+            {"package":"not a package","label":"bad"},
+            {"package":"nodots","label":"bad"},
+            {"package":"../../etc","label":"bad"},
+            {"label":"no package"},
+            42, "text", null])";
+        const QList<AndroidGame> gs = parseAndroidGames(json);
+        QCOMPARE(gs.size(), 2);
+        QCOMPARE(gs[0].package, QStringLiteral("com.kurogame.wutheringwaves.global"));
+        QCOMPARE(gs[0].label, QStringLiteral("Wuthering Waves"));
+        QCOMPARE(gs[0].icon, QStringLiteral("/data/icons/ww.png"));
+        QCOMPARE(gs[1].label, QStringLiteral("org.sideloaded.game"));        // no name: the package name stands in
+        QCOMPARE(gs[1].icon, QString());                                      // an icon must be a file path on the phone
+        QCOMPARE(androidGameSystem(gs[0].installer), QStringLiteral("gplay"));
+        QCOMPARE(androidGameSystem(gs[1].installer), QStringLiteral("android"));
+        QCOMPARE(androidGameSystem(QString()), QStringLiteral("android"));
+        QCOMPARE(gameSystemName(QStringLiteral("gplay")), QStringLiteral("Google Play"));
+        QCOMPARE(gameSystemName(QStringLiteral("android")), QStringLiteral("Android"));
+        QVERIFY(parseAndroidGames({}).isEmpty());
+        QVERIFY(parseAndroidGames("not json").isEmpty());
+        QVERIFY(parseAndroidGames(R"({"package":"a.b"})").isEmpty());         // an object, not a list
+        QVERIFY(parseAndroidGames(QByteArray(5 * 1024 * 1024, '[')).isEmpty());
+    }
+
     void gogInfoFiles()
     {
         const GogInfo g = parseGogInfo(R"({"gameId":"1207658930","name":"The Witcher 3","rootGameId":"1207658930","buildId":"1"})");

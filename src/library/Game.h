@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QStringList>
 
@@ -17,7 +18,7 @@ struct Game {
     qint64  size = 0;
     QString title;         // the game's name, cleaned up
     QString system;        // a system key from gameSystems(): "pc" (Steam games), "nes", "snes", "switch", "psx" ...
-    QString source;        // "steam" | "gog" | "rom" | "manual" (added by hand)
+    QString source;        // "steam" | "gog" | "rom" | "manual" (added by hand) | "android" (installed on this phone)
     QString appId;         // Steam only
     QString cover;         // a cover picture found on this computer (Steam's own library cache), or empty
     qint64  added = 0;
@@ -50,6 +51,12 @@ bool isSteamTool(const SteamManifest &m);                    // Proton, runtimes
 // GOG: each installed game has a goggame-<id>.info (JSON) in its folder. Add-ons (DLC) carry the id of the game they belong to and are not games of their own.
 struct GogInfo { bool ok = false; QString gameId; QString name; bool isAddOn = false; };
 GogInfo parseGogInfo(const QByteArray &json);
+
+// Games installed on an Android phone (the Google Play ones, like Wuthering Waves, and others): the phone lists them (HopActivity.installedGames) and this
+// reads the list it sends, as JSON: [{"package","label","installer","icon"}]. Tolerant of garbage; only well-formed package names are kept.
+struct AndroidGame { QString package; QString label; QString installer; QString icon; };
+QList<AndroidGame> parseAndroidGames(const QByteArray &json);
+QString androidGameSystem(const QString &installer);          // "gplay" when Google Play installed it, else "android"
 
 // Epic Games Store libraries are deliberately not scanned. A game from there (or any other launcher) is added by hand, under "Third-party PC".
 extern const char *const kManualSystem;                       // "pcother"

@@ -114,6 +114,8 @@ class App : public QObject {
     Q_PROPERTY(hop::GameListModel *games READ games CONSTANT)
     Q_PROPERTY(QStringList gamesFolders READ gamesFolders NOTIFY gamesFoldersChanged)
     Q_PROPERTY(QVariantMap gamesStatus READ gamesStatus NOTIFY gamesStatusChanged)            // {scanning, done, total}
+    Q_PROPERTY(bool androidGamesAvailable READ androidGamesAvailable CONSTANT)                // true on a phone: it can list the games installed on it
+    Q_PROPERTY(bool androidGames READ androidGames WRITE setAndroidGames NOTIFY androidGamesChanged)   // show them on the shelf (off until the person switches it on)
     Q_PROPERTY(QString gamesShelfMode READ gamesShelfMode WRITE setGamesShelfMode NOTIFY gamesShelfModeChanged)   // "covers" (a wall of covers) | "bookshelf" (spines on shelves, some leaning out)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
@@ -321,6 +323,16 @@ public:
     GameListModel *games() { return &m_games; }
     QStringList gamesFolders() const { return m_gameFolders; }
     QString gamesShelfMode() const { return m_gamesShelfMode; }
+    bool androidGamesAvailable() const {
+#ifdef Q_OS_ANDROID
+        return true;
+#else
+        return false;
+#endif
+    }
+    bool androidGames() const { return m_androidGamesOn; }
+    void setAndroidGames(bool on);
+    void applyAndroidGames(const QByteArray &json);   // the phone's list of installed games (HopActivity.installedGames); public so tests can hand one in
     void setGamesShelfMode(const QString &mode);
     QVariantMap gamesStatus() const;
     Q_INVOKABLE void addGamesFolder(const QUrl &folder);
@@ -623,6 +635,7 @@ signals:
     void videoCategoryChanged();
     void sectionFoldersChanged();
     void gamesFoldersChanged();
+    void androidGamesChanged();
     void gamesShelfModeChanged();
     void gamesStatusChanged();
     void gameDetailChanged();
@@ -827,6 +840,10 @@ private:
     GameListModel m_games;
     QStringList m_gameFolders;
     QString m_gamesShelfMode = QStringLiteral("covers");
+    bool m_androidGamesOn = false;
+    QList<AndroidGame> m_androidGames;
+    bool m_androidListing = false;
+    void refreshAndroidGames();
     QHash<QString, QJsonObject> m_gameMeta;          // this profile's own title / notes per game, by path
     QHash<QString, QString> m_gameCovers;            // this profile's picked covers, by game path
     int m_gameScanDone = 0, m_gameScanTotal = 0;

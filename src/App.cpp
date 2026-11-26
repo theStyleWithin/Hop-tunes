@@ -35,6 +35,8 @@
 #include <QImageReader>
 #include <QPainterPath>
 #include <QPainter>
+#include <QPointer>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFileInfo>
@@ -540,6 +542,8 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_nowPlaying = guest ? QJsonObject{} : s.value(QStringLiteral("nowPlaying")).toObject();
     updateAnalysisAvailable();
+    m_androidGamesOn = !guest && s.value(QStringLiteral("androidGames")).toBool(false);
+    m_androidGames.clear();
     m_gamesShelfMode = s.value(QStringLiteral("gamesShelfMode")).toString() == QLatin1String("bookshelf") ? QStringLiteral("bookshelf") : QStringLiteral("covers");
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
@@ -682,6 +686,8 @@ void App::leaveProfile()
     emit gameSettingsChanged();
     m_videoViewStyle = QStringLiteral("window");
     m_gamesShelfMode = QStringLiteral("covers");
+    m_androidGamesOn = false;
+    m_androidGames.clear();
     m_appsEnabled = false;
     emit appsEnabledChanged();
     m_netAllowed.clear();
@@ -716,6 +722,7 @@ void App::leaveProfile()
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
     emit gamesShelfModeChanged();
+    emit androidGamesChanged();
     emit appearanceChanged();
     m_folders.clear();
     m_videoFolders.clear();
@@ -769,6 +776,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
     s.insert(QStringLiteral("gamesShelfMode"), m_gamesShelfMode);
+    s.insert(QStringLiteral("androidGames"), m_androidGamesOn);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
     s.insert(QStringLiteral("appHints"), m_appHints);
     s.insert(QStringLiteral("appsBackground"), m_appsBg);
@@ -1918,6 +1926,7 @@ void App::rescan()
         if (sec->scanner.isRunning()) sec->rescanPending = true;
         else { sec->done = sec->total = 0; sec->scanner.start(sec->folders); }
     }
+    if (m_androidGamesOn) refreshAndroidGames();
     if (!m_gameFolders.isEmpty()) {
         if (m_gameScanner.isRunning()) m_gameRescanPending = true;
         else { m_gameScanDone = m_gameScanTotal = 0; m_gameScanner.start(m_gameFolders); }
@@ -3446,6 +3455,27 @@ void App::reloadGames()
         if (!custom.isEmpty() && QFile::exists(custom)) { e.coverUrl = QUrl::fromLocalFile(custom).toString(); e.customCover = true; }
         rows.append(e);
     }
+    // games installed on this phone (Google Play and others), when the person has switched that on
+    if (m_androidGamesOn) {
+        for (const AndroidGame &a : m_androidGames) {
+            GameListModel::Entry e;
+            e.game.path = QStringLiteral("android:") + a.package;
+            e.game.source = QStringLiteral("android");
+            e.game.system = androidGameSystem(a.installer);
+            e.game.appId = a.package;
+            e.game.title = a.label;
+            const QJsonObject mine = m_gameMeta.value(e.game.path);
+            const QString title = mine.value(QStringLiteral("title")).toString().trimmed();
+            e.renamed = !title.isEmpty();
+            e.title = e.renamed ? title : a.label;
+            const QString sys = mine.value(QStringLiteral("system")).toString();
+            if (!sys.isEmpty() && gameSystemByKey(sys)) e.game.system = sys;
+            if (!a.icon.isEmpty() && QFile::exists(a.icon)) e.iconUrl = QUrl::fromLocalFile(a.icon).toString();
+            const QString custom = m_gameCovers.value(e.game.path);
+            if (!custom.isEmpty() && QFile::exists(custom)) { e.coverUrl = QUrl::fromLocalFile(custom).toString(); e.customCover = true; }
+            rows.append(e);
+        }
+    }
     m_games.setEntries(rows);
 }
 
@@ -3467,8 +3497,51 @@ QVariantMap App::gameDetail(const QString &path) const
             {QStringLiteral("appId"), e->game.appId},
             {QStringLiteral("notes"), mine.value(QStringLiteral("notes")).toString()},
             {QStringLiteral("cover"), e->coverUrl},
+            {QStringLiteral("icon"), e->iconUrl},
             {QStringLiteral("customCover"), e->customCover},
             {QStringLiteral("editable"), profileReady() && !m_guest}};
+}
+
+void App::setAndroidGames(bool on)
+{
+    if (on == m_androidGamesOn) return;
+    m_androidGamesOn = on;
+    if (!on) m_androidGames.clear();
+    saveProfileSettings();
+    emit androidGamesChanged();
+    reloadGames();
+    if (on) refreshAndroidGames();
+}
+
+void App::applyAndroidGames(const QByteArray &json)
+{
+    if (!m_androidGamesOn) return;
+    m_androidGames = parseAndroidGames(json);
+    reloadGames();
+    emit gameDetailChanged();
+}
+
+// Asks the phone which games are installed (off the main thread: drawing each icon takes a moment); the answer comes back to applyAndroidGames.
+void App::refreshAndroidGames()
+{
+#ifdef Q_OS_ANDROID
+    if (!m_androidGamesOn || m_androidListing) return;
+    m_androidListing = true;
+    const QString iconDir = Paths::cacheDir() + QStringLiteral("/game-icons");
+    QPointer<App> self(this);
+    (void)QtConcurrent::run([self, iconDir] {
+        QByteArray json;
+        const QJniObject r = QJniObject::callStaticObjectMethod("io/github/thestylewithin/hoptunes/HopActivity", "installedGames",
+                                                                 "(Ljava/lang/String;)Ljava/lang/String;", QJniObject::fromString(iconDir).object<jstring>());
+        if (r.isValid()) json = r.toString().toUtf8();
+        if (!self) return;
+        QMetaObject::invokeMethod(self.data(), [self, json] {
+            if (!self) return;
+            self->m_androidListing = false;
+            self->applyAndroidGames(json);
+        }, Qt::QueuedConnection);
+    });
+#endif
 }
 
 QString App::addManualGame(const QString &title, const QString &system)

@@ -1006,6 +1006,21 @@ Item {
                 }
             }
             Button {
+                objectName: "settingsAndroidGames"
+                visible: hop.androidGamesAvailable
+                text: (hop.androidGames ? "\u2611 " : "\u2610 ") + "show the games installed on this phone"
+                onClicked: hop.androidGames = !hop.androidGames
+                Accessible.name: "show the games installed on this phone"
+                contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitWidth: 360; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
+            }
+            Label {
+                visible: hop.androidGamesAvailable
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: "reads which games are installed on this phone, only while this is on. nothing leaves the phone, and hop-tunes does not start them."
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+            }
+            Button {
                 objectName: "settingsAddFolder_games"
                 text: "+ add games folder"
                 onClicked: root.addGamesFolderRequested()

@@ -103,7 +103,7 @@ Hop-tunes takes the *organising ideas* that made Zune pleasant, not its assets:
 
 ### 4.1 Navigation model
 - **Top pivots** in large lowercase type: **collection · now playing · quickplay · settings**.
-- Collection has **sub-pivots**: **music · videos · games · pictures · audiobooks · ebooks · podcasts**. *v1 ships music*; **videos** follows in v1.1 (§5b); the others came later. **games** is a browse-only shelf of covers by system (Steam and GOG together as PC, roms by file type and folder name; Epic Games libraries are not scanned, other launchers' games are added by hand as Third-party PC); it reads file names only and never launches a game. Two displays (a profile setting): a **covers** wall, and a **bookshelf** with games on their spines, some leaning out to show their front cover.
+- Collection has **sub-pivots**: **music · videos · games · pictures · audiobooks · ebooks · podcasts**. *v1 ships music*; **videos** follows in v1.1 (§5b); the others came later. **games** is a browse-only shelf of covers by system (Steam and GOG together as PC, roms by file type and folder name; Epic Games libraries are not scanned, other launchers' games are added by hand as Third-party PC); it reads file names only and never launches a game. On Android it can also list the games installed on the phone (opt-in, local only; Google Play ones under "Google Play", others under "Android"). Two displays (a profile setting): a **covers** wall, and a **bookshelf** with games on their spines, some leaning out to show their front cover.
 - Inside music: **artists · albums · songs · genres · playlists**.
 - Navigation is flat and text-led, with no toolbar clutter. Back/forward arrows sit top-left, and a persistent **mini player** sits along the bottom.
 

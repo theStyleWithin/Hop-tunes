@@ -31,9 +31,10 @@ public:
         CoverRole,        // file:// URL of a picture to show, or ""
         CustomCoverRole,  // the cover is the user's own pick
         RenamedRole,      // the title is the user's own
+        IconRole,         // file:// URL of an app icon (a game installed on a phone), shown on the drawn cover when there is no cover picture
     };
 
-    struct Entry { Game game; QString title; QString coverUrl; bool customCover = false; bool renamed = false; };
+    struct Entry { Game game; QString title; QString coverUrl; QString iconUrl; bool customCover = false; bool renamed = false; };
 
     explicit GameListModel(QObject *parent = nullptr);
 

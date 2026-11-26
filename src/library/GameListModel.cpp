@@ -16,7 +16,7 @@ QHash<int, QByteArray> GameListModel::roleNames() const
 {
     return {{GameIdRole, "gameId"}, {TitleRole, "title"}, {PathRole, "path"}, {SystemRole, "system"}, {SystemNameRole, "systemName"},
             {SystemColorRole, "systemColor"}, {SourceRole, "source"}, {AppIdRole, "appId"}, {CoverRole, "cover"},
-            {CustomCoverRole, "customCover"}, {RenamedRole, "renamed"}};
+            {CustomCoverRole, "customCover"}, {RenamedRole, "renamed"}, {IconRole, "icon"}};
 }
 
 QVariant GameListModel::data(const QModelIndex &index, int role) const
@@ -35,6 +35,7 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     case CoverRole:       return e.coverUrl;
     case CustomCoverRole: return e.customCover;
     case RenamedRole:     return e.renamed;
+    case IconRole:        return e.iconUrl;
     }
     return {};
 }
@@ -132,7 +133,7 @@ QVariantList GameListModel::shelfItems() const
         const Entry &e = m_all.at(i);
         out.append(QVariantMap{{QStringLiteral("path"), e.game.path}, {QStringLiteral("title"), e.title},
                                {QStringLiteral("systemName"), gameSystemName(e.game.system)}, {QStringLiteral("systemColor"), gameSystemColor(e.game.system)},
-                               {QStringLiteral("cover"), e.coverUrl}});
+                               {QStringLiteral("cover"), e.coverUrl}, {QStringLiteral("icon"), e.iconUrl}});
     }
     return out;
 }

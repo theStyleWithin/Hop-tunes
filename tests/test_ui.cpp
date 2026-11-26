@@ -2191,6 +2191,89 @@ private slots:
         QVERIFY(click("subTab_music"));
     }
 
+    // Games installed on a phone (Google Play ones like Wuthering Waves, and others) come to the shelf only when the person switches that on; the
+    // list is what the phone's own code hands over (here a stand-in list), shelved under Google Play or Android, with the game's own icon as its cover.
+    void phoneGamesAppearOnlyWhenSwitchedOn()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(!m_app->androidGamesAvailable());                        // a computer cannot list a phone's apps: the switches are hidden
+        QVERIFY(!m_app->androidGames());
+        QCOMPARE(m_app->games()->total(), 0);
+        QVERIFY(click("subTab_games"));
+        QVERIFY(!item("gamesPhoneSwitch") || !item("gamesPhoneSwitch")->isVisible());
+        QVERIFY(!item("gamesPhoneGamesEmpty") || !item("gamesPhoneGamesEmpty")->isVisible());
+
+        const QString icon = m_home.filePath(QStringLiteral("ww-icon.png"));
+        QImage img(192, 192, QImage::Format_ARGB32);
+        img.fill(QColor(0x3b, 0x82, 0xf6));
+        QVERIFY(img.save(icon));
+        auto game = [](const QString &pkg, const QString &label, const QString &installer, const QString &ico) {
+            return QJsonObject{{QStringLiteral("package"), pkg}, {QStringLiteral("label"), label}, {QStringLiteral("installer"), installer}, {QStringLiteral("icon"), ico}};
+        };
+        const QByteArray json = QJsonDocument(QJsonArray{
+            game(QStringLiteral("com.kurogame.wutheringwaves.global"), QStringLiteral("Wuthering Waves"), QStringLiteral("com.android.vending"), icon),
+            game(QStringLiteral("org.sideloaded.racer"), QStringLiteral("Sideloaded Racer"), QStringLiteral("org.fdroid.fdroid"), QString()),
+            game(QStringLiteral("bad package"), QStringLiteral("not a package name"), QString(), QString())}).toJson(QJsonDocument::Compact);
+        m_app->applyAndroidGames(json);                                  // switched off: nothing is shown
+        QCOMPARE(m_app->games()->total(), 0);
+
+        const QString id = m_app->profile().value("id").toString();
+        m_app->setAndroidGames(true);
+        QVERIFY(m_app->androidGames());
+        QVERIFY(m_app->profileStore()->settings(id).value("androidGames").toBool());
+        m_app->applyAndroidGames(json);
+        QTRY_COMPARE(m_app->games()->total(), 2);
+        QMap<QString, int> perSystem;
+        for (const QVariant &s : m_app->games()->systems()) perSystem[s.toMap().value("key").toString()] = s.toMap().value("count").toInt();
+        QCOMPARE(perSystem.value("gplay"), 1);
+        QCOMPARE(perSystem.value("android"), 1);
+        QTRY_VERIFY(item("gamesChip_gplay") != nullptr);
+        QVERIFY(click("gamesChip_gplay"));
+        QTRY_COMPARE(m_app->games()->count(), 1);
+        QCOMPARE(m_app->games()->titleAt(0), QStringLiteral("Wuthering Waves"));
+        const QString path = m_app->games()->pathAt(0);
+        QCOMPARE(path, QStringLiteral("android:com.kurogame.wutheringwaves.global"));
+        QVariantMap d = m_app->gameDetail(path);
+        QCOMPARE(d.value("source").toString(), QStringLiteral("android"));
+        QCOMPARE(d.value("systemName").toString(), QStringLiteral("Google Play"));
+        QCOMPARE(d.value("appId").toString(), QStringLiteral("com.kurogame.wutheringwaves.global"));
+        QCOMPARE(QUrl(d.value("icon").toString()).toLocalFile(), icon);   // the game's own icon is its cover
+        QVERIFY(d.value("cover").toString().isEmpty());
+        shot("games-phone-covers");
+        QVERIFY(click("gamesMode_bookshelf"));
+        QTRY_VERIFY(item("gameSpine_0") != nullptr);
+        shot("games-phone-bookshelf");
+        QVERIFY(click("gamesMode_covers"));
+        QVERIFY(click("gamesChip_all"));
+        QTRY_COMPARE(m_app->games()->count(), 2);
+
+        // the person's own title and cover work like for any game, and a game can be moved between Google Play and Android
+        m_app->setGameField(path, QStringLiteral("title"), QStringLiteral("WuWa"));
+        QCOMPARE(m_app->gameDetail(path).value("title").toString(), QStringLiteral("WuWa"));
+        m_app->setGameField(path, QStringLiteral("system"), QStringLiteral("android"));
+        QTRY_COMPARE(m_app->gameDetail(path).value("system").toString(), QStringLiteral("android"));
+        m_app->setGameField(path, QStringLiteral("system"), QString());
+        QTRY_COMPARE(m_app->gameDetail(path).value("system").toString(), QStringLiteral("gplay"));
+
+        // remembered by the profile: the switch and the person's changes stay; the list itself comes from the phone each time it is opened
+        m_app->leaveProfile();
+        QCOMPARE(m_app->games()->total(), 0);
+        QCOMPARE(m_app->openProfile(id), QString());
+        QVERIFY(m_app->androidGames());
+        QCOMPARE(m_app->games()->total(), 0);                            // (on a computer there is no phone to ask)
+        m_app->applyAndroidGames(json);
+        QTRY_COMPARE(m_app->games()->total(), 2);
+        QCOMPARE(m_app->gameDetail(path).value("title").toString(), QStringLiteral("WuWa"));
+
+        // switching it off takes them all off the shelf again
+        m_app->setAndroidGames(false);
+        QCOMPARE(m_app->games()->total(), 0);
+        QVERIFY(!m_app->profileStore()->settings(id).value("androidGames").toBool());
+        m_app->applyAndroidGames(json);
+        QCOMPARE(m_app->games()->total(), 0);
+        QVERIFY(click("subTab_music"));
+    }
+
     // Audiobooks and podcasts get folder slots like pictures: one named slot per folder, open it for its own items.
     void audiobooksAndPodcastsHaveFolderSlots()
     {

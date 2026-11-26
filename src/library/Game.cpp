@@ -2,9 +2,11 @@
 #include "library/Game.h"
 
 #include <QHash>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 
 #include <algorithm>
 
@@ -18,6 +20,8 @@ const GameSystem kSystems[] = {
     // key          shown as                 colour      file types that are only this system       folder names that mean this system
     {"pc",          "PC",                    "#1b2838", "",                                        "pc windows steam gog games"},
     {"pcother",     "Third-party PC",        "#44445e", "",                                        "thirdpartypc thirdparty"},
+    {"gplay",       "Google Play",           "#01875f", "",                                        ""},
+    {"android",     "Android",               "#2f6f4e", "",                                        ""},
     {"dos",         "DOS",                   "#555555", "",                                        "dos msdos"},
     {"switch",      "Switch",                "#e4002b", "nsp xci",                                 "switch nintendoswitch nsw"},
     {"wiiu",        "Wii U",                 "#009ac7", "wux wud rpx",                             "wiiu nintendowiiu"},
@@ -196,6 +200,37 @@ SteamManifest parseSteamManifest(const QByteArray &acf)
     static const QRegularExpression digits(QStringLiteral("^[0-9]{1,12}$"));
     m.ok = digits.match(m.appId).hasMatch() && !m.name.isEmpty() && m.name.size() <= 300;
     return m;
+}
+
+QString androidGameSystem(const QString &installer)
+{
+    return installer == QLatin1String("com.android.vending") ? QStringLiteral("gplay") : QStringLiteral("android");
+}
+
+QList<AndroidGame> parseAndroidGames(const QByteArray &json)
+{
+    QList<AndroidGame> out;
+    if (json.isEmpty() || json.size() > 4 * 1024 * 1024) return out;
+    const QJsonDocument doc = QJsonDocument::fromJson(json);
+    if (!doc.isArray()) return out;
+    static const QRegularExpression pkgRe(QStringLiteral("^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)+$"));
+    QSet<QString> seen;
+    for (const QJsonValue &v : doc.array()) {
+        if (out.size() >= 3000) break;
+        if (!v.isObject()) continue;
+        const QJsonObject o = v.toObject();
+        AndroidGame g;
+        g.package = o.value(QLatin1String("package")).toString().trimmed();
+        if (g.package.size() > 200 || !pkgRe.match(g.package).hasMatch() || seen.contains(g.package)) continue;
+        seen.insert(g.package);
+        g.label = o.value(QLatin1String("label")).toString().simplified().left(200);
+        if (g.label.isEmpty()) g.label = g.package;
+        g.installer = o.value(QLatin1String("installer")).toString().trimmed().left(200);
+        const QString icon = o.value(QLatin1String("icon")).toString();
+        g.icon = icon.startsWith(QLatin1Char('/')) ? icon : QString();                // a file on this phone, or nothing
+        out.append(g);
+    }
+    return out;
 }
 
 GogInfo parseGogInfo(const QByteArray &json)
