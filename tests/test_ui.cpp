@@ -1361,6 +1361,22 @@ private slots:
             check("music-playlists", QStringLiteral("playlists"));
             QVERIFY(click("pillTab_videos"));
             check("videos", QStringLiteral("videos"));
+            QVERIFY(click("pillTab_games"));
+            check("games-empty", QStringLiteral("games (empty)"));
+            QVERIFY(m_app->addManualGame(QStringLiteral("A game with a really long name that has to wrap onto lines"), QString()).isEmpty());
+            QVERIFY(m_app->addManualGame(QStringLiteral("Fortnite"), QString()).isEmpty());
+            QTRY_COMPARE(m_app->games()->total(), 2);
+            check("games-shelf", QStringLiteral("games"));
+            QVERIFY(click("gamesAddByHand"));                                   // the little form for a game added by hand fits too
+            QTRY_VERIFY(item("gamesHandForm") && item("gamesHandForm")->isVisible());
+            check("games-add-by-hand", QStringLiteral("games (adding one)"));
+            item("gamesHandForm")->setVisible(false);
+            QVERIFY(click("gameCard_0"));
+            check("games-detail", QStringLiteral("a game's page"));
+            QVERIFY(click("gameBack"));
+            m_app->games()->setSystemFilter(QString());
+            while (m_app->games()->count() > 0) m_app->removeManualGame(m_app->games()->pathAt(0));
+            QCOMPARE(m_app->games()->total(), 0);
             QVERIFY(click("pillTab_pictures"));
             check("pictures", QStringLiteral("pictures"));
             QVERIFY(click("pillTab_music"));
@@ -1970,6 +1986,152 @@ private slots:
 
         m_app->removeSectionFolder(QStringLiteral("pictures"), QFileInfo(dir).canonicalFilePath());
         QTRY_COMPARE(m_app->pictures()->count(), 0);
+        QVERIFY(click("subTab_music"));
+    }
+
+    // The game shelf (collection → games, right after videos): Steam and GOG games share "PC", roms are shelved by system, a game from another
+    // launcher is added by hand under third-party PC; the shelf narrows by system and by a word; a game's page keeps the person's own title,
+    // system, notes and cover, and all of it is remembered by the profile. Epic Games is not scanned.
+    void gameShelfBrowsesFiltersAndKeepsMyChanges()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(m_app->games()->total() == 0);
+        QVERIFY(click("subTab_games"));
+        QTRY_VERIFY(item("gamesChooseFolder") != nullptr);
+        QVERIFY(item("gamesChooseFolder")->isVisible());
+        QVERIFY(item("gamesAddByHandEmpty") != nullptr);
+        // it sits right after videos: videos, games, then the other sections
+        QQuickItem *videosTab = item("subTab_videos"), *gamesTab = item("subTab_games"), *picsTab = item("subTab_pictures");
+        QVERIFY(videosTab && gamesTab && picsTab);
+        QVERIFY(videosTab->mapToScene(QPointF(0, 0)).x() < gamesTab->mapToScene(QPointF(0, 0)).x());
+        QVERIFY(gamesTab->mapToScene(QPointF(0, 0)).x() < picsTab->mapToScene(QPointF(0, 0)).x());
+
+        const QString lib = m_home.filePath(QStringLiteral("GameLib"));
+        auto touchFile = [](const QString &path, const QByteArray &data = "x") {
+            QDir().mkpath(QFileInfo(path).absolutePath());
+            QFile f(path);
+            return f.open(QIODevice::WriteOnly) && f.write(data) >= 0;
+        };
+        QVERIFY(touchFile(lib + "/Steam/steamapps/appmanifest_620.acf", "\"AppState\"\n{\n\t\"appid\"\t\"620\"\n\t\"name\"\t\"Portal 2\"\n}\n"));
+        QVERIFY(touchFile(lib + "/GOG Games/Witcher/goggame-1.info", R"({"gameId":"1","name":"The Witcher 3"})"));
+        QVERIFY(touchFile(lib + "/Epic/Manifests/A.item", R"({"DisplayName":"Fortnite"})"));
+        QVERIFY(touchFile(lib + "/roms/nes/Mario (USA).nes"));
+        QVERIFY(touchFile(lib + "/roms/snes/Zelda.sfc"));
+        QVERIFY(touchFile(lib + "/roms/ps2/Gran Turismo 4.iso"));
+        QVERIFY(touchFile(lib + "/roms/Wii U/Mario Kart 8.wux"));
+        QVERIFY(touchFile(lib + "/roms/switch/Odyssey.nsp"));
+        m_app->addGamesFolder(QUrl::fromLocalFile(lib));
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->games()->total(), 7, 15000);
+        QVERIFY(m_app->gamesFolders().contains(QFileInfo(lib).canonicalFilePath()));
+        QVERIFY(!m_app->folders().contains(QFileInfo(lib).canonicalFilePath()));         // not mixed into the music folders
+        QVERIFY(m_app->profileStore()->settings(m_app->profile().value("id").toString()).value("gamesFolders").toArray().size() == 1);
+
+        QMap<QString, int> perSystem;
+        for (const QVariant &s : m_app->games()->systems()) perSystem[s.toMap().value("key").toString()] = s.toMap().value("count").toInt();
+        QCOMPARE(perSystem.value("pc"), 2);                                              // Steam and GOG together; Epic's manifest is not read
+        for (const char *k : {"nes", "snes", "ps2", "wiiu", "switch"}) QCOMPARE(perSystem.value(QLatin1String(k)), 1);
+        QVERIFY(!perSystem.contains("pcother"));
+        QTRY_VERIFY(item("gameCard_0") != nullptr);
+        QTRY_VERIFY(item("gamesChip_pc") != nullptr);
+        shot("games-shelf");
+
+        // the chips narrow the shelf; search narrows it by a word
+        QVERIFY(click("gamesChip_switch"));
+        QTRY_COMPARE(m_app->games()->count(), 1);
+        QCOMPARE(m_app->games()->titleAt(0), QStringLiteral("Odyssey"));
+        QVERIFY(click("gamesChip_pc"));
+        QTRY_COMPARE(m_app->games()->count(), 2);
+        QVERIFY(click("gamesChip_all"));
+        QTRY_COMPARE(m_app->games()->count(), 7);
+        m_app->games()->setTextFilter(QStringLiteral("mario"));
+        QCOMPARE(m_app->games()->count(), 2);
+        m_app->games()->setTextFilter(QString());
+
+        // a game's page: the person's own title, system, notes, cover
+        const QString id = m_app->profile().value("id").toString();
+        QString zelda;
+        for (int i = 0; i < m_app->games()->count(); ++i) if (m_app->games()->titleAt(i) == QLatin1String("Zelda")) zelda = m_app->games()->pathAt(i);
+        QVERIFY(!zelda.isEmpty());
+        QVariantMap d = m_app->gameDetail(zelda);
+        QCOMPARE(d.value("system").toString(), QStringLiteral("snes"));
+        QCOMPARE(d.value("source").toString(), QStringLiteral("rom"));
+        QVERIFY(d.value("editable").toBool());
+        int row = -1;
+        for (int i = 0; i < m_app->games()->count(); ++i) if (m_app->games()->pathAt(i) == zelda) row = i;
+        QVERIFY(row >= 0);
+        QTRY_VERIFY_WITH_TIMEOUT((click(QByteArray("gameCard_" + QByteArray::number(row)).constData()), item("gameDetail") && item("gameDetail")->isVisible()), 8000);
+        QVERIFY(item("gameTitleEdit")->isVisible());
+        QVERIFY(item("gameNotes")->isVisible());
+        shot("games-detail");
+        m_app->setGameField(zelda, QStringLiteral("title"), QStringLiteral("  The   Legend of Zelda "));
+        m_app->setGameField(zelda, QStringLiteral("notes"), QStringLiteral("beat the first dungeon"));
+        m_app->setGameField(zelda, QStringLiteral("bogus"), QStringLiteral("ignored"));
+        m_app->setGameField(zelda, QStringLiteral("system"), QStringLiteral("nosuchsystem"));       // refused
+        d = m_app->gameDetail(zelda);
+        QCOMPARE(d.value("title").toString(), QStringLiteral("The Legend of Zelda"));
+        QCOMPARE(d.value("scannedTitle").toString(), QStringLiteral("Zelda"));
+        QVERIFY(d.value("renamed").toBool());
+        QCOMPARE(d.value("system").toString(), QStringLiteral("snes"));
+        QCOMPARE(d.value("notes").toString(), QStringLiteral("beat the first dungeon"));
+        m_app->setGameField(zelda, QStringLiteral("system"), QStringLiteral("gba"));                 // moved by hand
+        QTRY_COMPARE(m_app->gameDetail(zelda).value("system").toString(), QStringLiteral("gba"));
+        QVERIFY(m_app->gameDetail(zelda).value("systemChosen").toBool());
+        m_app->setGameField(zelda, QStringLiteral("system"), QString());                             // back to what the scan found
+        QTRY_COMPARE(m_app->gameDetail(zelda).value("system").toString(), QStringLiteral("snes"));
+
+        const QString pic = m_home.filePath(QStringLiteral("cover.png"));
+        QImage img(900, 1200, QImage::Format_RGB32);
+        img.fill(Qt::darkGreen);
+        QVERIFY(img.save(pic));
+        QVERIFY(m_app->setGameCover(zelda, QUrl::fromLocalFile(pic)).isEmpty());
+        d = m_app->gameDetail(zelda);
+        QVERIFY(d.value("customCover").toBool());
+        const QString coverUrl = d.value("cover").toString();
+        QVERIFY(!coverUrl.isEmpty());
+        const QString coverFile = QUrl(coverUrl).toLocalFile();
+        QVERIFY(QFile::exists(coverFile));
+        QVERIFY(coverFile.startsWith(m_app->profileStore()->dirFor(id)));                            // a copy in the profile, not the picture itself
+        QImage saved(coverFile);
+        QVERIFY(saved.width() <= 600 && saved.height() <= 900);
+        QVERIFY(!m_app->setGameCover(zelda, QUrl::fromLocalFile(m_home.filePath(QStringLiteral("nothing.png")))).isEmpty());   // not a picture: refused, nothing changes
+        QVERIFY(m_app->gameDetail(zelda).value("customCover").toBool());
+        QVERIFY(!m_app->setGameCover(QStringLiteral("/not/a/game"), QUrl::fromLocalFile(pic)).isEmpty());
+        QTRY_VERIFY(item("gameResetCover") != nullptr);
+
+        // a game from another launcher is added by hand, under third-party PC
+        QVERIFY(!m_app->addManualGame(QString(), QString()).isEmpty());                              // a name is needed
+        QVERIFY(!m_app->addManualGame(QStringLiteral("x"), QStringLiteral("nosuchsystem")).isEmpty());
+        QVERIFY(m_app->addManualGame(QStringLiteral("  Fortnite "), QString()).isEmpty());
+        QTRY_COMPARE(m_app->games()->total(), 8);
+        QString fort;
+        for (int i = 0; i < m_app->games()->count(); ++i) if (m_app->games()->titleAt(i) == QLatin1String("Fortnite")) fort = m_app->games()->pathAt(i);
+        QVERIFY(fort.startsWith(QLatin1String("manual:")));
+        d = m_app->gameDetail(fort);
+        QCOMPARE(d.value("system").toString(), QStringLiteral("pcother"));
+        QCOMPARE(d.value("systemName").toString(), QStringLiteral("Third-party PC"));
+        QVERIFY(d.value("manual").toBool());
+        QTRY_VERIFY(item("gamesChip_pcother") != nullptr);
+
+        // all of it is remembered by the profile (and the folder's games come back from the index)
+        m_app->leaveProfile();
+        QCOMPARE(m_app->games()->total(), 0);
+        QCOMPARE(m_app->openProfile(id), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(m_app->games()->total(), 8, 15000);
+        d = m_app->gameDetail(zelda);
+        QCOMPARE(d.value("title").toString(), QStringLiteral("The Legend of Zelda"));
+        QCOMPARE(d.value("notes").toString(), QStringLiteral("beat the first dungeon"));
+        QVERIFY(d.value("customCover").toBool());
+        QCOMPARE(m_app->gameDetail(fort).value("system").toString(), QStringLiteral("pcother"));
+
+        // resetting the cover removes the copy; removing the folder takes its games off the shelf, but never the ones added by hand
+        m_app->clearGameCover(zelda);
+        QVERIFY(!m_app->gameDetail(zelda).value("customCover").toBool());
+        QVERIFY(!QFile::exists(coverFile));
+        m_app->removeGamesFolder(QFileInfo(lib).canonicalFilePath());
+        QTRY_COMPARE(m_app->games()->total(), 1);
+        m_app->removeManualGame(fort);
+        QTRY_COMPARE(m_app->games()->total(), 0);
+        QVERIFY(m_app->gameDetail(fort).isEmpty());
         QVERIFY(click("subTab_music"));
     }
 

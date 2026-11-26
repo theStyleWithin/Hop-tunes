@@ -140,6 +140,17 @@ bool ProfileDb::migrate()
             && exec("PRAGMA user_version=8")
             && exec("COMMIT");
         if (!ok) { exec("ROLLBACK"); return false; }
+        version = 8;
+    }
+    if (version < 9) {
+        // v9: the game shelf: the user's own title and notes for a game (exported with the profile), and the cover picture they picked
+        // (a path to a copy kept in this profile's folder: like video_thumb_override it is never exported, the file stays on this device).
+        const bool ok = exec("BEGIN")
+            && exec("CREATE TABLE game_meta (path TEXT PRIMARY KEY, json TEXT NOT NULL)")
+            && exec("CREATE TABLE game_cover_override (path TEXT PRIMARY KEY, cover TEXT NOT NULL)")
+            && exec("PRAGMA user_version=9")
+            && exec("COMMIT");
+        if (!ok) { exec("ROLLBACK"); return false; }
     }
     return true;
 }
@@ -486,6 +497,51 @@ bool ProfileDb::setVideoThumbOverride(const QString &videoPath, const QString &t
     return s.run();
 }
 
+QHash<QString, QString> ProfileDb::gameMetas() const
+{
+    QHash<QString, QString> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path, json FROM game_meta");
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0), s.str(1));
+    return out;
+}
+
+bool ProfileDb::setGameMeta(const QString &gamePath, const QString &json)
+{
+    if (!m_db || gamePath.isEmpty()) return false;
+    if (json.isEmpty()) {
+        Stmt d(m_db, "DELETE FROM game_meta WHERE path = ?1");
+        d.bind(1, gamePath);
+        return d.run();
+    }
+    Stmt s(m_db, "INSERT INTO game_meta(path, json) VALUES(?1, ?2) ON CONFLICT(path) DO UPDATE SET json = ?2");
+    s.bind(1, gamePath); s.bind(2, json);
+    return s.run();
+}
+
+QHash<QString, QString> ProfileDb::gameCoverOverrides() const
+{
+    QHash<QString, QString> out;
+    if (!m_db) return out;
+    Stmt s(m_db, "SELECT path, cover FROM game_cover_override");
+    while (s.step() == SQLITE_ROW) out.insert(s.str(0), s.str(1));
+    return out;
+}
+
+bool ProfileDb::setGameCoverOverride(const QString &gamePath, const QString &coverPath)
+{
+    if (!m_db || gamePath.isEmpty()) return false;
+    if (coverPath.isEmpty()) {
+        Stmt d(m_db, "DELETE FROM game_cover_override WHERE path = ?1");
+        d.bind(1, gamePath);
+        return d.run();
+    }
+    Stmt s(m_db, "INSERT INTO game_cover_override(path, cover) VALUES(?1, ?2) "
+                 "ON CONFLICT(path) DO UPDATE SET cover = ?2");
+    s.bind(1, gamePath); s.bind(2, coverPath);
+    return s.run();
+}
+
 QStringList ProfileDb::albumTrackOrder(const QString &ref) const
 {
     QStringList out;
@@ -616,6 +672,7 @@ const TableSpec kTables[] = {
     {"item_played",       "ti",    "path,played_at"},
     {"video_meta",        "tt",    "path,json"},
     {"video_comment",     "tti",   "path,text,at"},
+    {"game_meta",         "tt",    "path,json"},
 };
 
 constexpr int kMaxRowsPerTable = 2'000'000;

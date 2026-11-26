@@ -133,6 +133,19 @@ first video folder you add starts from those folders (so nothing disappears); re
 you don't want in **settings → video folders**. The "image" button under a video lets you pick
 your own thumbnail (and "reset" returns to the detected frame); it is saved per profile.
 
+## Games: the game shelf
+
+`collection → games` (right after videos) is a shelf for your games: covers standing on wooden planks, with one chip per **system** to narrow the shelf (PC, Switch, Wii U, Wii, GameCube, Nintendo 64, Super Nintendo, NES, Game Boy, Game Boy Advance, DS, 3DS, PSP, PS Vita, PlayStation 1 to 5, Xbox, Dreamcast, Mega Drive, Atari, arcade and more). It is **browse only**: Hop-tunes never opens, runs or launches a game, and it only reads file names, never what is inside a rom.
+
+Add folders with **choose a games folder** (or **settings → games folders**). Nothing is scanned until you do, and a games folder is never read for music or videos.
+- **PC** holds your **Steam** and **GOG** games together. Choose a Steam library (the folder that has `steamapps` in it, or `steamapps` itself) or your GOG games folder. Steam's own tools (Proton, runtimes) and GOG add-ons are left out, and Steam's picture for a game is used when Steam has one on this computer.
+- **Roms and disc images** from your emulators are found by file type (`.sfc`, `.z64`, `.gba`, `.nsp`, `.nds` and so on). A disc image or archive (`.iso`, `.cue`, `.chd`, `.zip`, `.7z`) is shelved by the name of the folder it is in, for example `PS2`, `Wii U` or `GameCube`; for a disc with a `.cue`, the `.cue` is the game and its `.bin` tracks are not listed again. Titles are tidied (`Super Mario World (USA) [!]` shows as `Super Mario World`).
+- **Epic Games Store libraries are not scanned.** A game from there, or from any other launcher, can be added by hand: **+ add a game by hand** puts it on the shelf under **Third-party PC** (or any system you pick), with its own cover and notes. Removing a folder only takes its games off the shelf; games you added by hand stay until you remove them.
+
+Click a cover to open the game's page. There you can give it **your own title**, move it to another **system** (for a file Hop-tunes could not place), write **notes**, and **change the cover** with a picture of your own (a small copy is kept in your profile, never the original). **use the original** goes back to the picture Hop-tunes found, or to the drawn cover. All of it is saved in your profile on this computer: your titles, systems, notes and the games you added by hand travel with the profile when you eject and import it, but cover pictures are files and stay on the computer.
+
+If a drive with games is unplugged, its games leave the shelf and come back with the drive; nothing is forgotten. (In the Flatpak build, choose games folders with the file chooser: Hop-tunes can only see folders you pick.)
+
 ## Pictures, audiobooks, ebooks and podcasts
 
 Four more `collection` tabs, each with **its own folders and its own "choose a folder" button**

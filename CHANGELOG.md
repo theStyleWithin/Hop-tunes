@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Added
+- **The game shelf: a new `collection › games` tab, right after videos.** Add your games folders and Hop-tunes puts your games on a wooden bookshelf of covers, with a chip for each system (PC, Switch, Wii U, Wii, GameCube, N64, SNES, NES, Game Boy, GBA, DS, 3DS, PSP, Vita, PS1 to PS5, Xbox, Dreamcast, Mega Drive, Atari, arcade and more) and a search box. **PC** holds your **Steam** and **GOG** games together (from `steamapps` manifests and GOG's `goggame` files; Steam's tools and GOG add-ons are skipped, and Steam's own cover picture is used when it is on this computer). Roms and disc images are found by file type and, for `.iso`, `.cue`, `.chd`, `.zip` and the like, by the name of the folder they sit in (`PS2`, `Wii U`, ...). **Epic Games Store libraries are not scanned**: a game from any other launcher is added by hand under **Third-party PC**. A game's page keeps your own title, system, notes and cover picture (a small copy in your profile); titles, systems, notes and hand-added games travel with the profile when it is ejected and imported. Browse only for now: Hop-tunes never opens or launches a game, only reads file names, and a missing drive's games return with the drive. Phones get the same shelf in three columns.
+
 ### Fixed
 - **The Android app builds without the networked apps again.** The background-playback code was only declared in builds that include the networked apps, so a build without them did not compile.
 

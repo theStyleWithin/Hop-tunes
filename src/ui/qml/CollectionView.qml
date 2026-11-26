@@ -11,8 +11,9 @@ Item {
     signal addVideoFolderRequested()
     signal addVideoCategoryFolderRequested(string category)
     signal addSectionFolderRequested(string kind)
+    signal addGamesFolderRequested()
     property string mode: ["albums", "songs", "playlists"].indexOf(String(initialView)) >= 0 ? String(initialView) : "artists"
-    property string collectionTab: "music"   // music | videos | pictures | audiobooks | ebooks | podcasts | apps (spec §4.1; apps: desktop only for now)
+    property string collectionTab: "music"   // music | videos | games | pictures | audiobooks | ebooks | podcasts | apps (spec §4.1; apps: desktop only for now)
     function showArtists() { mode = "artists"; collectionTab = "music" }
 
     TrackMenu {
@@ -145,6 +146,7 @@ Item {
         if (pictureViewer.visible) { pictureViewer.close(); return }
         if (ebookReader.visible) { ebookReader.close(); return }
         if (root.collectionTab !== "music") {
+            if (root.collectionTab === "games" && gamesView.detailOpen) { gamesView.closeDetail(); return }
             if (root.collectionTab === "pictures" && hop.pictureAlbum !== "") { hop.closePictureAlbum(); return }
             if (hop.sectionOpenSlot[root.collectionTab]) { hop.closeSlot(root.collectionTab); return }
             if (root.collectionTab === "videos" && hop.videoSlot !== "") { hop.closeVideoSlot(); return }
@@ -178,7 +180,7 @@ Item {
             underline: true
             Layout.fillWidth: true; Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 4
             namePrefix: "pillTab_"
-            items: [["music", "music"], ["videos", "videos"]].concat(hop.sectionKinds.map(function (k) { return [k, k] })).concat(hop.appsEnabled ? [["apps", "apps"]] : [])
+            items: [["music", "music"], ["videos", "videos"], ["games", "games"]].concat(hop.sectionKinds.map(function (k) { return [k, k] })).concat(hop.appsEnabled ? [["apps", "apps"]] : [])
             current: root.collectionTab
             onPicked: function (v) { root.collectionTab = v }
         }
@@ -212,6 +214,16 @@ Item {
                 hoverEnabled: true
                 onClicked: root.collectionTab = "videos"
                 contentItem: Label { text: "videos"; color: root.collectionTab === "videos" ? Theme.accent : (videosTab.hovered ? Theme.text2 : Theme.dim)
+                                      font { family: Theme.font; pixelSize: Theme.fs(22) } }
+                background: Item {}
+            }
+            AbstractButton {
+                id: gamesTab
+                visible: !root.phone
+                objectName: "subTab_games"
+                hoverEnabled: true
+                onClicked: root.collectionTab = "games"
+                contentItem: Label { text: "games"; color: root.collectionTab === "games" ? Theme.accent : (gamesTab.hovered ? Theme.text2 : Theme.dim)
                                       font { family: Theme.font; pixelSize: Theme.fs(22) } }
                 background: Item {}
             }
@@ -375,6 +387,14 @@ Item {
         VideosView {
             onAddFolderRequested: function (c) { root.addVideoCategoryFolderRequested(c) }
             visible: root.collectionTab === "videos"
+            Layout.fillWidth: true; Layout.fillHeight: true
+            Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
+        }
+
+        GamesView {
+            id: gamesView
+            visible: root.collectionTab === "games"
+            onAddFolderRequested: root.addGamesFolderRequested()
             Layout.fillWidth: true; Layout.fillHeight: true
             Layout.leftMargin: Theme.pad; Layout.rightMargin: Theme.pad; Layout.topMargin: 18
         }

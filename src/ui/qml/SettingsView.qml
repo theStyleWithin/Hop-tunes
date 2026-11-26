@@ -12,6 +12,7 @@ Item {
     signal addVideoFolderRequested()
     signal addVideoCategoryFolderRequested(string category)
     signal addSectionFolderRequested(string kind)
+    signal addGamesFolderRequested()
 
     property string profileMsg: ""
     property bool confirmRemove: false
@@ -969,6 +970,47 @@ Item {
                     contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                     background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
                 }
+            }
+        }
+
+        // ---- the game shelf: Steam libraries and folders of roms ----
+        ColumnLayout {
+            id: gamesSec
+            Layout.fillWidth: true
+            spacing: 8
+            Label { text: "games folders"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } Layout.topMargin: 16 }
+            Label {
+                wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                visible: hop.gamesFolders.length === 0
+                text: "no games folders yet. add a Steam library or a folder of roms and disc images for the games shelf."
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) }
+            }
+            Repeater {
+                model: hop.gamesFolders
+                delegate: Rectangle {
+                    required property string modelData
+                    Layout.fillWidth: true; Layout.maximumWidth: 760
+                    implicitHeight: 56
+                    color: Theme.panel
+                    RowLayout {
+                        anchors { fill: parent; leftMargin: 16; rightMargin: 8 }
+                        Label { text: modelData; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(17) } elide: Text.ElideMiddle; Layout.fillWidth: true }
+                        Button {
+                            text: "remove"
+                            onClicked: hop.removeGamesFolder(modelData)
+                            Accessible.name: "remove games folder " + modelData
+                            contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 96; implicitHeight: 44; color: parent.hovered ? Theme.hover : "transparent" }
+                        }
+                    }
+                }
+            }
+            Button {
+                objectName: "settingsAddFolder_games"
+                text: "+ add games folder"
+                onClicked: root.addGamesFolderRequested()
+                contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
             }
         }
 

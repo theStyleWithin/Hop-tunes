@@ -90,6 +90,10 @@ add_library(hoptunes_core STATIC
     src/library/SectionIndex.h src/library/SectionIndex.cpp
     src/library/SectionListModel.h src/library/SectionListModel.cpp
     src/library/EpubBook.h    src/library/EpubBook.cpp
+    src/library/Game.h        src/library/Game.cpp
+    src/library/GameIndex.h   src/library/GameIndex.cpp
+    src/library/GameListModel.h src/library/GameListModel.cpp
+    src/library/GameScanner.h src/library/GameScanner.cpp
 )
 target_include_directories(hoptunes_core PUBLIC src)
 target_link_libraries(hoptunes_core PUBLIC Qt6::Core Qt6::Gui Qt6::Concurrent PkgConfig::TAGLIB PkgConfig::SQLITE3 ZLIB::ZLIB)
@@ -318,6 +322,10 @@ if(HOPTUNES_BUILD_TESTS)
         add_test(NAME mpris COMMAND test_mpris)
         set_tests_properties(mpris PROPERTIES ENVIRONMENT "HOPTUNES_AUDIO_SINK=fakesink sync=true")
     endif()
+
+    add_executable(test_games tests/test_games.cpp)
+    target_link_libraries(test_games PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME games COMMAND test_games)
 
     add_executable(test_paths tests/test_paths.cpp)
     target_link_libraries(test_paths PRIVATE hoptunes_core Qt6::Test)
