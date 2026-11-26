@@ -82,6 +82,16 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.14.0" date="2026-11-26">
+      <description>
+        <p>App folders and drag-and-drop on the apps page, and a right-click menu on the profile picker.</p>
+        <ul>
+          <li>Apps: drag tiles anywhere on the grid (the placement is remembered), and keep them in glassy folders you can rename, colour or give a picture from your photos.</li>
+          <li>Profile picker: right-click a profile to open it, hide it (hidden profiles are listed in settings) or eject it to a file. Profiles with a PIN cannot be hidden.</li>
+          <li>A drive pulled out while Hop-tunes was scanning no longer makes it forget your songs until the next rescan.</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.13.0" date="2026-11-20">
       <description>
         <p>Two new apps (DeviantArt and the Internet Archive), a new apps page, and Android fixes.</p>
