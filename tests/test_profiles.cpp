@@ -222,11 +222,16 @@ private slots:
         db.setAlbumOverrideArt(QStringLiteral("Ana\x1f" "Songs"), QStringLiteral("/secret/cover.jpg"));
         db.setVideoThumbOverride(QStringLiteral("/v/x.mkv"), QStringLiteral("/secret/t.jpg"));
         db.addVideoComment(QStringLiteral("/v/x.mkv"), QStringLiteral("great one"), 42);
+        // the game shelf: the person's own title / notes and the games added by hand travel; a picked cover is a file on this device and stays
+        db.setGameMeta(QStringLiteral("/g/zelda.sfc"), QStringLiteral(R"({"title":"My Zelda","notes":"beat dungeon 1"})"));
+        db.setGameMeta(QStringLiteral("manual:1234"), QStringLiteral(R"({"title":"Fortnite","system":"pcother"})"));
+        db.setGameCoverOverride(QStringLiteral("/g/zelda.sfc"), QStringLiteral("/secret/game-cover.jpg"));
         ProfileArchive a;
         a.name = QStringLiteral("Ana");
         a.accent = QStringLiteral("#ff8800");
         a.appVersion = QStringLiteral("1.7.3");
-        a.settings = {{QStringLiteral("folders"), QJsonArray{QStringLiteral("/nonexistent/music")}}, {QStringLiteral("volume"), 0.5}};
+        a.settings = {{QStringLiteral("folders"), QJsonArray{QStringLiteral("/nonexistent/music")}}, {QStringLiteral("volume"), 0.5},
+                      {QStringLiteral("gamesFolders"), QJsonArray{QStringLiteral("/nonexistent/games")}}};
         a.data = db.exportData();
         return a;
     }
@@ -239,7 +244,7 @@ private slots:
         QString err;
         QVERIFY2(ProfileArchive::parse(a.toBytes(), &b, &err), qPrintable(err));
         QCOMPARE(b.name, QStringLiteral("Ana"));
-        QCOMPARE(b.folders(), QStringList{QStringLiteral("/nonexistent/music")});
+        QCOMPARE(b.folders(), (QStringList{QStringLiteral("/nonexistent/music"), QStringLiteral("/nonexistent/games")}));   // the games folders are listed as "missing here" too
         QCOMPARE(b.rowCount(QStringLiteral("playlist")), 1);
         QCOMPARE(b.rowCount(QStringLiteral("playlist_item")), 2);
 
@@ -258,6 +263,10 @@ private slots:
         QCOMPARE(ov.title, QStringLiteral("Better title"));
         QVERIFY(ov.art.isEmpty());
         QVERIFY(fresh.videoThumbOverrides().isEmpty());
+        QCOMPARE(fresh.gameMetas().size(), 2);                                       // titles, notes and the games added by hand travel
+        QVERIFY(fresh.gameMetas().value(QStringLiteral("/g/zelda.sfc")).contains(QLatin1String("beat dungeon 1")));
+        QVERIFY(fresh.gameMetas().value(QStringLiteral("manual:1234")).contains(QLatin1String("Fortnite")));
+        QVERIFY(fresh.gameCoverOverrides().isEmpty());                              // a cover file stays on the old device
         QVERIFY(!a.toBytes().contains("secret"));
         QVERIFY(!a.toBytes().contains("pbkdf2"));
     }

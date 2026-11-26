@@ -13,6 +13,9 @@
 #include "library/Scanner.h"
 #include "library/TrackIndex.h"
 #include "library/TrackListModel.h"
+#include "library/GameIndex.h"
+#include "library/GameListModel.h"
+#include "library/GameScanner.h"
 #include "library/VideoIndex.h"
 #include "library/VideoListModel.h"
 #include "library/VideoScanner.h"
@@ -107,6 +110,13 @@ class App : public QObject {
     Q_PROPERTY(double bookResumeFraction READ bookResumeFraction NOTIFY bookChanged)   // scroll position within the chapter
     Q_PROPERTY(QVariantMap sectionFolders READ sectionFolders NOTIFY sectionFoldersChanged)   // key -> [paths]
     Q_PROPERTY(QVariantMap sectionStatus READ sectionStatus NOTIFY sectionStatusChanged)      // key -> {scanning, done, total}
+    // The game shelf (collection -> games): Steam games and ROMs found in the folders the person added; browse only.
+    Q_PROPERTY(hop::GameListModel *games READ games CONSTANT)
+    Q_PROPERTY(QStringList gamesFolders READ gamesFolders NOTIFY gamesFoldersChanged)
+    Q_PROPERTY(QVariantMap gamesStatus READ gamesStatus NOTIFY gamesStatusChanged)            // {scanning, done, total}
+    Q_PROPERTY(bool androidGamesAvailable READ androidGamesAvailable CONSTANT)                // true on a phone: it can list the games installed on it
+    Q_PROPERTY(bool androidGames READ androidGames WRITE setAndroidGames NOTIFY androidGamesChanged)   // show them on the shelf (off until the person switches it on)
+    Q_PROPERTY(QString gamesShelfMode READ gamesShelfMode WRITE setGamesShelfMode NOTIFY gamesShelfModeChanged)   // "covers" (a wall of covers) | "bookshelf" (spines on shelves, some leaning out)
     Q_PROPERTY(bool scanning READ scanning NOTIFY scanningChanged)
     Q_PROPERTY(int scanDone READ scanDone NOTIFY scanProgressChanged)
     Q_PROPERTY(int scanTotal READ scanTotal NOTIFY scanProgressChanged)
@@ -310,6 +320,30 @@ public:
 
     VideoListModel *videos() { return &m_videos; }
     bool videoScanning() const { return m_videoScanner.isRunning(); }
+    GameListModel *games() { return &m_games; }
+    QStringList gamesFolders() const { return m_gameFolders; }
+    QString gamesShelfMode() const { return m_gamesShelfMode; }
+    bool androidGamesAvailable() const {
+#ifdef Q_OS_ANDROID
+        return true;
+#else
+        return false;
+#endif
+    }
+    bool androidGames() const { return m_androidGamesOn; }
+    void setAndroidGames(bool on);
+    void applyAndroidGames(const QByteArray &json);   // the phone's list of installed games (HopActivity.installedGames); public so tests can hand one in
+    void setGamesShelfMode(const QString &mode);
+    QVariantMap gamesStatus() const;
+    Q_INVOKABLE void addGamesFolder(const QUrl &folder);
+    Q_INVOKABLE void removeGamesFolder(const QString &path);
+    Q_INVOKABLE QVariantMap gameDetail(const QString &path) const;                       // what the detail page shows ({} when unknown)
+    Q_INVOKABLE void setGameField(const QString &path, const QString &key, const QString &value);   // key: title | notes | system ("" = as scanned)
+    Q_INVOKABLE QVariantList gameSystemChoices() const;                                  // every system the person can move a game to: [{key, name}]
+    Q_INVOKABLE QString addManualGame(const QString &title, const QString &system);        // a game the folders cannot show (Fortnite, a launcher's game ...): "" on success, else why not
+    Q_INVOKABLE void removeManualGame(const QString &path);
+    Q_INVOKABLE QString setGameCover(const QString &path, const QUrl &image);             // "" on success, else why not
+    Q_INVOKABLE void clearGameCover(const QString &path);
     int videoScanDone() const { return m_videoScanDone; }
     int videoScanTotal() const { return m_videoScanTotal; }
     bool videoPlayerOpen() const { return m_videoPlayerOpen; }
@@ -600,6 +634,11 @@ signals:
     void pictureAlbumChanged();
     void videoCategoryChanged();
     void sectionFoldersChanged();
+    void gamesFoldersChanged();
+    void androidGamesChanged();
+    void gamesShelfModeChanged();
+    void gamesStatusChanged();
+    void gameDetailChanged();
     void sectionStatusChanged();
     void bookChanged();
     void scanningChanged();
@@ -795,6 +834,22 @@ private:
     qint64 m_resumeDurationMs = 0;
     SectionIndex m_sectionIndex;
     std::unique_ptr<SectionState> m_sec[4];
+
+    GameIndex m_gameIndex;
+    GameScanner m_gameScanner{&m_gameIndex};
+    GameListModel m_games;
+    QStringList m_gameFolders;
+    QString m_gamesShelfMode = QStringLiteral("covers");
+    bool m_androidGamesOn = false;
+    QList<AndroidGame> m_androidGames;
+    bool m_androidListing = false;
+    void refreshAndroidGames();
+    QHash<QString, QJsonObject> m_gameMeta;          // this profile's own title / notes per game, by path
+    QHash<QString, QString> m_gameCovers;            // this profile's picked covers, by game path
+    int m_gameScanDone = 0, m_gameScanTotal = 0;
+    bool m_gameRescanPending = false;
+    void reloadGames();
+    void saveGameMeta(const QString &path);
 
     VideoIndex m_videoIndex;
     VideoScanner m_videoScanner{&m_videoIndex};

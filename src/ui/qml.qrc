@@ -59,6 +59,7 @@
     <file>qml/VideoThumb.qml</file>
     <file>qml/VideosView.qml</file>
     <file>qml/SectionView.qml</file>
+    <file>qml/GamesView.qml</file>
     <file>qml/VideoDetailView.qml</file>
     <file>qml/LiveChat.qml</file>
     <file>qml/ChatGen.js</file>

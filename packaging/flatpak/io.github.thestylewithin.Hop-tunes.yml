@@ -37,6 +37,8 @@ finish-args:
   # Your Music folder, read-only. Other folders are picked with the file chooser
   # (the document portal), so Hop-tunes never needs access to your whole home folder.
   - --filesystem=xdg-music:ro
+  # The game shelf (collection > games) likewise only sees the folders you pick with the file chooser. A Steam library or a roms folder outside
+  # the sandbox's reach can be given with: flatpak override --user --filesystem=/path/to/games:ro io.github.thestylewithin.Hop-tunes
   # The internet, for the Kick app only: it is off until you switch apps on in Settings, it asks before it connects, it contacts only
   # the sites it lists, and only while it is open. Nothing else in Hop-tunes uses the network.
   - --share=network

@@ -106,6 +106,11 @@ public:
     bool setItemPlayed(const QString &path, bool played);
     QHash<QString, QString> videoThumbOverrides() const;   // video path -> picked image, loaded once per profile
     bool setVideoThumbOverride(const QString &videoPath, const QString &thumbPath);   // "" clears it
+    // The game shelf: the user's own title/notes for a game (JSON, exported) and the cover they picked (a copy in the profile folder, never exported).
+    QHash<QString, QString> gameMetas() const;
+    bool setGameMeta(const QString &gamePath, const QString &json);   // "" clears it
+    QHash<QString, QString> gameCoverOverrides() const;
+    bool setGameCoverOverride(const QString &gamePath, const QString &coverPath);   // "" clears it
     QStringList albumTrackOrder(const QString &ref) const;          // paths, in order; empty: natural order
     bool setAlbumTrackOrder(const QString &ref, const QStringList &paths);
 

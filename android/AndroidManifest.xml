@@ -8,6 +8,14 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
+    <!-- The game shelf lists the games installed on the phone (only if the person switches that on). This is the visibility Android 11+ gives to
+         launcher apps; Hop-tunes does not ask for the broad "see every app" permission. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
+        </intent>
+    </queries>
     <supports-screens android:smallScreens="true" android:normalScreens="true" android:largeScreens="true" android:xlargeScreens="true" android:anyDensity="true"/>
     <application android:name="org.qtproject.qt.android.bindings.QtApplication" android:label="Hop-tunes" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:hardwareAccelerated="true" android:extractNativeLibs="true" android:allowBackup="false">
         <activity android:name="io.github.thestylewithin.hoptunes.HopActivity" android:label="Hop-tunes" android:exported="true"

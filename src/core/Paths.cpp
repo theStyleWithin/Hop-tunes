@@ -50,6 +50,7 @@ QString cacheDir()    { return overrideRoot().isEmpty() ? xdg(QStandardPaths::Ge
 QString artCacheDir() { return cacheDir() + QStringLiteral("/art"); }
 QString videoIndexDbPath()   { return sharedDir() + QStringLiteral("/videos.sqlite"); }
 QString sectionIndexDbPath() { return sharedDir() + QStringLiteral("/sections.sqlite"); }
+QString gameIndexDbPath()    { return sharedDir() + QStringLiteral("/games.sqlite"); }
 QString videoThumbCacheDir() { return cacheDir() + QStringLiteral("/video-thumbs"); }
 
 bool ensureDirs()

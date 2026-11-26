@@ -35,6 +35,8 @@
 #include <QImageReader>
 #include <QPainterPath>
 #include <QPainter>
+#include <QPointer>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QFileInfo>
@@ -45,6 +47,7 @@
 #include <QSettings>
 #include <QStandardPaths>
 #include <QUrl>
+#include <QUuid>
 
 #include <QMap>
 #include <algorithm>
@@ -189,6 +192,19 @@ App::App(QObject *parent) : QObject(parent), m_store(Paths::profilesDir())
             m_watcher.setFolders(watchedFolders());
         });
     }
+    // The game shelf: one scanner over the GameIndex.
+    connect(&m_gameScanner, &GameScanner::started, this, &App::gamesStatusChanged);
+    connect(&m_gameScanner, &GameScanner::progress, this, [this](int done, int total) {
+        m_gameScanDone = done;
+        m_gameScanTotal = total;
+        emit gamesStatusChanged();
+    });
+    connect(&m_gameScanner, &GameScanner::finished, this, [this](int added, int updated, int removed, int) {
+        emit gamesStatusChanged();
+        if (added || updated || removed || m_games.total() == 0) reloadGames();
+        if (m_gameRescanPending) { m_gameRescanPending = false; m_gameScanner.start(m_gameFolders); }
+        m_watcher.setFolders(watchedFolders());
+    });
     // Live library updates (spec §6): a local inotify watch, nothing more — see
     // LibraryWatcher's header comment. Debounced, so one rescan covers a whole copy.
     connect(&m_watcher, &LibraryWatcher::changed, this, [this] { rescan(); });
@@ -229,6 +245,7 @@ App::~App()
     saveProfileSettings();
     m_scanner.cancel();
     m_videoScanner.cancel();
+    m_gameScanner.cancel();
 }
 
 bool App::init()
@@ -257,6 +274,13 @@ bool App::init()
         setAside(Paths::sectionIndexDbPath());
         if (!m_sectionIndex.open(Paths::sectionIndexDbPath()))
             qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::sectionIndexDbPath()), qPrintable(m_sectionIndex.lastError()));
+    }
+    if (!m_gameIndex.open(Paths::gameIndexDbPath())) {
+        qWarning("hop-tunes: game index unreadable (%s); rebuilding it", qPrintable(m_gameIndex.lastError()));
+        m_gameIndex.close();
+        setAside(Paths::gameIndexDbPath());
+        if (!m_gameIndex.open(Paths::gameIndexDbPath()))
+            qWarning("hop-tunes: cannot create %s: %s", qPrintable(Paths::gameIndexDbPath()), qPrintable(m_gameIndex.lastError()));
     }
     if (!m_store.load()) {
         // Never overwrite an unreadable profile list: set it aside and start fresh.
@@ -482,6 +506,7 @@ void App::activate(const QString &id, bool guest)
     m_videoCatFolders.clear();
     m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) sec->folders.clear();
+    m_gameFolders.clear();
     if (guest) {
         if (!suggestedFolder().isEmpty()) m_folders << suggestedFolder();
     } else {
@@ -489,6 +514,7 @@ void App::activate(const QString &id, bool guest)
         for (auto &sec : m_sec)
             for (const QJsonValue &v : s.value(sectionKey(sec->kind) + QStringLiteral("Folders")).toArray())
                 sec->folders << v.toString();
+        for (const QJsonValue &v : s.value(QStringLiteral("gamesFolders")).toArray()) m_gameFolders << v.toString();
         const QJsonObject am = s.value(QStringLiteral("artistMerges")).toObject();
         for (auto it = am.constBegin(); it != am.constEnd(); ++it)
             if (it.value().isString() && !it.value().toString().isEmpty()) m_artistMerges.insert(it.key(), it.value().toString());
@@ -516,6 +542,9 @@ void App::activate(const QString &id, bool guest)
     m_reduceMotion = s.value(QStringLiteral("reduceMotion")).toBool(false);
     m_nowPlaying = guest ? QJsonObject{} : s.value(QStringLiteral("nowPlaying")).toObject();
     updateAnalysisAvailable();
+    m_androidGamesOn = !guest && s.value(QStringLiteral("androidGames")).toBool(false);
+    m_androidGames.clear();
+    m_gamesShelfMode = s.value(QStringLiteral("gamesShelfMode")).toString() == QLatin1String("bookshelf") ? QStringLiteral("bookshelf") : QStringLiteral("covers");
     m_videoViewStyle = s.value(QStringLiteral("videoViewStyle")).toString(QStringLiteral("window"));
     if (m_videoViewStyle != QLatin1String("theater") && m_videoViewStyle != QLatin1String("fullscreen")) m_videoViewStyle = QStringLiteral("window");
     m_appsEnabled = !guest && s.value(QStringLiteral("appsEnabled")).toBool(false);
@@ -577,6 +606,7 @@ void App::activate(const QString &id, bool guest)
                             return m == QLatin1String("mine") || m == QLatin1String("populated") ? m : QStringLiteral("off"); }();
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
+    emit gamesShelfModeChanged();
     emit appearanceChanged();
     const QString dbPath = guest ? QStringLiteral(":memory:") : m_store.dirFor(id) + QStringLiteral("/profile.sqlite");
     if (!m_db.open(dbPath) && !guest) {
@@ -596,6 +626,13 @@ void App::activate(const QString &id, bool guest)
     for (auto it = metas.cbegin(); it != metas.cend(); ++it) {
         const QJsonDocument doc = QJsonDocument::fromJson(it.value().toUtf8());
         if (doc.isObject()) m_videoMeta.insert(it.key(), doc.object());
+    }
+    m_gameCovers = m_db.gameCoverOverrides();
+    m_gameMeta.clear();
+    const QHash<QString, QString> gmetas = m_db.gameMetas();
+    for (auto it = gmetas.cbegin(); it != gmetas.cend(); ++it) {
+        const QJsonDocument doc = QJsonDocument::fromJson(it.value().toUtf8());
+        if (doc.isObject()) m_gameMeta.insert(it.key(), doc.object());
     }
     m_songOrder = m_db.songOrder();
     m_search.clear();
@@ -624,6 +661,7 @@ void App::leaveProfile()
     m_scanner.cancel();
     m_videoScanner.cancel();
     for (auto &sec : m_sec) sec->scanner.cancel();
+    m_gameScanner.cancel();
     m_videoPlayerOpen = false;
     m_db.close();
     m_stats.clear();
@@ -631,6 +669,8 @@ void App::leaveProfile()
     m_played.clear();
     m_videoThumbOverrides.clear();
     m_videoMeta.clear();
+    m_gameCovers.clear();
+    m_gameMeta.clear();
     m_detailPath.clear();
     m_songOrder.clear();
     m_search.clear();
@@ -645,6 +685,9 @@ void App::leaveProfile()
     m_pinball.setPaused(true);
     emit gameSettingsChanged();
     m_videoViewStyle = QStringLiteral("window");
+    m_gamesShelfMode = QStringLiteral("covers");
+    m_androidGamesOn = false;
+    m_androidGames.clear();
     m_appsEnabled = false;
     emit appsEnabledChanged();
     m_netAllowed.clear();
@@ -678,6 +721,8 @@ void App::leaveProfile()
     m_videoComments = QStringLiteral("off");
     emit videoCommentsChanged();
     emit videoViewStyleChanged();
+    emit gamesShelfModeChanged();
+    emit androidGamesChanged();
     emit appearanceChanged();
     m_folders.clear();
     m_videoFolders.clear();
@@ -689,6 +734,10 @@ void App::leaveProfile()
     m_videoCatFolders.clear();
     m_videoCategory = QStringLiteral("movies");
     for (auto &sec : m_sec) { sec->scanner.cancel(); sec->folders.clear(); }
+    m_gameScanner.cancel();
+    m_gameFolders.clear();
+    m_gameCovers.clear();
+    m_gameMeta.clear();
     reload();
     emit foldersChanged();
     emit sectionFoldersChanged();
@@ -715,6 +764,7 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("videoCategoryFolders"), cats);
     for (const auto &sec : m_sec)
         s.insert(sectionKey(sec->kind) + QStringLiteral("Folders"), QJsonArray::fromStringList(sec->folders));
+    s.insert(QStringLiteral("gamesFolders"), QJsonArray::fromStringList(m_gameFolders));
     s.insert(QStringLiteral("volume"), m_player.volume());
     s.insert(QStringLiteral("crossfadeMs"), m_player.crossfadeMs());
     s.insert(QStringLiteral("replayGain"), m_player.replayGainMode());
@@ -725,6 +775,8 @@ void App::saveProfileSettings()
     s.insert(QStringLiteral("reduceMotion"), m_reduceMotion);
     s.insert(QStringLiteral("nowPlaying"), m_nowPlaying);
     s.insert(QStringLiteral("videoViewStyle"), m_videoViewStyle);
+    s.insert(QStringLiteral("gamesShelfMode"), m_gamesShelfMode);
+    s.insert(QStringLiteral("androidGames"), m_androidGamesOn);
     s.insert(QStringLiteral("appsEnabled"), m_appsEnabled);
     s.insert(QStringLiteral("appHints"), m_appHints);
     s.insert(QStringLiteral("appsBackground"), m_appsBg);
@@ -817,6 +869,7 @@ QString App::removeProfile()
     m_listen = {};
     m_scanner.cancel();
     m_videoScanner.cancel();
+    m_gameScanner.cancel();
     m_videoPlayerOpen = false;
     m_db.close();
     m_stats.clear();
@@ -1813,6 +1866,7 @@ QStringList App::watchedFolders() const
     for (const QString &f : allVideoFolders()) if (!all.contains(f)) all << f;
     for (const auto &sec : m_sec)
         for (const QString &f : sec->folders) if (!all.contains(f)) all << f;
+    for (const QString &f : m_gameFolders) if (!all.contains(f)) all << f;
     return all;
 }
 
@@ -1831,6 +1885,7 @@ QStringList App::everyFolder() const
     QStringList all = m_folders;
     for (const QString &f : allVideoFolders()) if (!all.contains(f)) all << f;
     for (const auto &sec : m_sec) for (const QString &f : sec->folders) if (!all.contains(f)) all << f;
+    for (const QString &f : m_gameFolders) if (!all.contains(f)) all << f;
     return all;
 }
 
@@ -1859,6 +1914,7 @@ void App::checkDrives()
     reload();
     reloadVideos();
     reloadSections();
+    reloadGames();
     if (appeared) rescan();
     emit drivesChanged();
 }
@@ -1869,6 +1925,11 @@ void App::rescan()
         if (sec->folders.isEmpty()) continue;
         if (sec->scanner.isRunning()) sec->rescanPending = true;
         else { sec->done = sec->total = 0; sec->scanner.start(sec->folders); }
+    }
+    if (m_androidGamesOn) refreshAndroidGames();
+    if (!m_gameFolders.isEmpty()) {
+        if (m_gameScanner.isRunning()) m_gameRescanPending = true;
+        else { m_gameScanDone = m_gameScanTotal = 0; m_gameScanner.start(m_gameFolders); }
     }
     if (m_folders.isEmpty() && allVideoFolders().isEmpty()) { m_watcher.setFolders(watchedFolders()); return; }
     if (!m_folders.isEmpty()) {
@@ -1935,6 +1996,7 @@ void App::reload()
     refreshQuickplay();
     reloadVideos();
     reloadSections();
+    reloadGames();
 }
 
 void App::reloadVideos()
@@ -2175,6 +2237,15 @@ void App::setVideoViewStyle(const QString &style)
     m_videoViewStyle = s;
     saveProfileSettings();
     emit videoViewStyleChanged();
+}
+
+void App::setGamesShelfMode(const QString &mode)
+{
+    const QString m = mode == QLatin1String("bookshelf") ? mode : QStringLiteral("covers");
+    if (m == m_gamesShelfMode) return;
+    m_gamesShelfMode = m;
+    saveProfileSettings();
+    emit gamesShelfModeChanged();
 }
 
 void App::setAppHints(bool on)
@@ -3326,6 +3397,253 @@ QString App::offlineMoveTo(const QUrl &folder)
     Q_UNUSED(folder);
     return QStringLiteral("this build has no networked apps");
 #endif
+}
+
+// ---- the game shelf ------------------------------------------------------------------------------------
+
+QVariantMap App::gamesStatus() const
+{
+    return {{QStringLiteral("scanning"), m_gameScanner.isRunning()}, {QStringLiteral("done"), m_gameScanDone}, {QStringLiteral("total"), m_gameScanTotal}};
+}
+
+void App::addGamesFolder(const QUrl &folder)
+{
+    const QString path = QFileInfo(Paths::folderPath(folder)).canonicalFilePath();
+    if (path.isEmpty() || m_gameFolders.contains(path)) return;
+    m_gameFolders << path;
+    saveFolders();
+    emit gamesFoldersChanged();
+    rescan();
+}
+
+void App::removeGamesFolder(const QString &path)
+{
+    if (!m_gameFolders.removeAll(path)) return;
+    saveFolders();
+    emit gamesFoldersChanged();
+    reloadGames();
+}
+
+// The shelf's rows: what the scan found, with the person's own titles and covers laid over it.
+void App::reloadGames()
+{
+    QList<GameListModel::Entry> rows;
+    for (const Game &g : m_gameIndex.gamesUnder(reachable(m_gameFolders))) {
+        GameListModel::Entry e;
+        e.game = g;
+        const QString mine = m_gameMeta.value(g.path).value(QStringLiteral("title")).toString().trimmed();
+        e.renamed = !mine.isEmpty();
+        e.title = e.renamed ? mine : g.title;
+        const QString sys = m_gameMeta.value(g.path).value(QStringLiteral("system")).toString();      // the person said which system it is
+        if (!sys.isEmpty() && gameSystemByKey(sys)) e.game.system = sys;
+        const QString custom = m_gameCovers.value(g.path);
+        if (!custom.isEmpty() && QFile::exists(custom)) { e.coverUrl = QUrl::fromLocalFile(custom).toString(); e.customCover = true; }
+        else if (!g.cover.isEmpty() && QFile::exists(g.cover)) e.coverUrl = QUrl::fromLocalFile(g.cover).toString();
+        rows.append(e);
+    }
+    // games added by hand live in the profile (no folder, no scan): a "manual:<id>" path, its title and system in the profile's game details
+    for (auto it = m_gameMeta.cbegin(); it != m_gameMeta.cend(); ++it) {
+        if (!it.key().startsWith(QLatin1String("manual:"))) continue;
+        GameListModel::Entry e;
+        e.game.path = it.key();
+        e.game.source = QStringLiteral("manual");
+        e.game.title = it.value().value(QStringLiteral("title")).toString();
+        const QString sys = it.value().value(QStringLiteral("system")).toString();
+        e.game.system = gameSystemByKey(sys) ? sys : QString::fromLatin1(kManualSystem);
+        e.title = e.game.title;
+        const QString custom = m_gameCovers.value(e.game.path);
+        if (!custom.isEmpty() && QFile::exists(custom)) { e.coverUrl = QUrl::fromLocalFile(custom).toString(); e.customCover = true; }
+        rows.append(e);
+    }
+    // games installed on this phone (Google Play and others), when the person has switched that on
+    if (m_androidGamesOn) {
+        for (const AndroidGame &a : m_androidGames) {
+            GameListModel::Entry e;
+            e.game.path = QStringLiteral("android:") + a.package;
+            e.game.source = QStringLiteral("android");
+            e.game.system = androidGameSystem(a.installer);
+            e.game.appId = a.package;
+            e.game.title = a.label;
+            const QJsonObject mine = m_gameMeta.value(e.game.path);
+            const QString title = mine.value(QStringLiteral("title")).toString().trimmed();
+            e.renamed = !title.isEmpty();
+            e.title = e.renamed ? title : a.label;
+            const QString sys = mine.value(QStringLiteral("system")).toString();
+            if (!sys.isEmpty() && gameSystemByKey(sys)) e.game.system = sys;
+            if (!a.icon.isEmpty() && QFile::exists(a.icon)) e.iconUrl = QUrl::fromLocalFile(a.icon).toString();
+            const QString custom = m_gameCovers.value(e.game.path);
+            if (!custom.isEmpty() && QFile::exists(custom)) { e.coverUrl = QUrl::fromLocalFile(custom).toString(); e.customCover = true; }
+            rows.append(e);
+        }
+    }
+    m_games.setEntries(rows);
+}
+
+QVariantMap App::gameDetail(const QString &path) const
+{
+    const GameListModel::Entry *e = m_games.entryForPath(path);
+    if (!e) return {};
+    const QJsonObject mine = m_gameMeta.value(path);
+    return {{QStringLiteral("path"), path},
+            {QStringLiteral("title"), e->title},
+            {QStringLiteral("scannedTitle"), e->game.title},
+            {QStringLiteral("renamed"), e->renamed},
+            {QStringLiteral("system"), e->game.system},
+            {QStringLiteral("systemName"), gameSystemName(e->game.system)},
+            {QStringLiteral("systemColor"), gameSystemColor(e->game.system)},
+            {QStringLiteral("systemChosen"), !mine.value(QStringLiteral("system")).toString().isEmpty()},
+            {QStringLiteral("manual"), e->game.source == QLatin1String("manual")},
+            {QStringLiteral("source"), e->game.source},
+            {QStringLiteral("appId"), e->game.appId},
+            {QStringLiteral("notes"), mine.value(QStringLiteral("notes")).toString()},
+            {QStringLiteral("cover"), e->coverUrl},
+            {QStringLiteral("icon"), e->iconUrl},
+            {QStringLiteral("customCover"), e->customCover},
+            {QStringLiteral("editable"), profileReady() && !m_guest}};
+}
+
+void App::setAndroidGames(bool on)
+{
+    if (on == m_androidGamesOn) return;
+    m_androidGamesOn = on;
+    if (!on) m_androidGames.clear();
+    saveProfileSettings();
+    emit androidGamesChanged();
+    reloadGames();
+    if (on) refreshAndroidGames();
+}
+
+void App::applyAndroidGames(const QByteArray &json)
+{
+    if (!m_androidGamesOn) return;
+    m_androidGames = parseAndroidGames(json);
+    reloadGames();
+    emit gameDetailChanged();
+}
+
+// Asks the phone which games are installed (off the main thread: drawing each icon takes a moment); the answer comes back to applyAndroidGames.
+void App::refreshAndroidGames()
+{
+#ifdef Q_OS_ANDROID
+    if (!m_androidGamesOn || m_androidListing) return;
+    m_androidListing = true;
+    const QString iconDir = Paths::cacheDir() + QStringLiteral("/game-icons");
+    QPointer<App> self(this);
+    (void)QtConcurrent::run([self, iconDir] {
+        QByteArray json;
+        const QJniObject r = QJniObject::callStaticObjectMethod("io/github/thestylewithin/hoptunes/HopActivity", "installedGames",
+                                                                 "(Ljava/lang/String;)Ljava/lang/String;", QJniObject::fromString(iconDir).object<jstring>());
+        if (r.isValid()) json = r.toString().toUtf8();
+        if (!self) return;
+        QMetaObject::invokeMethod(self.data(), [self, json] {
+            if (!self) return;
+            self->m_androidListing = false;
+            self->applyAndroidGames(json);
+        }, Qt::QueuedConnection);
+    });
+#endif
+}
+
+QString App::addManualGame(const QString &title, const QString &system)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    const QString t = title.simplified().left(200);
+    if (t.isEmpty()) return QStringLiteral("give the game a name");
+    if (!system.isEmpty() && !gameSystemByKey(system)) return QStringLiteral("unknown system");
+    int manual = 0;
+    for (auto it = m_gameMeta.cbegin(); it != m_gameMeta.cend(); ++it) if (it.key().startsWith(QLatin1String("manual:"))) ++manual;
+    if (manual >= 2000) return QStringLiteral("that is a lot of games added by hand: remove some first");
+    const QString path = QStringLiteral("manual:") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    m_gameMeta[path] = QJsonObject{{QStringLiteral("title"), t}, {QStringLiteral("system"), system.isEmpty() ? QString::fromLatin1(kManualSystem) : system}};
+    saveGameMeta(path);
+    reloadGames();
+    return {};
+}
+
+void App::removeManualGame(const QString &path)
+{
+    if (!profileReady() || m_guest || !path.startsWith(QLatin1String("manual:")) || !m_gameMeta.contains(path)) return;
+    m_gameMeta.remove(path);
+    if (m_db.isOpen()) m_db.setGameMeta(path, QString());
+    if (m_gameCovers.contains(path)) {
+        m_db.setGameCoverOverride(path, QString());
+        QFile::remove(m_gameCovers.take(path));
+    }
+    reloadGames();
+    emit gameDetailChanged();
+}
+
+QVariantList App::gameSystemChoices() const
+{
+    QVariantList out;
+    int n = 0;
+    const GameSystem *s = gameSystems(&n);
+    for (int i = 0; i < n; ++i) out.append(QVariantMap{{QStringLiteral("key"), QString::fromLatin1(s[i].key)}, {QStringLiteral("name"), QString::fromLatin1(s[i].name)}});
+    return out;
+}
+
+void App::saveGameMeta(const QString &path)
+{
+    QJsonObject &o = m_gameMeta[path];
+    for (const QString &k : {QStringLiteral("title"), QStringLiteral("notes"), QStringLiteral("system")}) if (o.value(k).toString().trimmed().isEmpty()) o.remove(k);
+    if (o.isEmpty()) {
+        m_gameMeta.remove(path);
+        if (m_db.isOpen()) m_db.setGameMeta(path, QString());
+    } else if (m_db.isOpen()) {
+        m_db.setGameMeta(path, QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)));
+    }
+}
+
+void App::setGameField(const QString &path, const QString &key, const QString &value)
+{
+    if (!profileReady() || m_guest || !m_games.entryForPath(path)) return;
+    if (key != QLatin1String("title") && key != QLatin1String("notes") && key != QLatin1String("system")) return;
+    if (key == QLatin1String("system") && !value.isEmpty() && !gameSystemByKey(value)) return;     // "" goes back to what the scan found
+    if (path.startsWith(QLatin1String("manual:")) && key == QLatin1String("title") && value.simplified().isEmpty()) return;   // a game added by hand keeps its name
+    const QString v = (key == QLatin1String("title") ? value.simplified().left(200) : value.trimmed().left(20000));
+    if (m_gameMeta.value(path).value(key).toString() == v) return;   // nothing changed: no write
+    m_gameMeta[path].insert(key, v);
+    saveGameMeta(path);
+    if (key == QLatin1String("title") || key == QLatin1String("system")) reloadGames();   // the shelf shows the title typed here, and a game moves to the system chosen
+    emit gameDetailChanged();
+}
+
+QString App::setGameCover(const QString &path, const QUrl &image)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    if (!m_games.entryForPath(path)) return QStringLiteral("no game selected");
+    const QString file = image.isLocalFile() ? image.toLocalFile() : image.toString();
+    const QFileInfo fi(file);
+    if (!fi.isFile()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    if (fi.size() > 40 * 1024 * 1024) return QStringLiteral("that picture is too large (over 40 MB)");
+    QImageReader reader(file);
+    reader.setAutoTransform(true);
+    const QSize sz = reader.size();
+    if (sz.isValid() && qint64(sz.width()) * sz.height() > 120'000'000) return QStringLiteral("that picture is too large");
+    QImage img = reader.read();
+    if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
+    if (img.width() > 600 || img.height() > 900)
+        img = img.scaled(600, 900, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    const QString dir = m_store.dirFor(m_profileId) + QStringLiteral("/game-covers");
+    QDir().mkpath(dir);
+    const QString hash = QString::fromLatin1(QCryptographicHash::hash(path.toUtf8(), QCryptographicHash::Sha1).toHex());
+    const QString out = dir + QLatin1Char('/') + hash + QStringLiteral(".jpg");
+    if (!img.convertToFormat(QImage::Format_RGB32).save(out, "JPG", 88)) return QStringLiteral("could not save the picture");
+    QFile::setPermissions(out, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    if (!m_db.setGameCoverOverride(path, out)) return QStringLiteral("could not save the change");
+    m_gameCovers[path] = out;
+    reloadGames();
+    emit gameDetailChanged();
+    return {};
+}
+
+void App::clearGameCover(const QString &path)
+{
+    if (!profileReady() || m_guest || !m_gameCovers.contains(path)) return;
+    if (!m_db.setGameCoverOverride(path, QString())) return;
+    QFile::remove(m_gameCovers.take(path));
+    reloadGames();
+    emit gameDetailChanged();
 }
 
 } // namespace hop

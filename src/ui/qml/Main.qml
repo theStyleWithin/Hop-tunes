@@ -109,6 +109,12 @@ ApplicationWindow {
         title: "choose a folder"
         onAccepted: hop.addSectionFolder(kind, selectedFolder)
     }
+    // Folder picker for the game shelf: a Steam library, or a folder of roms and disc images.
+    FolderPick {
+        id: gamesFolderDialog
+        title: "choose a games folder"
+        onAccepted: hop.addGamesFolder(selectedFolder)
+    }
     FolderPick {
         id: folderDialog
         objectName: "musicFolderPick"
@@ -202,10 +208,10 @@ ApplicationWindow {
                 NumberAnimation { target: stack; property: "opacity"; from: 0.0; to: 1.0; duration: Theme.motion; easing.type: Easing.OutCubic }
                 NumberAnimation { target: slide; property: "x"; from: 28; to: 0; duration: Theme.motion; easing.type: Easing.OutCubic }
             }
-            CollectionView { id: collectionView; objectName: "collectionView"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            CollectionView { id: collectionView; objectName: "collectionView"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) }; onAddGamesFolderRequested: gamesFolderDialog.open() }
             NowPlayingView { onBack: win.view = "collection" }
             QuickplayView { onOpenAlbum: { collectionView.showArtists(); win.view = "collection" } }
-            SettingsView { objectName: "settingsView"; onBack: win.view = "profile"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) } }
+            SettingsView { objectName: "settingsView"; onBack: win.view = "profile"; onAddFolderRequested: folderDialog.open(); onAddVideoFolderRequested: videoFolderDialog.open(); onAddVideoCategoryFolderRequested: function (c) { win.openVideoCategoryFolderDialog(c) }; onAddSectionFolderRequested: function (k) { win.openSectionFolderDialog(k) }; onAddGamesFolderRequested: gamesFolderDialog.open() }
             PhoneSearch { }
             PhoneProfile { onGo: function (v) { win.view = v } }
         }

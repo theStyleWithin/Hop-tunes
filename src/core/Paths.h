@@ -18,6 +18,7 @@ namespace Paths {
     QString artCacheDir();    // cacheDir()/art  (extracted cover images, content-addressed)
     QString videoIndexDbPath();  // sharedDir()/videos.sqlite (spec §5b)
     QString sectionIndexDbPath(); // sharedDir()/sections.sqlite (pictures, audiobooks, ebooks, podcasts)
+    QString gameIndexDbPath();    // sharedDir()/games.sqlite (the game shelf)
     // A folder the user picked, as a path. On Android the picker returns a content:// tree address
     // (content://com.android.externalstorage.documents/tree/primary%3AMusic), which is mapped to its
     // plain path (/storage/emulated/0/Music); anything else is returned as it came.

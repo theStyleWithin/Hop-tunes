@@ -340,4 +340,61 @@ public class HopActivity extends QtActivity {
         }
         return super.dispatchGenericMotionEvent(e);
     }
+
+    // ---- the game shelf: the games installed on this phone (called from C++, App::refreshAndroidGames) ----
+    // Only apps with a launcher icon are looked at (that is the visibility Android 11 and newer gives without the broad "see every app" permission),
+    // and of those only the ones Android itself marks as games. Nothing leaves the phone. Each game's icon is drawn to a small PNG in `iconDir`
+    // so the shelf can show it as the cover. Returns a JSON array: [{"package","label","installer","icon"}].
+    public static String installedGames(String iconDir) {
+        final org.json.JSONArray out = new org.json.JSONArray();
+        try {
+            final HopActivity a = sInstance;
+            if (a == null) return "[]";
+            final android.content.pm.PackageManager pm = a.getPackageManager();
+            final Intent launcher = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+            final List<android.content.pm.ResolveInfo> apps = pm.queryIntentActivities(launcher, 0);
+            final java.io.File dir = new java.io.File(iconDir);
+            dir.mkdirs();
+            final java.util.HashSet<String> seen = new java.util.HashSet<String>();
+            for (android.content.pm.ResolveInfo ri : apps) {
+                if (out.length() >= 2000) break;
+                final android.content.pm.ApplicationInfo ai = ri.activityInfo.applicationInfo;
+                final String pkg = ai.packageName;
+                if (pkg == null || pkg.equals(a.getPackageName()) || !seen.add(pkg)) continue;
+                boolean game = false;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) game = ai.category == android.content.pm.ApplicationInfo.CATEGORY_GAME;
+                if (!game) game = (ai.flags & android.content.pm.ApplicationInfo.FLAG_IS_GAME) != 0;   // older apps say it this way
+                if (!game) continue;
+                String installer = "";
+                try {
+                    if (Build.VERSION.SDK_INT >= 30) { final String s = pm.getInstallSourceInfo(pkg).getInstallingPackageName(); if (s != null) installer = s; }
+                    else { final String s = pm.getInstallerPackageName(pkg); if (s != null) installer = s; }
+                } catch (Throwable t) { }
+                String iconPath = "";
+                try {
+                    final java.io.File f = new java.io.File(dir, pkg + ".png");
+                    final long updated = pm.getPackageInfo(pkg, 0).lastUpdateTime;
+                    if (!f.exists() || f.lastModified() < updated) {
+                        final android.graphics.drawable.Drawable d = ri.loadIcon(pm);
+                        final int sz = 192;
+                        final android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(sz, sz, android.graphics.Bitmap.Config.ARGB_8888);
+                        final android.graphics.Canvas cv = new android.graphics.Canvas(bmp);
+                        d.setBounds(0, 0, sz, sz);
+                        d.draw(cv);
+                        final java.io.FileOutputStream os = new java.io.FileOutputStream(f);
+                        try { bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, os); } finally { os.close(); }
+                        bmp.recycle();
+                    }
+                    iconPath = f.getAbsolutePath();
+                } catch (Throwable t) { }
+                final org.json.JSONObject o = new org.json.JSONObject();
+                o.put("package", pkg);
+                o.put("label", String.valueOf(ri.loadLabel(pm)));
+                o.put("installer", installer);
+                o.put("icon", iconPath);
+                out.put(o);
+            }
+        } catch (Throwable t) { life("android: listing installed games failed: " + t); }
+        return out.toString();
+    }
 }
