@@ -31,7 +31,7 @@ ApplicationWindow {
     // Returns true when it did something. Desktop windows close as usual.
     function goBack() {
         if (!hop.profileReady) {
-            if (gate.mode === "create" && hop.profiles.length > 0) gate.show("pick")
+            if (gate.mode === "create" && hop.profileCount > 0) gate.show("pick")
             else if (gate.mode === "pin") gate.show("pick")
             return true
         }

@@ -317,7 +317,8 @@ QVariantMap App::profileMap(const Profile &p) const
             {QStringLiteral("initial"), p.name.left(1).toUpper()},
             {QStringLiteral("accent"), p.accent},
             {QStringLiteral("avatar"), avatar},
-            {QStringLiteral("hasPin"), p.hasPin}};
+            {QStringLiteral("hasPin"), p.hasPin},
+            {QStringLiteral("hidden"), p.hidden}};
 }
 
 QVariantMap App::profile() const
@@ -333,8 +334,33 @@ QVariantMap App::profile() const
 QVariantList App::profiles() const
 {
     QVariantList out;
-    for (const Profile &p : m_store.profiles()) out.append(profileMap(p));
+    for (const Profile &p : m_store.profiles()) if (!p.hidden) out.append(profileMap(p));
     return out;
+}
+
+QVariantList App::hiddenProfiles() const
+{
+    QVariantList out;
+    for (const Profile &p : m_store.profiles()) if (p.hidden) out.append(profileMap(p));
+    return out;
+}
+
+QString App::hideProfile(const QString &id)
+{
+    const Profile *p = m_store.find(id);
+    if (!p) return QStringLiteral("that profile no longer exists");
+    if (p->hasPin) return QStringLiteral("a profile with a PIN cannot be hidden");
+    if (!m_store.setHidden(id, true)) return m_store.lastError();
+    emit profilesChanged();
+    return {};
+}
+
+QString App::unhideProfile(const QString &id)
+{
+    if (!m_store.find(id)) return QStringLiteral("that profile no longer exists");
+    if (!m_store.setHidden(id, false)) return m_store.lastError();
+    emit profilesChanged();
+    return {};
 }
 
 QString App::accent() const
@@ -414,17 +440,25 @@ QString App::openProfile(const QString &id, const QString &pin)
 {
     const Profile *p = m_store.find(id);
     if (!p) return QStringLiteral("that profile no longer exists");
-    if (p->hasPin) {
-        PinLock &lock = m_pinLocks[id];
-        const qint64 now = QDateTime::currentMSecsSinceEpoch();
-        if (lock.until > now) return QStringLiteral("too many tries. wait %1 s").arg((lock.until - now + 999) / 1000);
-        if (!m_store.checkPin(id, pin)) {
-            if (++lock.fails >= 5) { lock.fails = 0; lock.until = now + 30'000; }
-            return QStringLiteral("wrong PIN");
-        }
-        lock = {};
-    }
+    const QString denied = checkPinLocked(id, pin);
+    if (!denied.isEmpty()) return denied;
     activate(id, false);
+    return {};
+}
+
+QString App::checkPinLocked(const QString &id, const QString &pin)
+{
+    const Profile *p = m_store.find(id);
+    if (!p) return QStringLiteral("that profile no longer exists");
+    if (!p->hasPin) return {};
+    PinLock &lock = m_pinLocks[id];
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (lock.until > now) return QStringLiteral("too many tries. wait %1 s").arg((lock.until - now + 999) / 1000);
+    if (!m_store.checkPin(id, pin)) {
+        if (++lock.fails >= 5) { lock.fails = 0; lock.until = now + 30'000; }
+        return QStringLiteral("wrong PIN");
+    }
+    lock = {};
     return {};
 }
 
@@ -839,8 +873,13 @@ QVariantMap App::exportProfileTo(const QUrl &file)
     }
     a.settings = m_store.settings(p->id);
     a.data = m_db.exportData();
-    const QByteArray bytes = a.toBytes();
+    return saveArchiveVerified(a, file, p->id);
+}
 
+QVariantMap App::saveArchiveVerified(const ProfileArchive &a, const QUrl &file, const QString &profileId)
+{
+    auto bad = [](const QString &why) { return QVariantMap{{QStringLiteral("ok"), false}, {QStringLiteral("error"), why}}; };
+    const QByteArray bytes = a.toBytes();
     const QString target = fileTarget(file);
     {
         QFile out(target);
@@ -855,10 +894,53 @@ QVariantMap App::exportProfileTo(const QUrl &file)
     QString err;
     if (back != bytes || !ProfileArchive::parse(back, &check, &err))
         return bad(QStringLiteral("the saved file did not check out. nothing was removed"));
-    m_exportVerifiedFor = p->id;
+    m_exportVerifiedFor = profileId;
     const QString where = file.isLocalFile() ? QFileInfo(target).absoluteFilePath() : QFileInfo(file.path()).fileName();
-    return {{QStringLiteral("ok"), true}, {QStringLiteral("error"), QString()}, {QStringLiteral("name"), p->name},
+    return {{QStringLiteral("ok"), true}, {QStringLiteral("error"), QString()}, {QStringLiteral("name"), a.name},
             {QStringLiteral("bytes"), qint64(bytes.size())}, {QStringLiteral("where"), where}};
+}
+
+QVariantMap App::exportProfileById(const QString &id, const QString &pin, const QUrl &file)
+{
+    auto bad = [](const QString &why) { return QVariantMap{{QStringLiteral("ok"), false}, {QStringLiteral("error"), why}}; };
+    const Profile *p = m_store.find(id);
+    if (!p) return bad(QStringLiteral("that profile no longer exists"));
+    if (id == m_profileId) return exportProfileTo(file);                   // (it is the open one: the settings way)
+    const QString denied = checkPinLocked(id, pin);
+    if (!denied.isEmpty()) return bad(denied);
+    if (file.isEmpty()) return bad(QStringLiteral("choose where to save the file"));
+    m_exportVerifiedFor.clear();
+
+    ProfileArchive a;
+    a.name = p->name;
+    a.accent = p->accent;
+    a.appVersion = QCoreApplication::applicationVersion();
+    a.exportedAt = QDateTime::currentMSecsSinceEpoch();
+    if (p->hasAvatar) {
+        QFile av(m_store.avatarPath(p->id));
+        if (av.open(QIODevice::ReadOnly)) a.avatarPng = av.readAll();
+    }
+    a.settings = m_store.settings(p->id);
+    {
+        ProfileDb db;                                                       // (nothing is open here, so the profile's own database is free to read)
+        if (!db.open(m_store.dirFor(id) + QStringLiteral("/profile.sqlite"))) return bad(QStringLiteral("could not read the profile's data: %1").arg(db.lastError()));
+        a.data = db.exportData();
+    }
+    return saveArchiveVerified(a, file, p->id);
+}
+
+QString App::ejectProfileById(const QString &id, const QString &pin, bool haveTheFile)
+{
+    if (id == m_profileId) return ejectProfile(haveTheFile);
+    if (!m_store.find(id)) return QStringLiteral("that profile no longer exists");
+    if (!haveTheFile) return QStringLiteral("confirm that you have the file first");
+    if (m_exportVerifiedFor != id) return QStringLiteral("save the profile to a file first");
+    const QString denied = checkPinLocked(id, pin);                          // (asked again: the file alone does not remove a secured profile)
+    if (!denied.isEmpty()) return denied;
+    m_exportVerifiedFor.clear();
+    const bool ok = m_store.remove(id);
+    emit profilesChanged();
+    return ok ? QString() : m_store.lastError();
 }
 
 QString App::ejectProfile(bool haveTheFile)

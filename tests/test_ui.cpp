@@ -4399,6 +4399,141 @@ private slots:
         QVERIFY(m_app->appsFolderPictureUrl(pic2).isEmpty());
     }
 
+    // The profile picker's right-click menu: open / hide / eject. A left click still just opens; a profile with a PIN cannot be hidden;
+    // hidden profiles are listed in settings (also for a guest) and can be shown again; eject saves and checks a file first, asks for the PIN
+    // of a secured profile, and removes only the profile (the music stays). Uses profiles of its own and leaves the others alone.
+    void profilePickerMenuOpensHidesAndEjects()
+    {
+        auto *w = window();
+        const QString wasId = m_app->profile().value("id").toString();
+        const bool wasGuest = m_app->guest();
+        const bool wasPinned = !wasId.isEmpty() && m_app->profileNeedsPin(wasId);
+        const int storeBefore = m_app->profileStore()->count();
+        const QString accent = m_app->accents().value(0);
+        const QString song = m_home.filePath(QStringLiteral("Music/A/B/01 Song.wav"));
+        QCOMPARE(m_app->createProfile(QStringLiteral("MenuPlain"), accent, QString(), QUrl()), QString());
+        const QString plainId = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        QCOMPARE(m_app->createProfile(QStringLiteral("MenuSecret"), accent, QStringLiteral("1357"), QUrl()), QString());
+        const QString secretId = m_app->profile().value("id").toString();
+        m_app->leaveProfile();
+        QCOMPARE(m_app->profileStore()->count(), storeBefore + 2);
+        QTRY_VERIFY(item("profileGate") && item("profileGate")->isVisible());
+        QCOMPARE(gateMode(), QStringLiteral("pick"));
+
+        auto rightClick = [&](const char *name) {
+            QQuickItem *i = waitItem(name);
+            QVERIFY(i && i->isVisible());
+            QPointF c;                                                           // (waits until the tile stands still, like click() does: the picker's layout may still be settling)
+            for (int k = 0; k < 12; ++k) {
+                i = item(name);
+                QVERIFY(i);
+                const QPointF now = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
+                if (k > 0 && now == c) break;
+                c = now;
+                QTest::qWait(25);
+            }
+            QTest::mouseClick(w, Qt::RightButton, Qt::NoModifier, c.toPoint());
+        };
+        // a right click shows the three choices
+        rightClick("tile_MenuPlain");
+        QVERIFY(waitItem("tileOpen_MenuPlain") && waitItem("tileHide_MenuPlain") && waitItem("tileEject_MenuPlain"));
+        QVERIFY(item("tileHide_MenuPlain")->isEnabled());
+        shot("profile-menu");
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTRY_VERIFY(!find(w->contentItem(), QLatin1String("tileHide_MenuPlain")) || !find(w->contentItem(), QLatin1String("tileHide_MenuPlain"))->isVisible());
+        QVERIFY(!m_app->profileReady());                                         // (the menu did not open anything)
+        // a profile with a PIN cannot be hidden: the choice is greyed out and the app refuses too
+        rightClick("tile_MenuSecret");
+        QVERIFY(waitItem("tileHide_MenuSecret"));
+        QVERIFY(!item("tileHide_MenuSecret")->isEnabled());
+        QVERIFY(!m_app->hideProfile(secretId).isEmpty());
+        QVERIFY(!m_app->profileStore()->find(secretId)->hidden);
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTest::qWait(150);
+
+        // hide: the tile goes, the hint appears, the profile is only hidden (still in the store)
+        rightClick("tile_MenuPlain");
+        QVERIFY(click("tileHide_MenuPlain"));
+        QTRY_VERIFY(!find(w->contentItem(), QLatin1String("tile_MenuPlain")));
+        QVERIFY(find(w->contentItem(), QLatin1String("tile_MenuSecret")));
+        QTRY_VERIFY(item("hiddenHint") && item("hiddenHint")->isVisible());
+        QVERIFY(m_app->profileStore()->find(plainId)->hidden);
+        QCOMPARE(m_app->hiddenProfiles().size(), 1);
+        QCOMPARE(m_app->profileCount(), storeBefore + 2);
+
+        // hidden profiles are listed in settings, for a guest too; show it again from there
+        m_app->openGuest();
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("hiddenProfilesSection") && item("hiddenProfilesSection")->isVisible());
+        QVERIFY(waitItem("hiddenShow_MenuPlain") && waitItem("hiddenOpen_MenuPlain"));
+        ensureVisible(item("hiddenProfilesSection"));
+        shot("hidden-profiles");
+        QVERIFY(click("hiddenShow_MenuPlain"));
+        QTRY_VERIFY(!item("hiddenProfilesSection")->isVisible());
+        QVERIFY(!m_app->profileStore()->find(plainId)->hidden);
+        QVERIFY(m_app->hiddenProfiles().isEmpty());
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->leaveProfile();
+        QTRY_VERIFY(item("profileGate") && item("profileGate")->isVisible());
+        // ...and a left click simply opens the profile, no menu
+        QVERIFY(click("tile_MenuPlain"));
+        QTRY_VERIFY(m_app->profileReady() && m_app->profile().value("id").toString() == plainId);
+        m_app->leaveProfile();
+        QTRY_VERIFY(item("profileGate") && item("profileGate")->isVisible());
+
+        // eject from the picker: nothing is removed until a saved, checked file is confirmed
+        const QString file = m_home.filePath(QStringLiteral("menu-eject.hoptunes.json"));
+        rightClick("tile_MenuPlain");
+        QVERIFY(click("tileEject_MenuPlain"));
+        QTRY_COMPARE(gateMode(), QStringLiteral("eject"));
+        QCOMPARE(item("profileGate")->property("ejectStep").toString(), QStringLiteral("save"));       // (no PIN to ask for)
+        QVERIFY(item("ejectChooseFile")->isVisible());
+        shot("profile-eject");
+        QVERIFY(!m_app->ejectProfileById(plainId, QString(), true).isEmpty());                      // not before the file is saved
+        QVERIFY(m_app->profileStore()->find(plainId));
+        const QVariantMap saved = m_app->exportProfileById(plainId, QString(), QUrl::fromLocalFile(file));   // what the save dialog does
+        QVERIFY2(saved.value("ok").toBool(), qPrintable(saved.value("error").toString()));
+        QVERIFY(QFileInfo(file).size() > 0);
+        QVERIFY(item("profileGate")->setProperty("ejectResult", saved) && item("profileGate")->setProperty("ejectStep", QStringLiteral("confirm")));
+        QTRY_VERIFY(item("ejectConfirm")->isVisible());
+        QVERIFY(!item("ejectConfirm")->isEnabled());                                                // needs "I have the file"
+        QVERIFY(click("ejectHaveFile"));
+        QTRY_VERIFY(item("ejectConfirm")->isEnabled());
+        QVERIFY(click("ejectConfirm"));
+        QTRY_VERIFY(!m_app->profileStore()->find(plainId));
+        QTRY_COMPARE(gateMode(), QStringLiteral("pick"));
+        QVERIFY(QFile::exists(song));                                                               // the music stays
+        // the saved file can be read back as a profile
+        QVERIFY(m_app->inspectProfileFile(QUrl::fromLocalFile(file)).value("ok").toBool());
+
+        // a secured profile asks for its PIN: the wrong one saves and removes nothing, the right one does
+        const QString file2 = m_home.filePath(QStringLiteral("menu-eject-secret.hoptunes.json"));
+        rightClick("tile_MenuSecret");
+        QVERIFY(click("tileEject_MenuSecret"));
+        QTRY_COMPARE(gateMode(), QStringLiteral("eject"));
+        QCOMPARE(item("profileGate")->property("ejectStep").toString(), QStringLiteral("pin"));
+        QVERIFY(item("ejectPin")->isVisible());
+        const QVariantMap wrong = m_app->exportProfileById(secretId, QStringLiteral("0000"), QUrl::fromLocalFile(file2));
+        QVERIFY(!wrong.value("ok").toBool() && wrong.value("error").toString().contains("PIN"));
+        QVERIFY(!QFile::exists(file2));
+        QVERIFY(!m_app->ejectProfileById(secretId, QStringLiteral("0000"), true).isEmpty());
+        QVERIFY(m_app->profileStore()->find(secretId));
+        const QVariantMap right = m_app->exportProfileById(secretId, QStringLiteral("1357"), QUrl::fromLocalFile(file2));
+        QVERIFY2(right.value("ok").toBool(), qPrintable(right.value("error").toString()));
+        QVERIFY(!m_app->ejectProfileById(secretId, QStringLiteral("0000"), true).isEmpty());        // the file alone does not remove a secured profile
+        QVERIFY(m_app->profileStore()->find(secretId));
+        QCOMPARE(m_app->ejectProfileById(secretId, QStringLiteral("1357"), true), QString());
+        QVERIFY(!m_app->profileStore()->find(secretId));
+        QVERIFY(QFile::exists(song));
+        QCOMPARE(m_app->profileStore()->count(), storeBefore);
+        QVERIFY(click("ejectCancel"));                                                              // (the screen was still showing the secured profile's eject)
+        QTRY_COMPARE(gateMode(), QStringLiteral("pick"));
+        // back to how the other tests left things
+        if (wasGuest || wasPinned || wasId.isEmpty()) m_app->openGuest();
+        else QCOMPARE(m_app->openProfile(wasId), QString());
+    }
+
     // README renders of the visual music games, with the richer fixture library (see phoneMockupRenders):
     // Album Fall on the desktop, Musy Note and the phone visualizer on a phone. Skipped unless both variables are set.
     void visualGameRenders()
