@@ -188,6 +188,39 @@ private slots:
         QCOMPARE(r.total, 1);
     }
 
+    // A drive pulled out while it is being scanned must not make the scan forget anything (this used to wipe the whole index now and then:
+    // the folder was found, then gone, and the empty answer matched every row).
+    void aDriveGoneMidScanLosesNothing()
+    {
+        QTemporaryDir dir;
+        const QString base = QFileInfo(dir.path()).canonicalFilePath();
+        const QString drive = base + "/drive", other = base + "/other";
+        QVERIFY(QDir(base).mkpath("drive/Songs"));
+        QVERIFY(QDir(base).mkpath("other"));
+        QVERIFY(writeWav(drive + "/Songs/a.wav", 400));
+        QVERIFY(writeWav(drive + "/Songs/b.wav", 400));
+        QVERIFY(writeWav(other + "/c.wav", 400));
+        TrackIndex idx;
+        QVERIFY(idx.open(QStringLiteral(":memory:")));
+        auto r = Scanner::scanFolders(&idx, {drive, other});
+        QCOMPARE(r.total, 3);
+
+        // one file is really gone, and the drive follows it out while the scan is under way (the progress call is the moment in between)
+        QVERIFY(QFile::remove(drive + "/Songs/b.wav"));
+        bool pulled = false;
+        r = Scanner::scanFolders(&idx, {drive, other}, nullptr, [&](int, int) {
+            if (!pulled) { pulled = true; QVERIFY(QDir().rename(drive, base + "/drive.away")); }
+        });
+        QVERIFY(pulled);
+        QCOMPARE(r.removed, 0);                                           // not forgotten: it cannot be told apart from the drive being pulled
+        QCOMPARE(r.total, 3);
+        // plugged in again, the next scan tidies up what really went
+        QVERIFY(QDir().rename(base + "/drive.away", drive));
+        r = Scanner::scanFolders(&idx, {drive, other});
+        QCOMPARE(r.removed, 1);
+        QCOMPARE(r.total, 2);
+    }
+
     void coverArtEmbeddedAndFolder()
     {
         QTemporaryDir dir;
