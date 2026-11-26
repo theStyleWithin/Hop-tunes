@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
 
+#include "core/AppsLayout.h"
 #include "core/ProfileStore.h"
 #include "library/CollectionModels.h"
 #include "library/EpubBook.h"
@@ -173,6 +174,7 @@ class App : public QObject {
     Q_PROPERTY(QVariantList appsBackgrounds READ appsBackgrounds NOTIFY appsBackgroundChanged)  // the person's own pictures: {id, url, luma}
     Q_PROPERTY(int appsDim READ appsDim WRITE setAppsDim NOTIFY appsBackgroundChanged)           // how much a picture is darkened, 0 to 60 percent
     Q_PROPERTY(bool appHints READ appHints WRITE setAppHints NOTIFY appHintsChanged)   // the one-line descriptions that pop up on the apps tiles (on at first, the person can hide them)
+    Q_PROPERTY(QObject *appsLayout READ appsLayoutObject CONSTANT)   // where the apps and app folders are on the apps page (drag and drop, remembered per profile)
     Q_PROPERTY(bool appsEnabled READ appsEnabled WRITE setAppsEnabled NOTIFY appsEnabledChanged)   // the apps tab: off until the person turns it on (settings > apps)
     // A pretend live chat beside the video: every chatter is generated, nobody is real (off by default).
     Q_PROPERTY(QString videoOrientation READ videoOrientation WRITE setVideoOrientation NOTIFY videoOrientationChanged)   // phones: how videos open, "portrait" | "auto" | "landscape"
@@ -391,6 +393,12 @@ public:
     QVariantList appsBackgrounds() const;
     int appsDim() const { return m_appsDim; }
     void setAppsDim(int percent);
+    QObject *appsLayoutObject() { return &m_appsLayout; }
+    AppsLayout *appsLayout() { return &m_appsLayout; }          // for tests
+    // A folder's own picture: a square, resized copy kept in the profile (the original photo is never kept). "" or a plain sentence about what went wrong.
+    Q_INVOKABLE QString setAppsFolderPicture(const QString &folderId, const QUrl &image);
+    Q_INVOKABLE void removeAppsFolderPicture(const QString &folderId);
+    Q_INVOKABLE QString appsFolderPictureUrl(const QString &file) const;   // the file:// address of a folder picture ("" when there is none)
     static constexpr int kMaxAppsBackgrounds = 12;
     Q_INVOKABLE QString addAppsBackground(const QUrl &image);   // a resized copy goes in the profile; returns "" or a plain sentence about what went wrong
     Q_INVOKABLE void removeAppsBackground(const QString &id);
@@ -658,6 +666,8 @@ private:
     bool m_appHints = true;
     QString m_appsBg;                              // id of the chosen picture, or ""
     int m_appsDim = 25;
+    AppsLayout m_appsLayout;
+    QString appsFolderDir() const;
     struct AppsBg { QString id; double luma = 0.5; };
     QVector<AppsBg> m_appsBgs;
     QString appsBgDir() const;

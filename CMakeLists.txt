@@ -57,6 +57,7 @@ add_library(hoptunes_core STATIC
     src/core/Paths.h          src/core/Paths.cpp
     src/core/DiagLog.h        src/core/DiagLog.cpp
     src/core/ProfileStore.h src/core/ProfileStore.cpp
+    src/core/AppsLayout.h src/core/AppsLayout.cpp
     src/library/Track.h
     src/core/Sql.h
     src/library/TrackIndex.h  src/library/TrackIndex.cpp
@@ -292,6 +293,9 @@ if(HOPTUNES_BUILD_TESTS)
     add_executable(test_profiles tests/test_profiles.cpp)
     target_link_libraries(test_profiles PRIVATE hoptunes_core Qt6::Test)
     add_test(NAME profiles COMMAND test_profiles)
+    add_executable(test_appslayout tests/test_appslayout.cpp)
+    target_link_libraries(test_appslayout PRIVATE hoptunes_core Qt6::Test)
+    add_test(NAME appslayout COMMAND test_appslayout)
 
     add_executable(test_m4 tests/test_m4.cpp)
     target_link_libraries(test_m4 PRIVATE hoptunes_core Qt6::Test)

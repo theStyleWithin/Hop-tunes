@@ -7,6 +7,7 @@
 #ifdef HOPTUNES_NET_APPS
 #include "apps/ArchiveClient.h"
 #include "apps/DeviantArtClient.h"
+#include "core/AppsLayout.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
 #include "net/AppNet.h"
@@ -4214,6 +4215,188 @@ private slots:
         QCOMPARE(m_app->openProfile(profileId), QString());
         QCOMPARE(m_app->songs()->tracks().at(1).path, firstPath);
         shot("m8-songs-drag");
+    }
+
+    // The apps page: tiles can be dragged anywhere (even onto another page), swap places, be filed in folders (a folder opens inside the grid and an
+    // app is taken out again by dropping it on "all apps"), folders can be renamed, coloured and given a picture, and all of it is remembered by
+    // the profile. Drags are simulated with the mouse.
+    void appsCanBeDraggedFiledInFoldersAndRemembered()
+    {
+        auto *w = window();
+        AppsLayout *lay = m_app->appsLayout();
+        struct Restore { App *app; ~Restore() { app->appsLayout()->reset(); app->setAppsEnabled(false); } } restore{m_app.get()};
+        QVERIFY(m_app->profileReady() && !m_app->guest());
+        lay->reset();
+        w->setProperty("view", QStringLiteral("collection"));
+        m_app->setAppsEnabled(true);
+        QTRY_VERIFY(item("subTab_apps")->isVisible());
+        QVERIFY(click("subTab_apps"));
+        QTRY_VERIFY(item("appTile_kick") && item("appTile_kick")->isVisible());
+        QQuickItem *view = item("appsView");
+        QTRY_VERIFY(view->property("cellW").toReal() > 50);
+        const int perPage = view->property("perPage").toInt(), cols = view->property("cols").toInt();
+        auto cellCentre = [&](int slot) {
+            const int onPage = slot % perPage;
+            return view->mapToScene(QPointF((onPage % cols + 0.5) * view->property("cellW").toReal(),
+                                            view->property("dotsHeight").toReal() + (onPage / cols + 0.5) * view->property("cellH").toReal())).toPoint();
+        };
+        auto centreOf = [&](const char *name) { QQuickItem *i = item(name); return i->mapToScene(QPointF(i->width() / 2, i->height() / 2)).toPoint(); };
+        auto drag = [&](QPoint from, QPoint to) {
+            QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, from);
+            for (int k = 1; k <= 8; ++k) QTest::mouseMove(w, from + (to - from) * k / 8, 12);
+            QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, to);
+            QTest::qWait(200);
+        };
+        auto rightClickAt = [&](QPoint at) { QTest::mouseClick(w, Qt::RightButton, Qt::NoModifier, at); QTest::qWait(150); };
+        auto stand = [&](const char *name) {                          // (waits until the tile stands still, like click() does)
+            QPointF c;
+            for (int k = 0; k < 12; ++k) { QQuickItem *i = item(name); if (!i) return; const QPointF now = i->mapToScene(QPointF(i->width() / 2, i->height() / 2)); if (k > 0 && now == c) break; c = now; QTest::qWait(25); }
+        };
+
+        // default order, then a tile dragged to a free spot far from where it was
+        QCOMPARE(lay->slotOf("app:kick"), 0);
+        stand("appTile_kick");
+        drag(centreOf("appTile_kick"), cellCentre(8));
+        QTRY_COMPARE(lay->slotOf("app:kick"), 8);
+        QCOMPARE(lay->itemAt(0), QString());                                     // a gap: it can be anywhere
+        QTRY_VERIFY(item("appTile_kick")->mapToScene(QPointF(1, 1)).y() > item("appTile_nekocafe")->mapToScene(QPointF(1, 1)).y());   // (it is on the second row now)
+        // dropped on another tile: they swap
+        stand("appTile_kick");
+        drag(centreOf("appTile_kick"), centreOf("appTile_archive"));
+        QTRY_COMPARE(lay->slotOf("app:kick"), 1);
+        QCOMPARE(lay->slotOf("app:archive"), 8);
+        shot("apps-dragged");
+
+        // a new folder: the editor opens, the name is set, the folder is on the grid
+        QVERIFY(click("appsNewFolder"));
+        QTRY_VERIFY(item("appsFolderEditor")->isVisible());
+        type("appsFolderName", QStringLiteral("games"));
+        QVERIFY(click("appsFolderDone"));
+        QTRY_VERIFY(!item("appsFolderEditor")->isVisible());
+        QCOMPARE(lay->folders().size(), 1);
+        const QString fid = lay->folders().first().toMap().value("id").toString();
+        QCOMPARE(lay->folder(fid).value("name").toString(), QString("games"));
+        const QByteArray folderTile = ("appFolder_" + fid).toUtf8();
+        QTRY_VERIFY(item(folderTile.constData()) && item(folderTile.constData())->isVisible());
+        // an app dragged onto the folder goes into it, and leaves the grid
+        stand("appTile_deviantart");
+        drag(centreOf("appTile_deviantart"), centreOf(folderTile.constData()));
+        QTRY_COMPARE(lay->folderOf("deviantart"), fid);
+        QTRY_VERIFY(!find(w->contentItem(), QLatin1String("appTile_deviantart")));
+        shot("apps-folder-tile");
+        // the folder opens inside the grid and shows its app; the title says whose
+        QVERIFY(click(folderTile.constData()));
+        QTRY_COMPARE(view->property("openFolder").toString(), fid);
+        QTRY_VERIFY(item("appTile_deviantart") && item("appTile_deviantart")->isVisible());
+        QVERIFY(!find(w->contentItem(), QLatin1String("appTile_kick")));         // only what is inside
+        QVERIFY(item("appsFolderTitle")->property("text").toString().contains("games"));
+        shot("apps-folder-open");
+        // dropping the app on "all apps" takes it out; then the way back
+        stand("appTile_deviantart");
+        drag(centreOf("appTile_deviantart"), centreOf("appsFolderBack"));
+        QTRY_VERIFY(lay->folderOf("deviantart").isEmpty());
+        QVERIFY(lay->slotOf("app:deviantart") >= 0);
+        QVERIFY(click("appsFolderBack"));
+        QTRY_VERIFY(view->property("openFolder").toString().isEmpty());
+        QTRY_VERIFY(item("appTile_deviantart") && item("appTile_deviantart")->isVisible());
+
+        // the menus: an app's "move to a folder…" list files it, a folder's menu edits it
+        stand("appTile_archive");
+        rightClickAt(centreOf("appTile_archive"));
+        QVERIFY(click("appsMenuMoveToFolder"));
+        QTRY_VERIFY(item("appsFolderPicker")->isVisible());
+        const QByteArray moveTo = ("appsMoveTo_" + fid).toUtf8();
+        QVERIFY(click(moveTo.constData()));
+        QTRY_COMPARE(lay->folderOf("archive"), fid);
+        QTRY_VERIFY(!item("appsFolderPicker")->isVisible());
+        stand(folderTile.constData());
+        rightClickAt(centreOf(folderTile.constData()));
+        QVERIFY(click("appsMenuFolderEdit"));
+        QTRY_VERIFY(item("appsFolderEditor")->isVisible());
+        const QString colour = m_app->accents().value(2);
+        QVERIFY(click(("appsFolderColor_" + colour).toUtf8().constData()));
+        QCOMPARE(lay->folder(fid).value("color").toString(), colour.toLower());
+        QVERIFY(click("appsFolderColor_clear"));
+        QVERIFY(lay->folder(fid).value("color").toString().isEmpty());
+        QVERIFY(click(("appsFolderColor_" + colour).toUtf8().constData()));
+        // a picture: a square, rounded copy is kept in the profile (not the photo), and goes when the folder's picture is removed
+        QImage photo(400, 240, QImage::Format_RGB32);
+        photo.fill(QColor("#c0392b"));
+        const QString photoFile = m_home.filePath(QStringLiteral("folder-photo.png"));
+        QVERIFY(photo.save(photoFile));
+        QCOMPARE(m_app->setAppsFolderPicture(fid, QUrl::fromLocalFile(photoFile)), QString());
+        const QString picName = lay->folder(fid).value("picture").toString();
+        QVERIFY(!picName.isEmpty());
+        const QString picUrl = m_app->appsFolderPictureUrl(picName);
+        QVERIFY(!picUrl.isEmpty());
+        const QImage kept(QUrl(picUrl).toLocalFile());
+        QCOMPARE(kept.width(), kept.height());                                   // square
+        QVERIFY(kept.width() <= 320);
+        QCOMPARE(qAlpha(kept.pixel(1, 1)), 0);                                   // the corners are rounded (transparent)
+        QCOMPARE(qAlpha(kept.pixel(kept.width() / 2, kept.height() / 2)), 255);
+        QVERIFY(QFile::exists(photoFile));                                       // the person's photo is untouched
+        QVERIFY(!m_app->setAppsFolderPicture(fid, QUrl::fromLocalFile(m_home.filePath(QStringLiteral("Music/A/B/01 Song.wav")))).isEmpty());   // not a picture
+        QTest::qWait(300);
+        shot("apps-folder-editor");
+        QVERIFY(click("appsFolderPictureRemove"));
+        QTRY_VERIFY(lay->folder(fid).value("picture").toString().isEmpty());
+        QVERIFY(m_app->appsFolderPictureUrl(picName).isEmpty());                 // the file is gone too
+        QVERIFY(m_app->setAppsFolderPicture(fid, QUrl::fromLocalFile(photoFile)).isEmpty());
+        // renamed from the editor
+        item("appsFolderName")->setProperty("text", QStringLiteral("pals"));
+        QVERIFY(click("appsFolderRename"));
+        QCOMPARE(lay->folder(fid).value("name").toString(), QString("pals"));
+        QVERIFY(click("appsFolderDone"));
+        QTRY_VERIFY(!item("appsFolderEditor")->isVisible());
+        shot("apps-folder-styled");
+
+        // a tile dropped on a page dot goes to that page (a spare page appears while dragging)
+        stand("appTile_nekocafe");
+        {
+            const QPoint from = centreOf("appTile_nekocafe");
+            QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, from);
+            for (int k = 1; k <= 4; ++k) QTest::mouseMove(w, from + QPoint(0, -k * 6), 12);
+            QTRY_VERIFY(item("appsDot_1") != nullptr);                          // (the spare page)
+            QPoint at = from + QPoint(0, -24);
+            QTest::qWait(150);                                                  // (the dots settle: a page was added)
+            for (int k = 1; k <= 6; ++k) {                                      // (aimed again every step: the row of dots re-centres when the page appears)
+                const QPoint dot = centreOf("appsDot_1");
+                at = QPoint(at.x() + (dot.x() - at.x()) * k / 6, at.y() + (dot.y() - at.y()) * k / 6);
+                QTest::mouseMove(w, at, 12);
+            }
+            const QPoint dotNow = centreOf("appsDot_1");
+            QTest::mouseMove(w, dotNow, 12);
+            QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, dotNow);
+            QTest::qWait(250);
+        }
+        QTRY_COMPARE(lay->slotOf("app:nekocafe") / perPage, 1);
+        QTRY_VERIFY(item("appsDot_1") != nullptr);                              // (two pages now)
+
+        // remembered: the profile keeps it, and opening the profile again gives the same page
+        const QString id = m_app->profile().value("id").toString();
+        const QJsonObject saved = m_app->profileStore()->settings(id).value("appsLayout").toObject();
+        QVERIFY(!saved.isEmpty());
+        const QJsonObject want = lay->toJson();
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(id), QString());
+        QCOMPARE(lay->toJson(), want);
+        QCOMPARE(lay->folder(fid).value("name").toString(), QString("pals"));
+        QCOMPARE(lay->slotOf("app:nekocafe") / perPage, 1);
+        QCOMPARE(lay->folderOf("archive"), fid);
+        // a guest keeps the default page and none of this
+        m_app->leaveProfile();
+        m_app->openGuest();
+        QVERIFY(lay->folders().isEmpty());
+        QCOMPARE(lay->slotOf("app:kick"), 0);
+        QCOMPARE(m_app->openProfile(id), QString());
+        QCOMPARE(lay->folder(fid).value("name").toString(), QString("pals"));
+        // deleting the folder gives its apps back; the picture file goes
+        const QString pic2 = lay->folder(fid).value("picture").toString();
+        QVERIFY(!m_app->appsFolderPictureUrl(pic2).isEmpty());
+        lay->deleteFolder(fid);
+        QTRY_VERIFY(lay->folders().isEmpty());
+        QVERIFY(lay->slotOf("app:archive") >= 0);
+        QVERIFY(m_app->appsFolderPictureUrl(pic2).isEmpty());
     }
 
     // README renders of the visual music games, with the richer fixture library (see phoneMockupRenders):
