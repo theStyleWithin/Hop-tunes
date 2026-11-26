@@ -90,6 +90,7 @@ SectionScanner::Result SectionScanner::scanFolders(SectionKind kind, SectionInde
         const QFileInfo folderInfo(rawFolder);
         if (!folderInfo.isDir()) continue;            // unplugged drive: keep its rows
         const QString folder = folderInfo.canonicalFilePath();
+        if (folder.isEmpty()) continue;                 // the drive went away between the two questions: an empty path would match every row, so it is skipped like an unplugged drive
         const QHash<QString, SectionIndex::FileStamp> known = index->stampsUnder(kind, folder);
 
         QList<QFileInfo> files;
@@ -131,6 +132,8 @@ SectionScanner::Result SectionScanner::scanFolders(SectionKind kind, SectionInde
         if (cancelled()) break;
         if (progress) progress(total, total);
 
+        // A drive pulled out while it was being walked gives a short (or empty) list: that is not a reason to forget its files, or anyone else's.
+        if (!QFileInfo(folder).isDir()) continue;
         QStringList gone;
         for (auto k = known.constBegin(); k != known.constEnd(); ++k)
             if (!seen.contains(k.key())) gone.append(k.key());

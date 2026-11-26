@@ -4,6 +4,9 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+### Fixed
+- **A drive pulled out while Hop-tunes was scanning could make it forget songs until the next rescan.** The music, video and section scans first asked whether a folder was there and then for its real path; if the drive vanished in between, the empty answer matched every file in the library, so the scan forgot them all (the songs came back on the next rescan, but the library looked empty meanwhile). A folder that disappears while it is scanned is now left alone, like an unplugged drive, and a test covers it.
+
 ## [1.13.0] - 2026-11-20: DeviantArt and the Internet Archive
 
 ### Added
