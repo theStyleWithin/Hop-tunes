@@ -3530,6 +3530,21 @@ QVariantMap App::gameDetail(const QString &path) const
             {QStringLiteral("editable"), profileReady() && !m_guest}};
 }
 
+void App::ejectCurrentProfile()
+{
+    if (!profileReady() || m_guest) return;          // a guest has nothing to eject
+    m_pendingEject = profile();
+    emit pendingEjectChanged();
+    leaveProfile();                                  // the picker then starts the eject flow (and asks for the PIN of a secured profile)
+}
+
+void App::clearPendingEject()
+{
+    if (m_pendingEject.isEmpty()) return;
+    m_pendingEject.clear();
+    emit pendingEjectChanged();
+}
+
 void App::setAndroidGames(bool on)
 {
     if (on == m_androidGamesOn) return;

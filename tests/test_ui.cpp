@@ -4902,6 +4902,30 @@ private slots:
         QVERIFY(waitItem("hiddenShow_MenuPlain") && waitItem("hiddenOpen_MenuPlain"));
         ensureVisible(item("hiddenProfilesSection"));
         shot("hidden-profiles");
+        // it sits near the bottom, just above "about" (out of sight of a glance at the top of settings)
+        QVERIFY(item("aboutVersion"));
+        QVERIFY(item("hiddenProfilesSection")->mapToScene(QPointF(0, 0)).y() < item("aboutVersion")->mapToScene(QPointF(0, 0)).y());
+        QVERIFY(item("hiddenProfilesSection")->mapToScene(QPointF(0, 0)).y() > item("settingsAddFolder_podcasts")->mapToScene(QPointF(0, 0)).y());
+        // a left click on a hidden profile in the list opens it, and it stays hidden; below the remove-profile button, above "about"
+        QVERIFY(waitItem("hiddenRow_MenuPlain"));
+        QVERIFY(click("hiddenRow_MenuPlain"));
+        QTRY_VERIFY(m_app->profileReady() && m_app->profile().value("id").toString() == plainId);
+        QVERIFY(m_app->profileStore()->find(plainId)->hidden);
+        QCOMPARE(m_app->hiddenProfiles().size(), 1);
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("hiddenProfilesSection") && item("hiddenProfilesSection")->isVisible());
+        QTRY_VERIFY(item("removeProfileRow") && item("removeProfileRow")->isVisible());
+        {
+            const qreal remove = item("removeProfileRow")->mapToScene(QPointF(0, 0)).y();
+            const qreal hidden = item("hiddenProfilesSection")->mapToScene(QPointF(0, 0)).y();
+            const qreal about = item("aboutVersion")->mapToScene(QPointF(0, 0)).y();
+            QVERIFY2(remove < hidden && hidden < about, qPrintable(QStringLiteral("remove %1 hidden %2 about %3").arg(remove).arg(hidden).arg(about)));
+        }
+        m_app->leaveProfile();
+        m_app->openGuest();
+        w->setProperty("view", QStringLiteral("settings"));
+        QTRY_VERIFY(item("hiddenProfilesSection") && item("hiddenProfilesSection")->isVisible());
+        ensureVisible(item("hiddenProfilesSection"));
         QVERIFY(click("hiddenShow_MenuPlain"));
         QTRY_VERIFY(!item("hiddenProfilesSection")->isVisible());
         QVERIFY(!m_app->profileStore()->find(plainId)->hidden);
@@ -4963,6 +4987,110 @@ private slots:
         QVERIFY(click("ejectCancel"));                                                              // (the screen was still showing the secured profile's eject)
         QTRY_COMPARE(gateMode(), QStringLiteral("pick"));
         // back to how the other tests left things
+        if (wasGuest || wasPinned || wasId.isEmpty()) m_app->openGuest();
+        else QCOMPARE(m_app->openProfile(wasId), QString());
+    }
+
+    // The profile icon's menu (right click, top right, while a profile is open): switch, eject and quick settings. Eject goes back to the picker and
+    // starts the eject flow for that profile (a secured one asks for its PIN first); a guest has nothing to eject.
+    void profileIconMenuSwitchesEjectsAndOpensSettings()
+    {
+        auto *w = window();
+        const QString wasId = m_app->profile().value("id").toString();
+        const bool wasGuest = m_app->guest();
+        const bool wasPinned = !wasId.isEmpty() && m_app->profileNeedsPin(wasId);
+        const QString accent = m_app->accents().value(0);
+        QCOMPARE(m_app->createProfile(QStringLiteral("ChipPlain"), accent, QString(), QUrl()), QString());      // (creating a profile opens it)
+        const QString plainId = m_app->profile().value("id").toString();
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(m_app->profileReady());
+        auto rightClick = [&](const char *name) {
+            QQuickItem *i = waitItem(name);
+            QVERIFY(i && i->isVisible());
+            QPointF c;
+            for (int k = 0; k < 12; ++k) {                                       // (waits until the chip stands still, like click() does)
+                i = item(name);
+                QVERIFY(i);
+                const QPointF now = i->mapToScene(QPointF(i->width() / 2, i->height() / 2));
+                if (k > 0 && now == c) break;
+                c = now;
+                QTest::qWait(25);
+            }
+            QTest::mouseClick(w, Qt::RightButton, Qt::NoModifier, c.toPoint());
+        };
+
+        // a right click on the profile icon shows the three choices; a left click still just switches
+        rightClick("profileChip");
+        QVERIFY(waitItem("chipMenuSwitch") && waitItem("chipMenuEject") && waitItem("chipMenuSettings"));
+        QVERIFY(item("chipMenuEject")->isVisible() && item("chipMenuEject")->height() > 10);
+        QCOMPARE(item("chipMenuSwitch")->property("text").toString(), QStringLiteral("switch"));
+        QCOMPARE(item("chipMenuSettings")->property("text").toString(), QStringLiteral("quick settings"));
+        shot("profile-icon-menu");
+        QVERIFY(m_app->profileReady());                                          // (the menu opened nothing)
+
+        // quick settings: just the settings page, still in the profile
+        QVERIFY(click("chipMenuSettings"));
+        QTRY_COMPARE(w->property("view").toString(), QStringLiteral("settings"));
+        QVERIFY(m_app->profileReady());
+        QCOMPARE(m_app->profile().value("id").toString(), plainId);
+
+        // switch (from the settings page: the icon is in the top bar there): back to the picker
+        rightClick("profileChip");
+        QVERIFY(click("chipMenuSwitch"));
+        QTRY_VERIFY(!m_app->profileReady());
+        QTRY_VERIFY(item("profileGate") && item("profileGate")->isVisible());
+        QCOMPARE(gateMode(), QStringLiteral("pick"));
+
+        // eject: the picker comes up already in the eject flow for that profile; nothing is removed until a saved, checked file is confirmed
+        QCOMPARE(m_app->openProfile(plainId, QString()), QString());
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(m_app->profileReady());
+        rightClick("profileChip");
+        QVERIFY(click("chipMenuEject"));
+        QTRY_VERIFY(!m_app->profileReady());
+        QTRY_COMPARE(gateMode(), QStringLiteral("eject"));
+        QCOMPARE(item("profileGate")->property("ejectTarget").toMap().value("id").toString(), plainId);
+        QCOMPARE(item("profileGate")->property("ejectStep").toString(), QStringLiteral("save"));       // (no PIN to ask for)
+        QVERIFY(m_app->pendingEject().isEmpty());                                // (the picker took the request)
+        QVERIFY(m_app->profileStore()->find(plainId));                           // nothing is removed yet
+        shot("profile-icon-eject");
+        QVERIFY(click("ejectCancel"));
+        QTRY_COMPARE(gateMode(), QStringLiteral("pick"));
+        QVERIFY(m_app->profileStore()->find(plainId));
+
+        // a profile with a PIN: the eject flow asks for it first
+        QCOMPARE(m_app->createProfile(QStringLiteral("ChipSecret"), accent, QStringLiteral("2468"), QUrl()), QString());
+        const QString secretId = m_app->profile().value("id").toString();
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(m_app->profileReady());
+        rightClick("profileChip");
+        QVERIFY(click("chipMenuEject"));
+        QTRY_COMPARE(gateMode(), QStringLiteral("eject"));
+        QCOMPARE(item("profileGate")->property("ejectStep").toString(), QStringLiteral("pin"));
+        QVERIFY(m_app->profileStore()->find(secretId));
+        QVERIFY(click("ejectCancel"));
+        QTRY_COMPARE(gateMode(), QStringLiteral("pick"));
+
+        // a guest has nothing to eject: switch and quick settings only
+        m_app->openGuest();
+        w->setProperty("view", QStringLiteral("collection"));
+        QTRY_VERIFY(m_app->profileReady() && m_app->guest());
+        rightClick("profileChip");
+        QVERIFY(waitItem("chipMenuSwitch") && waitItem("chipMenuSettings"));
+        QVERIFY(item("chipMenuSwitch")->isVisible());
+        QVERIFY(!item("chipMenuEject")->isVisible());
+        QTest::keyClick(w, Qt::Key_Escape);
+        m_app->ejectCurrentProfile();                                            // (and the app itself refuses it for a guest)
+        QVERIFY(m_app->profileReady() && m_app->guest());
+        QVERIFY(m_app->pendingEject().isEmpty());
+
+        // clean up: remove the two profiles made here, and go back to how the other tests left things
+        m_app->leaveProfile();
+        QCOMPARE(m_app->openProfile(plainId, QString()), QString());
+        QVERIFY(m_app->removeProfile().isEmpty());
+        QCOMPARE(m_app->openProfile(secretId, QStringLiteral("2468")), QString());
+        QVERIFY(m_app->removeProfile().isEmpty());
+        QVERIFY(!m_app->profileStore()->find(plainId) && !m_app->profileStore()->find(secretId));
         if (wasGuest || wasPinned || wasId.isEmpty()) m_app->openGuest();
         else QCOMPARE(m_app->openProfile(wasId), QString());
     }

@@ -38,7 +38,11 @@ Rectangle {
     }
     Connections {
         target: hop
-        function onProfileChanged() { if (!hop.profileReady) gate.show(hop.profileCount === 0 ? "create" : "pick") }
+        function onProfileChanged() {
+            if (hop.profileReady) return
+            gate.show(hop.profileCount === 0 ? "create" : "pick")
+            if (hop.pendingEject.id) { const p = hop.pendingEject; hop.clearPendingEject(); gate.startEject(p) }    // "eject" from the profile icon's menu
+        }
     }
 
     FileDialog {

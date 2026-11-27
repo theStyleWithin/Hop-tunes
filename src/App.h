@@ -559,6 +559,11 @@ public:
     Q_INVOKABLE bool profileNeedsPin(const QString &id) const;
     Q_INVOKABLE void openGuest();
     Q_INVOKABLE void leaveProfile();                        // stop playback, back to the picker
+    // the profile icon's menu: "eject" goes back to the picker and starts the eject flow for the profile that was open (the picker takes the request)
+    Q_PROPERTY(QVariantMap pendingEject READ pendingEject NOTIFY pendingEjectChanged)
+    QVariantMap pendingEject() const { return m_pendingEject; }
+    Q_INVOKABLE void ejectCurrentProfile();
+    Q_INVOKABLE void clearPendingEject();
     Q_INVOKABLE QString renameProfile(const QString &name);
     Q_INVOKABLE QString setProfileAccent(const QString &accent);
     Q_INVOKABLE QString setProfilePin(const QString &currentPin, const QString &newPin);   // newPin "" removes
@@ -652,6 +657,7 @@ signals:
     void videoCategoryChanged();
     void sectionFoldersChanged();
     void gamesFoldersChanged();
+    void pendingEjectChanged();
     void gridDbKeyChanged();
     void gridDbPicked(const QString &error);
     void androidGamesChanged();
@@ -861,6 +867,7 @@ private:
     QStringList m_gameFolders;
     QString m_gamesShelfMode = QStringLiteral("covers");
     bool m_gridDbHasKey = false;
+    QVariantMap m_pendingEject;
     QString gridDbKeyFile() const;
     QString saveGameCoverImage(const QString &gamePath, QImage img);
     QString setGameCoverFromData(const QString &gamePath, const QByteArray &bytes);
