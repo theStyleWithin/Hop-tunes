@@ -4,6 +4,14 @@ All notable changes to Hop-tunes. Versions follow [Semantic Versioning](https://
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-11-27: Profile touch-ups
+
+### Added
+- **A menu on your profile icon.** While a profile is open, right-click the profile icon at the top right (or long-press it on a touch screen) for **switch**, **eject** and **quick settings**. *eject* goes back to the picker and starts the eject flow for that profile (a profile with a PIN asks for it first; a guest has nothing to eject); *quick settings* just opens the settings page. A left click still switches profile.
+
+### Changed
+- **The hidden profiles list is lower in settings**, just above *about*, so it is out of sight of anyone glancing at the top of the page (it is a privacy tidy-up, not a lock). **Click a hidden profile in the list to open it**; it stays hidden (the *open* and *show on the picker* buttons are still there).
+
 ## [1.15.0] - 2026-11-27: The game shelf
 
 ### Added

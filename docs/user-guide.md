@@ -418,8 +418,16 @@ Hop-tunes data (playlists, history, settings); it never touches music files.
 On the "who's listening?" page, **right-click** a profile (or **long-press** it on a touch screen) for three choices. A left click still just opens it.
 
 - **open**: the same as a left click (a profile with a PIN asks for it first).
-- **hide**: takes the profile off the picker. A **hidden profiles** list then appears in *settings* (a guest sees it too) where each hidden profile can be **opened** or **shown on the picker** again. A profile with a PIN cannot be hidden. Hiding only tidies the picker: it is not a lock, a PIN is.
+- **hide**: takes the profile off the picker. A **hidden profiles** list then appears at the bottom of *settings* (just above *about*; a guest sees it too) where each hidden profile can be **opened** (click it, or its *open* button: it stays hidden) or **shown on the picker** again. A profile with a PIN cannot be hidden. Hiding only tidies the picker: it is not a lock, a PIN is.
 - **eject**: saves the profile to a file, checks the file, and only then removes the profile from this computer (its settings, playlists and history; never your music). A profile with a PIN asks for it first, and nothing is removed until you confirm that you have the file. Import the file on any device to get the profile back.
+
+### The profile icon's menu
+
+While a profile is open, **right-click your profile icon** (top right; or long-press it on a touch screen) for three quick choices. A left click still just switches profile.
+
+- **switch**: back to the "who's listening?" page, like a left click.
+- **eject**: goes back to the picker and starts the eject flow for this profile (a profile with a PIN asks for it first; nothing is removed until you confirm that you have the saved file). A guest has nothing to eject, so it is not offered.
+- **quick settings**: opens the settings page.
 
 ## Settings
 
