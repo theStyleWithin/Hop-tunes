@@ -183,6 +183,40 @@ public:
     void abortAll() override {}
 };
 
+// SteamGridDB as the cover picker sees it: a game search, the covers of a game, and a picture for every picture address (only its own hosts ever reach this)
+class FakeGridDb : public NetTransport {
+public:
+    QList<QUrl> asked;
+    QList<QByteArray> auths;
+    static QByteArray png()
+    {
+        QImage img(600, 900, QImage::Format_RGB32);
+        img.fill(QColor(0x2e, 0x8b, 0x57));
+        QByteArray out;
+        QBuffer b(&out);
+        b.open(QIODevice::WriteOnly);
+        img.save(&b, "PNG");
+        return out;
+    }
+    void get(const QUrl &url, const QByteArray &, const QByteArray &, NetLimits limits, Done done) override
+    {
+        asked << url;
+        auths << limits.authorization;
+        NetReply r; r.status = 200;
+        const QString s = url.toString();
+        if (s.contains("/search/autocomplete/"))
+            r.body = QJsonDocument(QJsonObject{{"success", true}, {"data", QJsonArray{QJsonObject{{"id", 5}, {"name", "Wuthering Waves"}, {"verified", true}}}}}).toJson();
+        else if (s.contains("/grids/game/5"))
+            r.body = QJsonDocument(QJsonObject{{"success", true}, {"data", QJsonArray{
+                QJsonObject{{"id", 1}, {"url", "https://cdn2.steamgriddb.com/grid/one.png"}, {"thumb", "https://cdn2.steamgriddb.com/thumb/one.jpg"}, {"width", 600}, {"height", 900}, {"author", QJsonObject{{"name", "Ana"}}}},
+                QJsonObject{{"id", 2}, {"url", "https://cdn2.steamgriddb.com/grid/two.png"}, {"thumb", "https://cdn2.steamgriddb.com/thumb/two.jpg"}, {"width", 600}, {"height", 900}}}}}).toJson();
+        else if (url.host() == "cdn2.steamgriddb.com") r.body = png();
+        else { r.status = 404; r.error = "not found"; }
+        QTimer::singleShot(0, [done, r] { done(r); });
+    }
+    void abortAll() override {}
+};
+
 // A DeviantArt feed like the real one, with made-up artists and works, and a small picture for every picture address
 class FakeDeviantArt : public NetTransport {
 public:
@@ -2271,6 +2305,104 @@ private slots:
         QVERIFY(!m_app->profileStore()->settings(id).value("androidGames").toBool());
         m_app->applyAndroidGames(json);
         QCOMPARE(m_app->games()->total(), 0);
+        QVERIFY(click("subTab_music"));
+    }
+
+    // The cover picker on a game's page (SteamGridDB): off until allowed, needs the person's own key (kept in a file of its own, never in the profile
+    // settings), searches by name, shows covers and keeps the one picked as a copy in the profile. The key goes only to the API, never to a picture server.
+    void aCoverCanBeFoundOnSteamGridDbWithTheirOwnKey()
+    {
+        window()->setProperty("view", QStringLiteral("collection"));
+        QVERIFY(m_app->netAppsBuilt());
+        auto fake = std::make_unique<FakeGridDb>();
+        FakeGridDb *f = fake.get();
+        m_app->gateway()->setTransport(std::move(fake));
+        struct Restore { App *app; ~Restore() { app->setAppNetAllowed("steamgriddb", false); app->clearGridDbKey(); } } restore{m_app.get()};
+        const QString id = m_app->profile().value("id").toString();
+        QVERIFY(!m_app->appNetAllowed("steamgriddb"));
+        QVERIFY(!m_app->gridDbHasKey());
+
+        QVERIFY(m_app->addManualGame(QStringLiteral("Wuthering Waves"), QString()).isEmpty());
+        QVERIFY(click("subTab_games"));
+        QTRY_COMPARE(m_app->games()->total(), 1);
+        QTRY_VERIFY(item("gameCard_0") != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT((click("gameCard_0"), item("gameDetail") && item("gameDetail")->isVisible()), 8000);
+        QTRY_VERIFY(item("gameGridDbOpen") && item("gameGridDbOpen")->isVisible());
+        QCOMPARE(f->asked.size(), 0);                                          // nothing is contacted just by looking at a game
+
+        // 1. nothing goes out until it is allowed, and the card says what is sent
+        QVERIFY(click("gameGridDbOpen"));
+        QTRY_VERIFY(item("gameGridDbAllow") && item("gameGridDbAllow")->isVisible());
+        QVERIFY(!item("gameGridDbKey") || !item("gameGridDbKey")->isVisible());
+        shot("games-griddb-allow");
+        QCOMPARE(f->asked.size(), 0);
+        QVERIFY(click("gameGridDbAllow"));
+        QVERIFY(m_app->appNetAllowed("steamgriddb"));
+        QVERIFY(m_app->profileStore()->settings(id).value("appsNet").toObject().value("steamgriddb").toBool());
+
+        // 2. the person's own key: a wrong-looking one is refused; a good one is kept in a file of its own (0600), not in the profile settings
+        QTRY_VERIFY(item("gameGridDbKey") && item("gameGridDbKey")->isVisible());
+        item("gameGridDbKey")->setProperty("text", QStringLiteral("not a key!"));
+        QVERIFY(click("gameGridDbSaveKey"));
+        QVERIFY(!m_app->gridDbHasKey());
+        const QString key = QStringLiteral("abcdEFGH12345678xyz");
+        item("gameGridDbKey")->setProperty("text", key);
+        QVERIFY(click("gameGridDbSaveKey"));
+        QVERIFY(m_app->gridDbHasKey());
+        const QString keyFile = m_app->profileStore()->dirFor(id) + QStringLiteral("/steamgriddb.key");
+        QVERIFY(QFile::exists(keyFile));
+        const auto perms = QFileInfo(keyFile).permissions();
+        QVERIFY(perms & QFileDevice::ReadOwner && perms & QFileDevice::WriteOwner);
+        QVERIFY(!(perms & (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOwner)));   // 0600
+        QVERIFY(!QJsonDocument(m_app->profileStore()->settings(id)).toJson().contains(key.toUtf8()));
+
+        // 3. saving the key opens the search (the game's own name is searched), the matches are listed, a match shows its covers
+        QTRY_VERIFY(item("gameGridDbGame_0") && item("gameGridDbGame_0")->isVisible());
+        QVERIFY(!f->asked.isEmpty());
+        QCOMPARE(f->asked.first().host(), QStringLiteral("www.steamgriddb.com"));
+        QCOMPARE(f->auths.first(), QByteArray("Bearer ") + key.toUtf8());
+        QVERIFY(click("gameGridDbGame_0"));
+        QTRY_VERIFY(item("gameGridDbGrid_1") != nullptr);
+        QVERIFY(item("gameGridDbGrid_0")->isVisible());
+        shot("games-griddb-covers");
+
+        // 4. picking a cover keeps a copy in the profile and closes the picker
+        QVERIFY(click("gameGridDbGrid_0"));
+        QTRY_VERIFY_WITH_TIMEOUT(m_app->gameDetail(m_app->games()->pathAt(0)).value("customCover").toBool(), 8000);
+        const QString cover = QUrl(m_app->gameDetail(m_app->games()->pathAt(0)).value("cover").toString()).toLocalFile();
+        QVERIFY(QFile::exists(cover));
+        QVERIFY(cover.startsWith(m_app->profileStore()->dirFor(id)));
+        const QImage saved(cover);
+        QVERIFY(saved.width() <= 600 && saved.height() <= 900 && !saved.isNull());
+        QTRY_VERIFY(!item("gameGridDbGrid_0") || !item("gameGridDbGrid_0")->isVisible());
+        QVERIFY(!m_app->gridDbClient()->isOpen());
+
+        // the key went only to the API host; pictures came from SteamGridDB's own servers without it
+        bool sawApi = false, sawCdn = false;
+        for (int i = 0; i < f->asked.size(); ++i) {
+            const QString host = f->asked[i].host();
+            QVERIFY2(host.endsWith(QLatin1String("steamgriddb.com")), qPrintable(host));
+            if (host == QLatin1String("www.steamgriddb.com")) { sawApi = true; QVERIFY(!f->auths[i].isEmpty()); }
+            else { sawCdn = true; QVERIFY2(f->auths[i].isEmpty(), qPrintable(host)); }
+        }
+        QVERIFY(sawApi && sawCdn);
+
+        // the key stays with the profile, not with an export; removing it deletes the file and closes everything
+        m_app->leaveProfile();
+        QVERIFY(!m_app->gridDbHasKey());
+        QCOMPARE(m_app->openProfile(id), QString());
+        QVERIFY(m_app->gridDbHasKey());
+        QVERIFY(m_app->appNetAllowed("steamgriddb"));
+        m_app->clearGridDbKey();
+        QVERIFY(!m_app->gridDbHasKey());
+        QVERIFY(!QFile::exists(keyFile));
+        m_app->setAppNetAllowed("steamgriddb", false);
+        QVERIFY(!m_app->gateway()->allowed(QStringLiteral("steamgriddb")));
+        // back to a clean shelf for the next test
+        const QString manual = m_app->games()->pathAt(0);
+        m_app->clearGameCover(manual);
+        m_app->removeManualGame(manual);
+        QTRY_COMPARE(m_app->games()->total(), 0);
         QVERIFY(click("subTab_music"));
     }
 

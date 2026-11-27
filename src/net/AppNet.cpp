@@ -40,6 +40,7 @@ public:
         req.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
         req.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
         req.setTransferTimeout(limits.timeoutMs);
+        if (!limits.authorization.isEmpty()) req.setRawHeader("Authorization", limits.authorization);
         if (limits.rangeStart >= 0 && limits.rangeLength > 0)
             req.setRawHeader("Range", "bytes=" + QByteArray::number(limits.rangeStart) + "-" + QByteArray::number(limits.rangeStart + limits.rangeLength - 1));
         QNetworkReply *rep = m_nam.get(req);
@@ -85,6 +86,8 @@ QStringList AppNet::hostsFor(const QString &app)
         return {QStringLiteral("archive.org")};
     if (app == QLatin1String("deviantart"))   // the public RSS feeds (the pictures come from the media host below)
         return {QStringLiteral("backend.deviantart.com")};
+    if (app == QLatin1String("steamgriddb"))  // the cover search (the person's own key goes only here); the pictures come from its image servers, below
+        return {QStringLiteral("www.steamgriddb.com")};
     return {};
 }
 
@@ -92,6 +95,7 @@ QStringList AppNet::streamSuffixesFor(const QString &app)
 {
     if (app == QLatin1String("archive")) return {QStringLiteral("archive.org")};            // the file servers (ia800000.us.archive.org and the like): the domain and its subdomains
     if (app == QLatin1String("deviantart")) return {QStringLiteral("wixmp.com")};   // the artwork pictures (not video: the name is older than this app)
+    if (app == QLatin1String("steamgriddb")) return {QStringLiteral("steamgriddb.com")};   // the cover pictures (cdn2.steamgriddb.com and the like): not video either
     return app == QLatin1String("kick") ? QStringList{QStringLiteral("live-video.net")} : QStringList{};
 }
 
@@ -151,6 +155,7 @@ void AppNet::get(const QString &app, const QUrl &url, std::function<void(NetRepl
     if (!m_allowed.contains(app)) { NetReply r; r.error = QStringLiteral("this app is not allowed to use the internet (settings > apps)"); done(r); return; }
     if (!m_open.contains(app)) { NetReply r; r.error = QStringLiteral("the app is not open"); done(r); return; }
     if (!urlAllowed(app, url, &why)) { NetReply r; r.error = why; done(r); return; }
+    if (!limits.authorization.isEmpty() && !mayAuthorize(app)) { NetReply r; r.error = QStringLiteral("this app may not send a key"); done(r); return; }
     if (!m_transport) m_transport = std::make_unique<QtTransport>();
     fetch(app, url, 0, m_epoch.value(app), limits, std::move(done));
 }
@@ -160,7 +165,10 @@ void AppNet::fetch(const QString &app, const QUrl &url, int hops, quint64 epoch,
     m_contacted[app].insert(url.host().toLower());
     emit contactedChanged(app);
     QPointer<AppNet> self(this);
-    m_transport->get(url, userAgent(), "application/json, image/*;q=0.8, */*;q=0.5", limits,
+    // a key goes to the app's API host only: not to a picture server, and not to wherever a redirect points
+    NetLimits send = limits;
+    if (!hostsFor(app).contains(url.host().toLower())) send.authorization.clear();
+    m_transport->get(url, userAgent(), "application/json, image/*;q=0.8, */*;q=0.5", send,
         [self, app, url, hops, epoch, limits, done = std::move(done)](NetReply r) mutable {
             if (!self || self->m_epoch.value(app) != epoch) return;                 // the app was closed meanwhile: nothing is delivered
             if (r.status >= 300 && r.status < 400 && r.location.isValid()) {

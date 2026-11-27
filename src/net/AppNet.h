@@ -17,7 +17,8 @@ namespace hop {
 //  * the person has allowed that app to use the internet (settings > apps, or the first-open card)
 //  * https only, the standard port, no user name in the address, and only the hosts that app has declared
 //  * redirects are followed only to another declared host
-//  * no cookies, no disk cache, no referrer, a generic user agent, a size limit, a timeout
+//  * no cookies, no disk cache, no referrer, a generic user agent, a size limit, a timeout (and, for the SteamGridDB app only, the person's own key to
+//    that app's API host and nowhere else)
 //  * connections belong to the app being open: closing it drops everything still on the way
 // The actual transfer is a NetTransport, so tests can answer from fixtures without a network.
 
@@ -35,6 +36,9 @@ struct NetLimits {
     int timeoutMs = 15000;
     qint64 rangeStart = -1;      // with rangeLength: ask only for this slice of the file (HTTP Range)
     qint64 rangeLength = -1;
+    // The one request header an app may add: "Authorization" (for a key the person typed in themselves). Only the SteamGridDB app may use it, it
+    // is sent only to that app's API host (never to a picture host, and never on to a redirect target), and it is never logged or listed.
+    QByteArray authorization;
 };
 
 class NetTransport : public QObject {
@@ -64,6 +68,7 @@ public:
     static QStringList streamSuffixesFor(const QString &app);
     static bool streamUrlAllowed(const QString &app, const QUrl &url, QString *why = nullptr);
     static QByteArray userAgent() { return "Mozilla/5.0"; }
+    static bool mayAuthorize(const QString &app) { return app == QLatin1String("steamgriddb"); }   // which apps may send a key at all
 
     // permission: set from the profile (and per session for guests)
     void setAllowed(const QString &app, bool on);

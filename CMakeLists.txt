@@ -104,6 +104,7 @@ if(HOPTUNES_NET_APPS_ON)
                                          src/apps/StreamDock.h src/apps/StreamDock.cpp
                                          src/apps/DeviantArtClient.h src/apps/DeviantArtClient.cpp
                                          src/apps/ArchiveClient.h src/apps/ArchiveClient.cpp
+                                         src/apps/GridDbClient.h src/apps/GridDbClient.cpp
                                          src/apps/Hls.h src/apps/Hls.cpp src/apps/OfflineDownloads.h src/apps/OfflineDownloads.cpp)
     # libwebp reads Kick's WebP pictures without depending on Qt's optional WebP plugin (missing on Android and some Linux installs)
     if(ANDROID)

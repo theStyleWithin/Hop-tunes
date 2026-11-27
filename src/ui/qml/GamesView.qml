@@ -821,6 +821,222 @@ Item {
                 }
             }
 
+            // ---- a cover from SteamGridDB: off until allowed, and needs the person's own key ----
+            ColumnLayout {
+                id: gridDbBox
+                objectName: "gameGridDbBox"
+                visible: page.editable && hop.netAppsBuilt
+                Layout.fillWidth: true
+                spacing: 8
+                property bool picking: false
+                property string pickNote: ""
+                readonly property var db: hop.gridDb
+                readonly property bool allowed: { hop.netAllowedApps; return hop.appNetAllowed("steamgriddb") }
+                function begin() {
+                    pickNote = ""
+                    picking = true
+                    if (allowed && hop.gridDbHasKey) startSearch()
+                }
+                function startSearch() {
+                    if (!db) return
+                    db.open()
+                    if (root.detail.source === "steam" && root.detail.appId) db.gridsForSteam(root.detail.appId)
+                    else if (root.detail.title) db.search(root.detail.title)
+                }
+                function end() { if (db) db.close(); picking = false; pickNote = "" }
+                Connections { target: root; function onOpenPathChanged() { gridDbBox.end() } }
+                Connections { target: hop; function onGridDbPicked(err) { if (err === "") gridDbBox.end(); else gridDbBox.pickNote = err } }
+
+                Button {
+                    objectName: "gameGridDbOpen"
+                    visible: !gridDbBox.picking
+                    text: "find a cover on SteamGridDB…"
+                    onClicked: gridDbBox.begin()
+                    contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                    background: Rectangle { implicitWidth: 250; implicitHeight: 40; color: "transparent"; border { width: 2; color: Theme.border } }
+                }
+
+                // 1. permission, with what is sent
+                ColumnLayout {
+                    visible: gridDbBox.picking && !gridDbBox.allowed
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Label {
+                        Layout.fillWidth: true; wrapMode: Text.WordWrap
+                        text: "SteamGridDB is a website of game artwork. If you allow it, Hop-tunes sends it what you search for (a game's name or Steam id), your own SteamGridDB key and your internet address, like any visitor: no account, no cookies, nothing about Hop-tunes or your other games. It only does this while this cover picker is open, and only the cover you pick is kept (a copy in your profile). It talks to www.steamgriddb.com for the search and to SteamGridDB's own picture servers (like cdn2.steamgriddb.com) for the covers. Hop-tunes is not made or endorsed by SteamGridDB, and the covers belong to their artists."
+                        color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                    }
+                    RowLayout {
+                        spacing: 10
+                        Button {
+                            objectName: "gameGridDbAllow"
+                            text: "allow SteamGridDB"
+                            onClicked: { hop.setAppNetAllowed("steamgriddb", true); if (hop.gridDbHasKey) gridDbBox.startSearch() }
+                            contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(15); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 190; implicitHeight: 40; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
+                        }
+                        Button {
+                            objectName: "gameGridDbCancel"
+                            text: "not now"
+                            onClicked: gridDbBox.end()
+                            contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 110; implicitHeight: 40; color: parent.hovered ? Theme.hover : "transparent" }
+                        }
+                    }
+                }
+
+                // 2. the person's own key
+                ColumnLayout {
+                    visible: gridDbBox.picking && gridDbBox.allowed && !hop.gridDbHasKey
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Label {
+                        Layout.fillWidth: true; wrapMode: Text.WordWrap
+                        text: "paste your own SteamGridDB key. It is free: make one in your preferences on steamgriddb.com (log in, then preferences, then API). Hop-tunes keeps it in a file of its own in your profile on this computer, never in your profile backup, and sends it only to SteamGridDB."
+                        color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                    }
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        TextField {
+                            id: keyField
+                            objectName: "gameGridDbKey"
+                            width: Math.min(380, page.width - 20)
+                            echoMode: TextInput.Password
+                            selectByMouse: true
+                            placeholderText: "your SteamGridDB key"; placeholderTextColor: Theme.dim
+                            color: Theme.text
+                            font { family: Theme.font; pixelSize: Theme.fs(15) }
+                            onAccepted: saveKey.clicked()
+                            background: Rectangle { color: Theme.panel; border { width: keyField.activeFocus ? 2 : 0; color: Theme.accent } }
+                        }
+                        Button {
+                            id: saveKey
+                            objectName: "gameGridDbSaveKey"
+                            text: "save key"
+                            onClicked: {
+                                const err = hop.setGridDbKey(keyField.text)
+                                gridDbBox.pickNote = err
+                                if (err === "") { keyField.text = ""; gridDbBox.startSearch() }
+                            }
+                            contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(15); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 110; implicitHeight: 40; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
+                        }
+                        Button {
+                            objectName: "gameGridDbCancelKey"
+                            text: "cancel"
+                            onClicked: gridDbBox.end()
+                            contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 90; implicitHeight: 40; color: parent.hovered ? Theme.hover : "transparent" }
+                        }
+                    }
+                }
+
+                // 3. search and pick
+                ColumnLayout {
+                    visible: gridDbBox.picking && gridDbBox.allowed && hop.gridDbHasKey
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        TextField {
+                            id: dbSearch
+                            objectName: "gameGridDbSearch"
+                            width: Math.min(320, page.width - 20)
+                            selectByMouse: true
+                            placeholderText: "game name"; placeholderTextColor: Theme.dim
+                            text: root.detail.title || ""
+                            color: Theme.text
+                            font { family: Theme.font; pixelSize: Theme.fs(15) }
+                            onAccepted: goSearch.clicked()
+                            background: Rectangle { color: Theme.panel; border { width: dbSearch.activeFocus ? 2 : 0; color: Theme.accent } }
+                        }
+                        Button {
+                            id: goSearch
+                            objectName: "gameGridDbSearchGo"
+                            text: "search"
+                            onClicked: { gridDbBox.pickNote = ""; if (gridDbBox.db) { gridDbBox.db.open(); gridDbBox.db.search(dbSearch.text) } }
+                            contentItem: Label { text: parent.text; color: Theme.ink; font { family: Theme.font; pixelSize: Theme.fs(15); weight: Font.Medium } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 100; implicitHeight: 40; color: parent.hovered ? Qt.lighter(Theme.accent, 1.08) : Theme.accent }
+                        }
+                        Button {
+                            objectName: "gameGridDbClose"
+                            text: "close"
+                            onClicked: gridDbBox.end()
+                            contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 90; implicitHeight: 40; color: parent.hovered ? Theme.hover : "transparent" }
+                        }
+                        Button {
+                            objectName: "gameGridDbForgetKey"
+                            text: "remove my key"
+                            onClicked: { hop.clearGridDbKey(); gridDbBox.picking = true }
+                            contentItem: Label { text: parent.text; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                            background: Rectangle { implicitWidth: 140; implicitHeight: 40; color: parent.hovered ? Theme.hover : "transparent" }
+                        }
+                    }
+                    Label {
+                        objectName: "gameGridDbNote"
+                        Layout.fillWidth: true
+                        visible: text !== ""
+                        wrapMode: Text.WordWrap
+                        text: gridDbBox.pickNote !== "" ? gridDbBox.pickNote : (gridDbBox.db ? (gridDbBox.db.busy ? "working…" : gridDbBox.db.message) : "")
+                        color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                    }
+                    // games that matched the name: pick one to see its covers
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        visible: gridDbBox.db && gridDbBox.db.games.length > 0 && gridDbBox.db.grids.length === 0
+                        Repeater {
+                            model: gridDbBox.db ? gridDbBox.db.games : []
+                            delegate: Button {
+                                required property int index
+                                required property var modelData
+                                objectName: "gameGridDbGame_" + index
+                                text: modelData.name + (modelData.verified ? "  ✓" : "")
+                                onClicked: gridDbBox.db.gridsForGame(modelData.id)
+                                contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(14) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                background: Rectangle { implicitHeight: 36; implicitWidth: 40; color: parent.hovered ? Theme.hover : "transparent"; border { width: 1; color: Theme.borderSoft } }
+                            }
+                        }
+                    }
+                    // the covers: pick one
+                    Flow {
+                        Layout.fillWidth: true
+                        spacing: 10
+                        visible: gridDbBox.db && gridDbBox.db.grids.length > 0
+                        Repeater {
+                            model: gridDbBox.db ? gridDbBox.db.grids : []
+                            delegate: AbstractButton {
+                                id: gridCell
+                                required property int index
+                                required property var modelData
+                                objectName: "gameGridDbGrid_" + index
+                                width: Theme.compact ? 88 : 104; height: width * 1.5
+                                hoverEnabled: true
+                                onClicked: { gridDbBox.pickNote = "saving…"; hop.gridDbPick(root.openPath, modelData.url) }
+                                Accessible.name: "cover " + (index + 1) + (modelData.author ? " by " + modelData.author : "")
+                                background: Rectangle { color: Theme.panel; border { width: gridCell.hovered ? 2 : 1; color: gridCell.hovered ? Theme.accent : Theme.borderSoft } }
+                                contentItem: Image {
+                                    source: "image://steamgriddb/" + encodeURIComponent(gridCell.modelData.thumb)
+                                    asynchronous: true; cache: false
+                                    fillMode: Image.PreserveAspectCrop
+                                    sourceSize.width: 220
+                                }
+                            }
+                        }
+                    }
+                }
+                Label {
+                    objectName: "gameGridDbPickNote"
+                    visible: !gridDbBox.picking && text !== ""
+                    Layout.fillWidth: true; wrapMode: Text.WordWrap
+                    text: gridDbBox.pickNote
+                    color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+                }
+            }
+
             Label { text: "title"; color: Theme.muted; visible: page.editable; font { family: Theme.font; pixelSize: Theme.fs(13) } }
             TextField {
                 id: titleEdit

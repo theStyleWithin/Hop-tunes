@@ -25,6 +25,8 @@
 #include <QDesktopServices>
 #include <QColor>
 #include <QCryptographicHash>
+#include <QSaveFile>
+#include <QBuffer>
 #include <QGuiApplication>
 #include <QStyleHints>
 #include <QDateTime>
@@ -53,6 +55,13 @@
 #include <algorithm>
 
 namespace hop {
+
+// a SteamGridDB key is letters, digits, "-" and "_" (the same rule as GridDbClient::validKey, which a build without the networked apps does not have)
+static bool plausibleGridDbKey(const QString &k)
+{
+    static const QRegularExpression re(QStringLiteral("^[A-Za-z0-9_-]{8,128}$"));
+    return re.match(k).hasMatch();
+}
 
 // Ref format shared with Pins (spec §4.4): "<artist>\x1f<title>", built from the album's
 // raw tag-derived fields — never from a profile's display override — so a renamed album
@@ -586,7 +595,20 @@ void App::activate(const QString &id, bool guest)
     m_appNet.setAllowed(QStringLiteral("kick"), m_netAllowed.contains(QStringLiteral("kick")));
     m_appNet.setAllowed(QStringLiteral("deviantart"), m_netAllowed.contains(QStringLiteral("deviantart")));
     m_appNet.setAllowed(QStringLiteral("archive"), m_netAllowed.contains(QStringLiteral("archive")));
+    m_gridDb.close();
+    m_appNet.setAllowed(QStringLiteral("steamgriddb"), m_netAllowed.contains(QStringLiteral("steamgriddb")));
 #endif
+    {   // the person's own SteamGridDB key (a file of its own in the profile; a guest has none)
+        QString key;
+        if (!guest) { QFile kf(gridDbKeyFile()); if (kf.open(QIODevice::ReadOnly)) key = QString::fromUtf8(kf.read(300)).trimmed(); }
+#ifdef HOPTUNES_NET_APPS
+        m_gridDb.setKey(key);
+        m_gridDbHasKey = m_gridDb.hasKey();
+#else
+        m_gridDbHasKey = plausibleGridDbKey(key);
+#endif
+    }
+    emit gridDbKeyChanged();
     emit appNetChanged();
     m_videoOrientation = s.value(QStringLiteral("videoOrientation")).toString();
     if (m_videoOrientation != QLatin1String("portrait") && m_videoOrientation != QLatin1String("landscape")) m_videoOrientation = QStringLiteral("auto");
@@ -702,7 +724,12 @@ void App::leaveProfile()
     m_archive.close();
     m_appNet.setAllowed(QStringLiteral("archive"), false);
     m_archive.setListsJson(QJsonObject{});
+    m_gridDb.close();
+    m_gridDb.setKey(QString());
+    m_appNet.setAllowed(QStringLiteral("steamgriddb"), false);
 #endif
+    m_gridDbHasKey = false;
+    emit gridDbKeyChanged();
     emit appNetChanged();
     m_videoOrientation = QStringLiteral("auto");
     m_navStyle = QStringLiteral("bar");
@@ -2394,6 +2421,7 @@ void App::installImageProviders(QQmlEngine *engine)
     engine->addImageProvider(QStringLiteral("kick"), new KickImageProvider(&m_appNet));
     engine->addImageProvider(QStringLiteral("deviantart"), new KickImageProvider(&m_appNet, QStringLiteral("deviantart")));
     engine->addImageProvider(QStringLiteral("archive"), new KickImageProvider(&m_appNet, QStringLiteral("archive")));
+    engine->addImageProvider(QStringLiteral("steamgriddb"), new KickImageProvider(&m_appNet, QStringLiteral("steamgriddb")));
 #else
     Q_UNUSED(engine)
 #endif
@@ -2411,10 +2439,10 @@ bool App::streamAllowed(const QString &app, const QString &url) const
 
 void App::setAppNetAllowed(const QString &app, bool on)
 {
-    if ((app != QLatin1String("kick") && app != QLatin1String("deviantart") && app != QLatin1String("archive")) || on == m_netAllowed.contains(app)) return;
+    if ((app != QLatin1String("kick") && app != QLatin1String("deviantart") && app != QLatin1String("archive") && app != QLatin1String("steamgriddb")) || on == m_netAllowed.contains(app)) return;
     if (on) m_netAllowed.insert(app); else m_netAllowed.remove(app);
 #ifdef HOPTUNES_NET_APPS
-    if (!on) { if (app == QLatin1String("kick")) { m_dock.stop(); m_kick.close(); } else if (app == QLatin1String("archive")) m_archive.close(); else m_da.close(); }
+    if (!on) { if (app == QLatin1String("kick")) { m_dock.stop(); m_kick.close(); } else if (app == QLatin1String("archive")) m_archive.close(); else if (app == QLatin1String("steamgriddb")) m_gridDb.close(); else m_da.close(); }
     m_appNet.setAllowed(app, on);
 #endif
     saveProfileSettings();                    // (guests keep nothing: this holds for the session only)
@@ -3620,7 +3648,27 @@ QString App::setGameCover(const QString &path, const QUrl &image)
     reader.setAutoTransform(true);
     const QSize sz = reader.size();
     if (sz.isValid() && qint64(sz.width()) * sz.height() > 120'000'000) return QStringLiteral("that picture is too large");
-    QImage img = reader.read();
+    return saveGameCoverImage(path, reader.read());
+}
+
+// A cover that came as bytes (SteamGridDB's): the same limits as a file the person picked.
+QString App::setGameCoverFromData(const QString &path, const QByteArray &bytes)
+{
+    if (!profileReady() || m_guest) return QStringLiteral("no profile open");
+    if (!m_games.entryForPath(path)) return QStringLiteral("no game selected");
+    if (bytes.isEmpty() || bytes.size() > 40 * 1024 * 1024) return QStringLiteral("that picture is too large or empty");
+    QBuffer buf;
+    buf.setData(bytes);
+    buf.open(QIODevice::ReadOnly);
+    QImageReader reader(&buf);
+    reader.setAutoTransform(true);
+    const QSize sz = reader.size();
+    if (sz.isValid() && qint64(sz.width()) * sz.height() > 120'000'000) return QStringLiteral("that picture is too large");
+    return saveGameCoverImage(path, reader.read());
+}
+
+QString App::saveGameCoverImage(const QString &path, QImage img)
+{
     if (img.isNull()) return QStringLiteral("that file is not a picture hop-tunes can read");
     if (img.width() > 600 || img.height() > 900)
         img = img.scaled(600, 900, Qt::KeepAspectRatio, Qt::SmoothTransformation);
@@ -3635,6 +3683,58 @@ QString App::setGameCover(const QString &path, const QUrl &image)
     reloadGames();
     emit gameDetailChanged();
     return {};
+}
+
+// ---- SteamGridDB: the person's own key, and the covers they pick ----
+
+QString App::gridDbKeyFile() const { return m_store.dirFor(m_profileId) + QStringLiteral("/steamgriddb.key"); }
+
+QString App::setGridDbKey(const QString &key)
+{
+    const QString k = key.trimmed();
+    if (!plausibleGridDbKey(k)) return QStringLiteral("that does not look like a SteamGridDB key (letters, digits, - and _)");
+    if (!profileReady()) return QStringLiteral("no profile open");
+    if (!m_guest) {
+        QSaveFile f(gridDbKeyFile());
+        if (!f.open(QIODevice::WriteOnly)) return QStringLiteral("could not save the key");
+        f.write(k.toUtf8());
+        f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+        if (!f.commit()) return QStringLiteral("could not save the key");
+    }
+#ifdef HOPTUNES_NET_APPS
+    m_gridDb.setKey(k);
+#endif
+    m_gridDbHasKey = true;
+    emit gridDbKeyChanged();
+    return {};
+}
+
+void App::clearGridDbKey()
+{
+    if (!profileReady()) return;
+#ifdef HOPTUNES_NET_APPS
+    m_gridDb.close();
+    m_gridDb.setKey(QString());
+#endif
+    if (!m_guest) QFile::remove(gridDbKeyFile());
+    m_gridDbHasKey = false;
+    emit gridDbKeyChanged();
+}
+
+void App::gridDbPick(const QString &gamePath, const QString &url)
+{
+#ifdef HOPTUNES_NET_APPS
+    if (!profileReady() || m_guest) { emit gridDbPicked(QStringLiteral("no profile open")); return; }
+    QPointer<App> self(this);
+    m_gridDb.download(url, [self, gamePath](QByteArray bytes, QString error) {
+        if (!self) return;
+        if (!error.isEmpty()) { emit self->gridDbPicked(error); return; }
+        emit self->gridDbPicked(self->setGameCoverFromData(gamePath, bytes));
+    });
+#else
+    Q_UNUSED(gamePath) Q_UNUSED(url)
+    emit gridDbPicked(QStringLiteral("this build has no networked apps"));
+#endif
 }
 
 void App::clearGameCover(const QString &path)

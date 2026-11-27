@@ -30,6 +30,7 @@
 #include "apps/KickClient.h"
 #include "apps/DeviantArtClient.h"
 #include "apps/ArchiveClient.h"
+#include "apps/GridDbClient.h"
 #include "apps/OfflineDownloads.h"
 #include "apps/OfflineStore.h"
 #include "apps/StreamDock.h"
@@ -178,6 +179,8 @@ class App : public QObject {
     Q_PROPERTY(QObject *downloads READ downloadsObject CONSTANT)  // offline downloads of Kick streams and clips (null without the networked apps)
     Q_PROPERTY(QObject *offline READ offlineObject CONSTANT)    // the room set aside for offline Kick (null without the networked apps)
     Q_PROPERTY(QObject *dock READ dockObject CONSTANT)          // the live stream that keeps playing after the Kick app is left (null without the networked apps)
+    Q_PROPERTY(QObject *gridDb READ gridDbObject CONSTANT)             // the SteamGridDB cover search for the game shelf (null in builds without the networked apps)
+    Q_PROPERTY(bool gridDbHasKey READ gridDbHasKey NOTIFY gridDbKeyChanged)   // the person has given their own SteamGridDB key
     Q_PROPERTY(QObject *archive READ archiveObject CONSTANT)           // the Internet Archive app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *deviantart READ deviantartObject CONSTANT)   // the DeviantArt app's data (null in builds without the networked apps)
     Q_PROPERTY(QObject *kick READ kickObject CONSTANT)          // the Kick app's data (null in builds without the networked apps)
@@ -386,6 +389,19 @@ public:
         return nullptr;
 #endif
     }
+    QObject *gridDbObject() {
+#ifdef HOPTUNES_NET_APPS
+        return &m_gridDb;
+#else
+        return nullptr;
+#endif
+    }
+    bool gridDbHasKey() const { return m_gridDbHasKey; }
+    // the key is the person's own: kept in its own file in the profile (never in settings.json, never in an export), 0600; a guest's lasts the session
+    Q_INVOKABLE QString setGridDbKey(const QString &key);     // "" on success, else why not
+    Q_INVOKABLE void clearGridDbKey();
+    // use one of the covers SteamGridDB showed for a game: downloaded once and kept as the game's cover (a copy in the profile); gridDbPicked says how it went
+    Q_INVOKABLE void gridDbPick(const QString &gamePath, const QString &url);
     QObject *archiveObject() {
 #ifdef HOPTUNES_NET_APPS
         return &m_archive;
@@ -412,6 +428,7 @@ public:
     KickClient *kickClient() { return &m_kick; }      // for tests
     DeviantArtClient *deviantArtClient() { return &m_da; }   // for tests
     ArchiveClient *archiveClient() { return &m_archive; }    // for tests
+    GridDbClient *gridDbClient() { return &m_gridDb; }       // for tests
     StreamDock *streamDock() { return &m_dock; }      // for tests
     AppNet *gateway() { return &m_appNet; }
 #endif
@@ -635,6 +652,8 @@ signals:
     void videoCategoryChanged();
     void sectionFoldersChanged();
     void gamesFoldersChanged();
+    void gridDbKeyChanged();
+    void gridDbPicked(const QString &error);
     void androidGamesChanged();
     void gamesShelfModeChanged();
     void gamesStatusChanged();
@@ -731,6 +750,7 @@ private:
     KickClient m_kick{&m_appNet};
     DeviantArtClient m_da{&m_appNet};
     ArchiveClient m_archive{&m_appNet};
+    GridDbClient m_gridDb{&m_appNet};
     StreamDock m_dock;
     OfflineStore m_offline;
     OfflineDownloads m_downloads{&m_appNet, &m_offline};
@@ -840,6 +860,10 @@ private:
     GameListModel m_games;
     QStringList m_gameFolders;
     QString m_gamesShelfMode = QStringLiteral("covers");
+    bool m_gridDbHasKey = false;
+    QString gridDbKeyFile() const;
+    QString saveGameCoverImage(const QString &gamePath, QImage img);
+    QString setGameCoverFromData(const QString &gamePath, const QByteArray &bytes);
     bool m_androidGamesOn = false;
     QList<AndroidGame> m_androidGames;
     bool m_androidListing = false;

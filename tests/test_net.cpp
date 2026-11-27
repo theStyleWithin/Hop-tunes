@@ -2,6 +2,7 @@
 // The gateway that apps reach the internet through, and the Kick app's data side, answered from fixtures (no real network).
 #include "apps/Hls.h"
 #include "apps/ArchiveClient.h"
+#include "apps/GridDbClient.h"
 #include "apps/DeviantArtClient.h"
 #include "apps/KickClient.h"
 #include "apps/StreamDock.h"
@@ -2230,6 +2231,181 @@ private slots:
         QCOMPARE(uchar(data[0]), uchar(0x47));
         QCOMPARE(uchar(data[188]), uchar(0x47));
         QFile::copy(dl.videoPath("rec-live"), qEnvironmentVariable("HOPTUNES_LIVE_OUT", tmp.filePath("rec-copy.ts")));
+    }
+
+    // ---- SteamGridDB: cover search with the person's own key ----
+
+    void steamGridDbHostsAndTheKeyGoOnlyWhereTheyShould()
+    {
+        QCOMPARE(AppNet::hostsFor("steamgriddb"), QStringList{"www.steamgriddb.com"});
+        QVERIFY(AppNet::urlAllowed("steamgriddb", QUrl("https://www.steamgriddb.com/api/v2/search/autocomplete/x")));
+        QVERIFY(AppNet::urlAllowed("steamgriddb", QUrl("https://cdn2.steamgriddb.com/grid/abc.png")));          // its picture servers
+        QString why;
+        for (const char *bad : {"http://www.steamgriddb.com/api/v2/x", "https://steamgriddb.com.evil.example/x.png", "https://evilsteamgriddb.com/x.png",
+                                "https://user@www.steamgriddb.com/x", "https://www.steamgriddb.com:8443/x", "https://s3.amazonaws.com/steamgriddb/grid/x.png", "https://kick.com/x"})
+            QVERIFY2(!AppNet::urlAllowed("steamgriddb", QUrl(bad), &why), bad);
+        QVERIFY(!AppNet::urlAllowed("kick", QUrl("https://www.steamgriddb.com/api/v2/x")));                      // the other apps cannot reach it
+        QVERIFY(AppNet::mayAuthorize("steamgriddb"));
+        for (const char *app : {"kick", "archive", "deviantart", "nosuchapp"}) QVERIFY(!AppNet::mayAuthorize(app));
+
+        AppNet gw;
+        auto t = std::make_unique<FakeTransport>();
+        FakeTransport *f = t.get();
+        gw.setTransport(std::move(t));
+        gw.setAllowed("steamgriddb", true); gw.open("steamgriddb");
+        gw.setAllowed("kick", true); gw.open("kick");
+        NetLimits withKey; withKey.authorization = "Bearer secretsecret1";
+        // another app may not send a key at all, and nothing goes out
+        QString err;
+        gw.get("kick", QUrl("https://kick.com/x"), [&](NetReply r) { err = r.error; }, withKey);
+        QVERIFY(err.contains("may not send a key"));
+        QCOMPARE(f->asked.size(), 0);
+        // the key goes to the API host ...
+        bool got = false;
+        f->handler = [](const QUrl &) { return ok("{}"); };
+        gw.get("steamgriddb", QUrl("https://www.steamgriddb.com/api/v2/search/autocomplete/x"), [&](NetReply) { got = true; }, withKey);
+        QTRY_VERIFY(got);
+        QCOMPARE(f->limitsAsked.last().authorization, QByteArray("Bearer secretsecret1"));
+        // ... never to a picture server ...
+        got = false;
+        gw.get("steamgriddb", QUrl("https://cdn2.steamgriddb.com/grid/a.png"), [&](NetReply) { got = true; }, withKey);
+        QTRY_VERIFY(got);
+        QVERIFY(f->limitsAsked.last().authorization.isEmpty());
+        // ... and not on to wherever a redirect points
+        f->asked.clear(); f->limitsAsked.clear();
+        f->handler = [](const QUrl &u) {
+            if (u.host() == "www.steamgriddb.com") { NetReply r; r.status = 302; r.location = QUrl("https://cdn2.steamgriddb.com/grid/moved.png"); return r; }
+            return ok("png");
+        };
+        got = false;
+        gw.get("steamgriddb", QUrl("https://www.steamgriddb.com/api/v2/grids/game/1"), [&](NetReply r) { got = r.error.isEmpty(); }, withKey);
+        QTRY_VERIFY(got);
+        QCOMPARE(f->asked.size(), 2);
+        QCOMPARE(f->limitsAsked.at(0).authorization, QByteArray("Bearer secretsecret1"));
+        QVERIFY(f->limitsAsked.at(1).authorization.isEmpty());
+        // a redirect off SteamGridDB altogether is refused
+        f->handler = [](const QUrl &) { NetReply r; r.status = 302; r.location = QUrl("https://evil.example/steal"); return r; };
+        err.clear();
+        gw.get("steamgriddb", QUrl("https://www.steamgriddb.com/api/v2/grids/game/2"), [&](NetReply r) { err = r.error; }, withKey);
+        QTRY_VERIFY(err.contains("redirect refused"));
+        // what the app has contacted lists hosts, never a key
+        for (const QString &h : gw.contacted("steamgriddb")) QVERIFY(!h.contains("secret"));
+    }
+
+    void steamGridDbAnswersAreParsedSafely()
+    {
+        const QByteArray games = "{\"success\":true,\"data\":[{\"id\":5,\"name\":\"Wuthering Waves\",\"verified\":true},{\"id\":0,\"name\":\"bad id\"},{\"id\":9,\"name\":\"\"},{\"id\":12,\"name\":\"Wuthering   Waves 2\"},{\"name\":\"no id\"},7]}";
+        const QVariantList g = GridDbClient::parseGames(games);
+        QCOMPARE(g.size(), 2);
+        QCOMPARE(g[0].toMap().value("name").toString(), QString("Wuthering Waves"));
+        QVERIFY(g[0].toMap().value("verified").toBool());
+        QCOMPARE(g[1].toMap().value("name").toString(), QString("Wuthering Waves 2"));
+        QVERIFY(GridDbClient::parseGames("{\"success\":false,\"errors\":[\"nope\"]}").isEmpty());
+        QVERIFY(GridDbClient::parseGames("not json").isEmpty());
+        QVERIFY(GridDbClient::parseGames("[1,2]").isEmpty());
+        const QByteArray grids = "{\"success\":true,\"data\":[ {\"id\":1,\"url\":\"https://cdn2.steamgriddb.com/grid/a.png\",\"thumb\":\"https://cdn2.steamgriddb.com/thumb/a.jpg\",\"width\":600,\"height\":900,\"score\":3,\"author\":{\"name\":\"Ana\"}}, {\"id\":2,\"url\":\"https://cdn2.steamgriddb.com/grid/b.png\",\"thumb\":\"https://evil.example/t.jpg\",\"width\":600,\"height\":900}, {\"id\":3,\"url\":\"https://evil.example/c.png\",\"thumb\":\"https://cdn2.steamgriddb.com/thumb/c.jpg\"}, {\"id\":4,\"url\":\"http://cdn2.steamgriddb.com/grid/d.png\"}, {\"id\":5}]}";
+        const QVariantList gr = GridDbClient::parseGrids(grids);
+        QCOMPARE(gr.size(), 2);                                                              // only pictures from SteamGridDB's own servers, over https
+        QCOMPARE(gr[0].toMap().value("author").toString(), QString("Ana"));
+        QCOMPARE(gr[1].toMap().value("thumb").toString(), QString("https://cdn2.steamgriddb.com/grid/b.png"));   // an odd thumbnail address falls back to the picture itself
+        QJsonArray many;
+        for (int i = 0; i < 100; ++i) many.append(QJsonObject{{"id", i + 1}, {"url", "https://cdn2.steamgriddb.com/grid/" + QString::number(i) + ".png"}});
+        QCOMPARE(GridDbClient::parseGrids(QJsonDocument(QJsonObject{{"success", true}, {"data", many}}).toJson()).size(), int(GridDbClient::kMaxGrids));
+        // addresses: the term is percent-encoded and shortened, ids are numbers
+        QVERIFY(GridDbClient::searchUrl("a b/c?d&e").startsWith("https://www.steamgriddb.com/api/v2/search/autocomplete/a%20b%2Fc%3Fd%26e"));
+        QCOMPARE(GridDbClient::searchUrl(QString(300, 'x')).size(), QString("https://www.steamgriddb.com/api/v2/search/autocomplete/").size() + 100);
+        QVERIFY(GridDbClient::gridsUrl(5).contains("/grids/game/5?dimensions=600x900"));
+        QVERIFY(GridDbClient::gridsUrl(5).contains("nsfw=false"));
+        QVERIFY(GridDbClient::gridsSteamUrl("620").contains("/grids/steam/620?"));
+        QVERIFY(GridDbClient::gridsSteamUrl("../../x").contains("/grids/steam/0?"));         // not a number: never put into the address
+        QVERIFY(GridDbClient::explain(401, "x").contains("did not accept that key"));
+        QVERIFY(GridDbClient::explain(429, "x").contains("slow down"));
+        QVERIFY(GridDbClient::explain(404, "x").contains("found nothing"));
+        QVERIFY(GridDbClient::explain(500, "x").contains("trouble"));
+        QCOMPARE(GridDbClient::explain(0, "could not connect: boom"), QString("could not connect: boom"));
+        QVERIFY(GridDbClient::validKey("abcdEFGH-1234_x"));
+        for (const char *bad : {"", "short", "has space in it 123", "semi;colon12345", "new\nline12345"}) QVERIFY2(!GridDbClient::validKey(bad), bad);
+        QVERIFY(!GridDbClient::validKey(QString(200, 'a')));
+    }
+
+    void steamGridDbSearchesListsPicksAndDownloads()
+    {
+        AppNet gw;
+        auto t = std::make_unique<FakeTransport>();
+        FakeTransport *f = t.get();
+        gw.setTransport(std::move(t));
+        GridDbClient db(&gw);
+        // nothing happens without the person's key and permission
+        db.open();
+        QVERIFY(!db.isOpen());
+        QVERIFY(db.message().contains("key"));
+        db.setKey("abc");                                                                    // not a key
+        QVERIFY(!db.hasKey());
+        db.setKey("  abcdEFGH1234  ");
+        QVERIFY(db.hasKey());
+        db.open();
+        QVERIFY(!db.isOpen());
+        QVERIFY(db.message().contains("not allowed"));
+        db.search("Wuthering Waves");
+        QCOMPARE(f->asked.size(), 0);
+        gw.setAllowed("steamgriddb", true);
+        db.open();
+        QVERIFY(db.isOpen());
+
+        f->handler = [](const QUrl &u) {
+            const QString s = u.toString();
+            if (s.contains("/search/autocomplete/")) return ok("{\"success\":true,\"data\":[{\"id\":5,\"name\":\"Wuthering Waves\",\"verified\":true}]}");
+            if (s.contains("/grids/game/5")) return ok("{\"success\":true,\"data\":[{\"id\":1,\"url\":\"https://cdn2.steamgriddb.com/grid/a.png\",\"thumb\":\"https://cdn2.steamgriddb.com/thumb/a.jpg\",\"width\":600,\"height\":900}]}");
+            if (s.contains("/grids/steam/620")) return ok("{\"success\":true,\"data\":[{\"id\":2,\"url\":\"https://cdn2.steamgriddb.com/grid/p.png\",\"width\":600,\"height\":900}]}");
+            if (s.contains("/grid/a.png")) return ok("PNGBYTES");
+            return NetReply{};
+        };
+        db.search("   ");                                                                    // nothing typed: nothing sent
+        QCOMPARE(f->asked.size(), 0);
+        db.search("Wuthering Waves");
+        QTRY_COMPARE(db.games().size(), 1);
+        QCOMPARE(f->asked.last(), QUrl(GridDbClient::searchUrl("Wuthering Waves")));
+        QCOMPARE(f->limitsAsked.last().authorization, QByteArray("Bearer abcdEFGH1234"));   // the key (trimmed) goes with the search
+        db.gridsForGame(db.games().first().toMap().value("id").toInt());
+        QTRY_COMPARE(db.grids().size(), 1);
+        QCOMPARE(f->asked.last(), QUrl(GridDbClient::gridsUrl(5)));
+        QVERIFY(db.message().isEmpty());
+        // a Steam game asks by its own app id
+        db.gridsForSteam("620");
+        QTRY_VERIFY(db.grids().size() == 1 && db.grids().first().toMap().value("id").toInt() == 2);
+        QVERIFY(db.games().isEmpty());
+        // the picked cover is downloaded without the key, and only from SteamGridDB's servers
+        QByteArray bytes; QString err = "unset";
+        db.download("https://cdn2.steamgriddb.com/grid/a.png", [&](QByteArray b, QString e) { bytes = b; err = e; });
+        QTRY_VERIFY(err != "unset");
+        QCOMPARE(bytes, QByteArray("PNGBYTES"));
+        QVERIFY(err.isEmpty());
+        QVERIFY(f->limitsAsked.last().authorization.isEmpty());
+        const int asked = f->asked.size();
+        err.clear();
+        db.download("https://evil.example/a.png", [&](QByteArray, QString e) { err = e; });
+        QVERIFY(!err.isEmpty());
+        QCOMPARE(f->asked.size(), asked);
+        // failures are said in plain words
+        f->handler = [](const QUrl &) { NetReply r; r.status = 401; r.error = "the site answered 401"; return r; };
+        db.search("x");
+        QTRY_VERIFY(db.message().contains("did not accept that key"));
+        f->handler = [](const QUrl &) { NetReply r; r.status = 429; r.error = "the site answered 429"; return r; };
+        db.search("x");
+        QTRY_VERIFY(db.message().contains("slow down"));
+        // closing drops what is still on the way and forgets the lists
+        f->handler = [](const QUrl &) { return ok("{\"success\":true,\"data\":[{\"id\":5,\"name\":\"Late\"}]}"); };
+        f->delayMs = 80;
+        db.search("late");
+        db.close();
+        QVERIFY(!db.isOpen());
+        QTest::qWait(250);
+        QVERIFY(db.games().isEmpty());
+        QVERIFY(!gw.isOpen("steamgriddb"));
+        // and a request while closed goes nowhere
+        const int before = f->asked.size();
+        db.search("again");
+        QCOMPARE(f->asked.size(), before);
     }
 };
 
