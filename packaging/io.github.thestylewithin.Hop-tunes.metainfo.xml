@@ -82,6 +82,17 @@
   </requires>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.15.0" date="2026-11-27">
+      <description>
+        <p>A game shelf in the collection, right after videos.</p>
+        <ul>
+          <li>Add your Steam and GOG libraries and your emulator roms: they stand on a shelf by system (PC, Switch, Wii U, Wii, GameCube, N64, Game Boy, PSP, PS2, PS3 and more). Browse only: Hop-tunes never opens or launches a game. Epic Games libraries are not scanned; add such games by hand under Third-party PC.</li>
+          <li>Two ways to look at it: a wall of covers, or a bookcase with the games on their spines, some leaning out to show their cover, on shelves that scroll.</li>
+          <li>Give a game your own title, notes, system and cover picture, or (optional, needs the internet and your own free key) pick a cover from SteamGridDB.</li>
+          <li>Android: show the games installed on the phone, such as Google Play games (off until you switch it on; nothing leaves the phone).</li>
+        </ul>
+      </description>
+    </release>
     <release version="1.14.0" date="2026-11-26">
       <description>
         <p>App folders and drag-and-drop on the apps page, and a right-click menu on the profile picker.</p>
