@@ -35,8 +35,8 @@ linked from the system on desktop and built statically into the Android app, so 
 
 ## OpenSSL on Android
 
-The Android app bundles OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`), Apache License 2.0, as built by
-[KDAB/android_openssl](https://github.com/KDAB/android_openssl) (BSD-style/Apache-2.0 build scripts), so that Qt can make secure connections for
+The Android app bundles OpenSSL 3 (`libssl_3.so`, `libcrypto_3.so`), Apache License 2.0, built from the OpenSSL project's source (or
+the equivalent from [KDAB/android_openssl](https://github.com/KDAB/android_openssl)), so that Qt can make secure connections for
 the networked apps. Builds without the networked apps do not contain it.
 
 ## Kick app: references
@@ -46,3 +46,10 @@ understanding of kick.com's website addresses and of how its live chat is delive
 GPL-3.0 projects [kickNX](https://github.com/j2k-lab/kickNX) by j2k, [twiNX](https://github.com/DomazinUS/twiNX) by DomazinUS and
 [Switchfin](https://github.com/dragonflylee/switchfin) by dragonflylee, which we thank. Hop-tunes is an independent project and is not
 affiliated with or endorsed by Kick.
+
+## SteamGridDB
+
+The game shelf can, only when the person allows it and gives their own key, search [SteamGridDB](https://www.steamgriddb.com) for cover pictures and keep
+the one they pick as a copy on their own computer. SteamGridDB is a trademark of its owners; Hop-tunes is an independent project and is not
+affiliated with or endorsed by SteamGridDB, Valve, Steam or GOG. The covers belong to their artists and are shown and kept only for the person's own
+shelf. Hop-tunes contains no code from SteamGridDB.

@@ -1008,17 +1008,41 @@ Item {
             Button {
                 objectName: "settingsAndroidGames"
                 visible: hop.androidGamesAvailable
-                text: (hop.androidGames ? "\u2611 " : "\u2610 ") + "show the games installed on this phone"
+                text: (hop.androidGames ? "\u2611 " : "\u2610 ") + "phone games"
                 onClicked: hop.androidGames = !hop.androidGames
                 Accessible.name: "show the games installed on this phone"
                 contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
-                background: Rectangle { implicitWidth: 360; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
+                background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
             }
             Label {
                 visible: hop.androidGamesAvailable
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
                 text: "reads which games are installed on this phone, only while this is on. nothing leaves the phone, and hop-tunes does not start them."
                 color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+            }
+            Button {
+                objectName: "settingsGridDbAllowed"
+                visible: hop.netAppsBuilt
+                text: (hop.appNetAllowed("steamgriddb") ? "\u2611 " : "\u2610 ") + "SteamGridDB covers"
+                property var tick: hop.netAllowedApps
+                onClicked: hop.setAppNetAllowed("steamgriddb", !hop.appNetAllowed("steamgriddb"))
+                Accessible.name: "allow SteamGridDB to be used for game covers"
+                contentItem: Label { text: parent.text; color: Theme.text; font { family: Theme.font; pixelSize: Theme.fs(16) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitWidth: 230; implicitHeight: 44; color: "transparent"; border { width: 2; color: Theme.border } }
+            }
+            Label {
+                visible: hop.netAppsBuilt
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: "off by default. When on, the cover picker on a game's page can search steamgriddb.com with your own free key (sent only there, with your search and your internet address), only while the picker is open. " + (hop.gridDbHasKey ? "your key is saved on this computer." : "no key saved yet.")
+                color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(13) }
+            }
+            Button {
+                objectName: "settingsGridDbForgetKey"
+                visible: hop.netAppsBuilt && hop.gridDbHasKey
+                text: "remove my key"
+                onClicked: hop.clearGridDbKey()
+                contentItem: Label { text: parent.text; color: Theme.text2; font { family: Theme.font; pixelSize: Theme.fs(15) } horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                background: Rectangle { implicitWidth: 230; implicitHeight: 40; color: parent.hovered ? Theme.hover : "transparent" }
             }
             Button {
                 objectName: "settingsAddFolder_games"

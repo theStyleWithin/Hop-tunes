@@ -186,9 +186,10 @@ Renders of the Android app's phone layout (it adapts to tablets, and has a side 
 Hop-tunes now has an **apps** tab: small programs built into Hop-tunes that open inside its window. It is off until you switch it on in
 **settings → apps settings**, so nothing changes for anyone who doesn't want it. The first app, **Kick**, browses and watches live streams
 from kick.com with a follow list and a block list that stay on your computer (no Kick account needed). The second, **neko cafe**, is a little game
-that works fully offline. Kick is the one part of Hop-tunes that
-uses the internet: it asks first, lists the exact sites it contacts, connects only while it is open, and every connection goes through one
-gateway (secure connections, only those sites, no cookies, nothing kept). Details in the [user guide](docs/user-guide.md#apps-off-until-you-switch-them-on).
+that works fully offline. The apps that use the internet (Kick, DeviantArt, the Internet Archive) and the optional **SteamGridDB cover picker** on the
+game shelf are the only parts of Hop-tunes that do: each asks first, lists the exact sites it contacts, connects only while it is open, and every
+connection goes through one gateway (secure connections, only those sites, no cookies, nothing kept; SteamGridDB also needs your own free key, which
+goes only to SteamGridDB). Details in the [user guide](docs/user-guide.md#apps-off-until-you-switch-them-on).
 
 ### Roadmap: more apps (planned, nothing below is built yet)
 
