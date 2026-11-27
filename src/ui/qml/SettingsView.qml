@@ -268,33 +268,6 @@ Item {
         }
         Label { visible: root.profileMsg !== ""; text: root.profileMsg; color: Theme.muted; font { family: Theme.font; pixelSize: Theme.fs(15) } }
 
-        // ---- hidden profiles: hidden from the picker with its right-click menu; shown here, only when there are some ----
-        ColumnLayout {
-            objectName: "hiddenProfilesSection"
-            visible: hop.hiddenProfiles.length > 0
-            Layout.fillWidth: true; Layout.minimumWidth: 0
-            Layout.topMargin: 24
-            spacing: 10
-            Label { text: "hidden profiles"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
-            Label {
-                text: "these profiles are not shown on the picker. hiding only tidies it: it is not a lock (a PIN is). open one from here, or show it on the picker again."
-                color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
-                font { family: Theme.font; pixelSize: Theme.fs(14) }
-            }
-            Repeater {
-                model: hop.hiddenProfiles
-                delegate: RowLayout {
-                    required property var modelData
-                    Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 12
-                    ProfileAvatar { profile: modelData; size: 40 }
-                    Label { text: modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0
-                            font { family: Theme.font; pixelSize: Theme.fs(17) } }
-                    PlainButton { objectName: "hiddenOpen_" + modelData.name; text: "open"; implicitHeight: 34; onClicked: root.profileMsg = hop.openProfile(modelData.id, "") }
-                    PlainButton { objectName: "hiddenShow_" + modelData.name; text: "show on the picker"; implicitHeight: 34; onClicked: root.profileMsg = hop.unhideProfile(modelData.id) }
-                }
-            }
-        }
-
         // ---- keep your profile: export a copy, or eject it from this device -------------
         ColumnLayout {
             visible: !hop.guest
@@ -1055,6 +1028,7 @@ Item {
 
         // ---- remove profile ------------------------------------------------------
         RowLayout {
+            objectName: "removeProfileRow"
             visible: !hop.guest
             Layout.topMargin: 24
             spacing: 14
@@ -1102,6 +1076,53 @@ Item {
                 text: parent.shown
                 color: Theme.text2; wrapMode: Text.WrapAnywhere; Layout.fillWidth: true; Layout.minimumWidth: 0
                 font { family: "monospace"; pixelSize: 11 }
+            }
+        }
+
+        // ---- hidden profiles: hidden from the picker with its right-click menu; shown here, only when there are some. Kept near the bottom, out of sight
+        //      of anyone glancing at the top of settings (it is a privacy tidy-up, not a lock) ----
+        ColumnLayout {
+            objectName: "hiddenProfilesSection"
+            visible: hop.hiddenProfiles.length > 0
+            Layout.fillWidth: true; Layout.minimumWidth: 0
+            Layout.topMargin: 24
+            spacing: 10
+            Label { text: "hidden profiles"; color: Theme.accent; font { family: Theme.font; pixelSize: Theme.fs(24) } }
+            Label {
+                text: "these profiles are not shown on the picker. hiding only tidies it: it is not a lock (a PIN is). click a profile here to open it (it stays hidden), or show it on the picker again."
+                color: Theme.muted; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0
+                font { family: Theme.font; pixelSize: Theme.fs(14) }
+            }
+            Repeater {
+                model: hop.hiddenProfiles
+                delegate: Item {
+                    id: hrow
+                    required property var modelData
+                    Layout.fillWidth: true; Layout.minimumWidth: 0
+                    implicitHeight: hline.implicitHeight + 12
+                    Rectangle { anchors.fill: parent; color: hopen.containsMouse ? Theme.hover : "transparent" }
+                    MouseArea {   // a left click anywhere on the row (except its buttons, which sit above) opens the profile: it does not unhide it
+                        id: hopen
+                        objectName: "hiddenRow_" + hrow.modelData.name
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.profileMsg = hop.openProfile(hrow.modelData.id, "")
+                        Accessible.name: "open " + hrow.modelData.name
+                        Accessible.role: Accessible.Button
+                    }
+                    RowLayout {
+                        id: hline
+                        anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter }
+                        spacing: 12
+                        ProfileAvatar { profile: hrow.modelData; size: 40 }
+                        Label { text: hrow.modelData.name; color: Theme.text; elide: Text.ElideRight; Layout.fillWidth: true; Layout.minimumWidth: 0
+                                font { family: Theme.font; pixelSize: Theme.fs(17) } }
+                        PlainButton { objectName: "hiddenOpen_" + hrow.modelData.name; text: "open"; implicitHeight: 34; onClicked: root.profileMsg = hop.openProfile(hrow.modelData.id, "") }
+                        PlainButton { objectName: "hiddenShow_" + hrow.modelData.name; text: "show on the picker"; implicitHeight: 34; onClicked: root.profileMsg = hop.unhideProfile(hrow.modelData.id) }
+                    }
+                }
             }
         }
 
